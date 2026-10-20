@@ -31,7 +31,7 @@ jobs:
         run: make check
       - run: make build
       - run:
-          bin/knotra validate examples/showcase/release-gate/pipeline.yaml --profile
+          bin/knotra validate examples/showcase/release-gate/pipeline.yaml --profile-file
           examples/local/profile.yaml
 
   integration:
