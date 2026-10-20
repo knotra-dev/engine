@@ -176,14 +176,14 @@ expressions. See [architecture](docs/architecture.md) for storage, ownership and
 
 ## Documentation
 
-| Start here                                           | Reference                                         |
-| ---------------------------------------------------- | ------------------------------------------------- |
-| [First run and examples](docs/first-run.md)          | [Pipeline notation](docs/notation.md)             |
-| [Engine setup and providers](docs/running.md)        | [Engine profile](docs/notation/engine-profile.md) |
-| [Desktop](app/README.md)                             | [CLI commands](internal/cli/README.md)            |
-| [Verified behavior and limits](docs/verification.md) | [HTTP API](docs/api/desktop-v1.md)                |
-| [Architecture](docs/architecture.md)                 | [Temporal implementation](docs/temporal.md)       |
-| [Roadmap](docs/roadmap.md)                           | [JSON Schema](schemas/knotra-v1.schema.json)      |
+| Start here                                           | Reference                                                      |
+| ---------------------------------------------------- | -------------------------------------------------------------- |
+| [First run and examples](docs/first-run.md)          | [Pipeline notation](docs/notation.md)                          |
+| [Engine setup and providers](docs/running.md)        | [Engine profile](docs/notation/engine-profile.md)              |
+| [Desktop](app/README.md)                             | [CLI commands](internal/cli/README.md)                         |
+| [Verified behavior and limits](docs/verification.md) | [HTTP API](docs/api/desktop-v1.md)                             |
+| [Architecture](docs/architecture.md)                 | [River implementation](docs/scheduler-river-implementation.md) |
+| [Roadmap](docs/roadmap.md)                           | [JSON Schema](schemas/knotra-v1.schema.json)                   |
 
 ## Contributing
 

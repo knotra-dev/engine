@@ -114,7 +114,7 @@ incompatible types and computation-limit violations. `coalesce` does not catch t
 for optional fields in an already received JSON object. Access to absent optional `args` without a
 presence check is an error.
 
-CEL receives no secret values, current time, randomness, network, filesystem, Temporal internals or
+CEL receives no secret values, current time, randomness, network, filesystem, scheduler internals or
 uncommitted results of neighboring nodes. Artifact references pass through `from`; creating artifact
 references from JSON or CEL is prohibited.
 

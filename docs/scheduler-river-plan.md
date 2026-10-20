@@ -1,7 +1,8 @@
-> MVP scope, updated 2026-10-06: ship a single-process River engine with PostgreSQL, sqlc, strict
-> lint and Makefile commands. Cluster capabilities, separate process deployment, two-host acceptance
-> and exhaustive performance gates are deferred. The detailed plan below remains a future roadmap,
-> not the MVP release checklist.
+> Historical migration design. The single-process River engine is now the default, with PostgreSQL,
+> sqlc, strict lint and Makefile commands. Cluster deployment, two-host acceptance and exhaustive
+> performance gates remain deferred. Use the
+> [implementation report](scheduler-river-implementation.md) for current status; the original plan
+> below is not the MVP release checklist.
 
 # Knotra Scheduler and River Migration Plan
 
@@ -10,11 +11,12 @@ OSS to deliver work. The first release keeps the existing combined Go service an
 deployment. A later stage enables multiple scheduler and executor processes against the same
 database and shared artifact storage.
 
-This is a proposed implementation plan, based on the repository and River documentation reviewed on
-October 5, 2026. It does not describe functionality already implemented. The requested option
-retains PostgreSQL; adding SQLite is separate work. The intended benefit is removing the Temporal
-service, its history store and its deployment requirements while preserving the v1 execution
-contract. Resource savings must be measured before release.
+This document preserves the design proposed after reviewing the repository and River documentation
+on October 5, 2026. Its future-tense requirements and release gates describe that original proposal,
+not current implementation status. The chosen option retains PostgreSQL; adding SQLite is separate
+work. The intended benefit is removing the Temporal service, its history store and its deployment
+requirements while preserving the v1 execution contract. Resource savings must be measured before
+release.
 
 The project has not launched. Use one initial application schema and edit it directly; deployed
 database upgrades and legacy-run conversion are outside the current scope. Temporal remains a
@@ -42,9 +44,9 @@ Arbitrary Go workflows, transparent recovery of lost agent workspaces, new YAML 
 switching, generalized storage adapters and a new operator UI are outside this migration. Existing
 unknown outcome and request APIs provide the operator interaction.
 
-## Current implementation and changes
+## Pre-migration implementation and target design
 
-| Area                | Current implementation                                              | Planned change                                                                     |
+| Area                | Legacy Temporal implementation                                      | River target design                                                                |
 | ------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | Run orchestration   | `internal/engine/workflow.go` and deterministic Temporal goroutines | Bounded scheduler steps over persisted execution records                           |
 | Graph execution     | `graph.go` and `control.go` hold live graph and composite state     | Persist graph scopes, instances, foreach elements and loop positions               |

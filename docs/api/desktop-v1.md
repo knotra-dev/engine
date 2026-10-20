@@ -182,8 +182,9 @@ The client persists events and the cursor atomically BEFORE presenting them. On 
 `Last-Event-ID`. The engine replays from the next retained event; repeated delivery is permitted and
 deduplicated by `(engine identity,runId,eventId)`. Disconnecting stops observation only, not
 execution. Clients read fresh run/request/artifact projections after an event and periodically
-reconcile, since PostgreSQL projections can lag Temporal. No client-derived state transition
-replaces the engine snapshot.
+reconcile to observe newer state. River execution transitions and projections commit together;
+legacy Temporal projections can lag workflow execution. No client-derived state transition replaces
+the engine snapshot.
 
 For this contract, events/cursors remain replayable for a retained run. If the run/event history was
 purged, the server returns a definitive error rather than silently skipping a gap.
@@ -251,7 +252,8 @@ Rust tests cover persistent drafts/journals/cursors, URL and path restrictions, 
 delivery, exact idempotency headers and transport loss, incremental SSE, and corrupt artifact
 rejection. Browser integration tests use a loopback **contract fixture** to exercise settings →
 admission → publish → start → events → saved review → artifact export and mutation recovery. This
-fixture is a test service, not a workflow engine; it calls no models, MCP, Docker or Temporal.
+fixture is a test service, not a workflow engine; it calls no models, MCP, Docker or execution
+backend.
 
 The production desktop app launches no engine processes. Start the engine using the
 [running guide](../running.md). The Go engine has separate deterministic, persistence, sandbox and

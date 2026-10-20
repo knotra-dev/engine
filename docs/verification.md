@@ -4,12 +4,73 @@ Knotra uses deterministic contract/workflow tests, opt-in service integration te
 CLI/browser executions. Passing examples establish the paths below, not throughput or universal
 model quality. Default checks need no paid API credentials.
 
-## Current examples: 5 October 2026
+## Current runtime
+
+River is the default execution backend. Its queues and authoritative execution records use the same
+PostgreSQL database; recovery also requires complete artifact and outcome directories. Normal
+Compose and quickstart do not start Temporal. Current River checks and recorded results are in the
+[implementation report](scheduler-river-implementation.md).
+
+The examples and measurements below retain their original verification dates and backends. Legacy
+Temporal results are historical evidence, not a claim that those runs were repeated on River.
+Compatibility and comparison tests still require the optional Temporal service.
+
+## Three executor processes: 20 October 2026
+
+`TestThreeExecutorProcessesShareWorkAndSurviveDrain` passed with the race detector against real
+PostgreSQL 18.6 and River 0.48.0. One scheduler runtime admits work directly through the existing
+store boundary; three separate executor OS processes use independent database pools, River clients,
+worker identities and heartbeats, with shared local outcome/artifact directories.
+
+- All three executors hold a physical call concurrently before the test releases their responses.
+- Twelve three-node workflows complete on the three executors. One executor then drains and exits;
+  six more workflows complete on the remaining two, with both participating concurrently.
+- All 18 workflows have the expected complete export. There are exactly 54 physical HTTP calls,
+  completed first attempts and root model debits, with no unreleased slots or Temporal outbox rows.
+
+The model endpoint returns fixed responses so calls can be counted exactly. This checks local
+process separation and graceful removal of a worker; it does not measure model throughput, test
+separate machines or network storage, or cover an in-flight executor crash. The public `serve`
+command still uses the combined role and exclusive engine lease; split-process CLI deployment is not
+exposed.
+
+With a disposable PostgreSQL database, run from the repository root:
+
+```sh
+KNOTRA_TEST_DATABASE_URL='postgres://localhost/knotra_dev?sslmode=disable' \
+  go test -mod=readonly -race -count=1 -timeout=4m ./internal/queue \
+  -run '^TestThreeExecutorProcessesShareWorkAndSurviveDrain$' -v
+```
+
+## Local Qwen smoke checks: 20 October 2026
+
+Two existing adapter tests passed against actual Ollama `qwen3.5:9b`:
+
+- `TestOllamaRealStructuredWithoutDocker`: the output is JSON `answer: 42`; replay returns the
+  recorded response without another model call.
+- `TestOllamaRealStructuredAndAgent`: structured generation succeeds, then an agent completes
+  through `knotra_finish` in a Docker sandbox using a helper built from the current sources.
+
+These checks exercise the model adapter and agent runtime, not the River/PostgreSQL service or
+restart recovery. With Ollama and Docker running, reproduce from the repository root:
+
+```sh
+make helper
+docker pull python:3.13-alpine
+KNOTRA_TEST_OLLAMA=http://127.0.0.1:11434 \
+  KNOTRA_TEST_HELPER="$PWD/.knotra/bin/sandbox-helper" \
+  KNOTRA_TEST_WORKDIR="$PWD/.knotra/test-work" \
+  go test -mod=readonly -count=1 -timeout=7m ./internal/adapters \
+  -run '^TestOllamaRealStructured(WithoutDocker|AndAgent)$' -v
+```
+
+## Recorded examples: 5 October 2026
 
 ### Game generation and correction
 
-The game uses actual local `qwen3.5:9b`, Docker/Node, Temporal and PostgreSQL. Repair run
-`a4cbb411-34dd-44f9-8563-c754b283e97b` completed in two loop iterations with no diagnostics:
+The recorded game checks used actual local `qwen3.5:9b`, Docker/Node, Temporal and PostgreSQL.
+Repair run `a4cbb411-34dd-44f9-8563-c754b283e97b` completed in two loop iterations with no
+diagnostics:
 
 1. The supplied, deliberately incorrect opponent lost against a legal sequence of moves.
 2. The model received that exact failure and source; its correction passed all 3159 checks across
@@ -67,11 +128,12 @@ confirmed aligned left edges; four affected review/artifact checks passed, inclu
 Provider checks cover structured arguments, tool IDs, private conversation context,
 malformed/incomplete replies, credentials, HTTP failures, cancellation, budgets and durable replay.
 
-Recovery tests use Docker tools and Temporal/PostgreSQL. The engine was killed while waiting for a
-human and restarted; request identity remained unchanged and each provider received exactly one
-generation request. Reviewed research runs additionally checked SIGKILL recovery, SSE replay,
-valid/late human responses, cancellation and byte-identical publication. These paths are covered by
-the reproducible integration tests below.
+Process-recovery tests cover River/PostgreSQL and legacy Temporal/PostgreSQL with Docker tools. The
+earlier Temporal verification killed the engine while waiting for a human and restarted it; request
+identity remained unchanged and each provider received exactly one generation request. Reviewed
+research runs additionally checked SIGKILL recovery, SSE replay, valid/late human responses,
+cancellation and byte-identical publication. These paths are covered by the reproducible integration
+tests below.
 
 The broader real-service suite exercised three concurrent pipelines with all nine node types, actual
 Ollama, Docker, MCP, Temporal and PostgreSQL. A separate Temporal stress test completed 1,004 nodes
@@ -99,7 +161,9 @@ uses `KNOTRA_E2E_ENDPOINT` and submits packages through the same API as desktop.
 
 For real services, use a disposable database and the addresses/helper/work directory described in
 [Running Knotra](running.md) and [integration setup](../examples/integration/README.md). Then enable
-only the checks needed:
+only the checks needed. The commands below include legacy compatibility and stress checks, so start
+the optional service with `docker compose --profile temporal up -d --wait` and set
+`KNOTRA_TEST_TEMPORAL=127.0.0.1:27233` when using bundled Compose:
 
 ```sh
 KNOTRA_TEST_REAL=1 go test -mod=readonly -race -count=1 -timeout 30m \

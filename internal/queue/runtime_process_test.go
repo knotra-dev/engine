@@ -87,7 +87,12 @@ func runtimeProcessChild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.Client, err = New(s.Pool, Config{EngineID: s.EngineID, HostID: r.HostID, Schema: schema, ExecutionWorkers: 2, ExecutionTimeout: timeout}, handlers)
+	role := execution.Role(os.Getenv("KNOTRA_RUNTIME_ROLE"))
+	workers := 2
+	if role == execution.RoleExecutor {
+		workers = 1
+	}
+	r.Client, err = New(s.Pool, Config{Role: role, EngineID: s.EngineID, HostID: r.HostID, Schema: schema, ExecutionWorkers: workers, ExecutionTimeout: timeout}, handlers)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,6 +106,12 @@ func runtimeProcessChild(t *testing.T) {
 			t.Error(err)
 		}
 	}()
+	if os.Getenv("KNOTRA_RUNTIME_MODE") == "executor" {
+		if err := waitSignal(ctx, directory, "stop-"+r.HostID); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
 	if os.Getenv("KNOTRA_RUNTIME_MODE") == "recover" {
 		await(t, 2*time.Minute, func() (bool, error) {
 			status, err := store.ReadRunStatus(ctx, s.Pool, os.Getenv("KNOTRA_RUNTIME_RUN"))

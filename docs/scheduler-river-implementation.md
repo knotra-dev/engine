@@ -1,15 +1,16 @@
 > MVP scope updated 2026-10-06: River is now the default. Normal Compose and quickstart require
-> PostgreSQL only. Temporal remains an explicit legacy option for baseline tests. Cluster deployment
-> and exhaustive release gates below are deferred; their historical status does not block the
-> single-process MVP.
+> PostgreSQL only. Temporal remains a legacy option for retained work and baseline tests. Cluster
+> deployment and exhaustive release gates below are deferred; their historical status does not block
+> the single-process MVP.
 
 # Scheduler migration implementation status
 
 Updated October 6, 2026. This document records the historical full
 [scheduler and River migration plan](scheduler-river-plan.md). The current release scope is a
-single-process MVP. Default admission and service startup use River without connecting to Temporal.
-The runtime executes DAGs and persisted nested controls; cluster deployment and exhaustive
-performance acceptance remain future work.
+single-process MVP. Default admission and fresh service startup use River without connecting to
+Temporal. Retained live Temporal runs or unsent legacy commands still start the legacy worker
+alongside River. The runtime executes DAGs and persisted nested controls; cluster deployment and
+exhaustive performance acceptance remain future work.
 
 ## Implemented and verified
 
@@ -790,7 +791,8 @@ migration or dependency was added.
 command transactions to the runtime. It initializes River in the application's PostgreSQL schema,
 opens the persistent outcome directory and starts guarded workers before accepting HTTP requests.
 This path creates no Temporal client, worker, codec store or outbox delivery loop. River is now the
-default for the single-process MVP; Temporal requires an explicit backend selection.
+default for the single-process MVP. Temporal starts only when selected explicitly or needed for
+retained live legacy runs or unsent outbox commands, as described below.
 
 The combined service keeps the exclusive engine lease and uses the single-host `local` resource
 identity. `--execution-workers` bounds leaf delivery concurrency (default 16); graph/ancestor limits
@@ -1467,6 +1469,18 @@ started, execution remains queued and physical calls remain zero. Direct API/sch
 attempts return no ownership. Starting the executor completes the original three-node DAG with exact
 full export, three physical HTTP model calls, three root budget debits and three outcomes owned by
 that executor. This is an in-process role-boundary check, not a two-host acceptance test.
+
+On October 20, `TestThreeExecutorProcessesShareWorkAndSurviveDrain` passed with race detection on
+PostgreSQL 18.6. A scheduler runtime and three separate executor OS processes share the database and
+local outcome/artifact directories. Each executor has its own pool, River client, incarnation and
+heartbeat, with one execution slot. A response barrier proves all three perform physical calls
+concurrently. Twelve three-node DAGs finish before one executor drains and exits; six further DAGs
+finish on the remaining two, with a second barrier proving both participate. All 18 exports match;
+54 completed first attempts, physical fixture-model calls and root debits agree, all slots are
+released, and no Temporal outbox row is created. The model is a literal HTTP fixture. This verifies
+local executor process separation and graceful removal, not multiple machines, network storage,
+in-flight crash recovery or a throughput target. See
+[reproduction](verification.md#three-executor-processes-20-october-2026).
 
 The `serve` command still uses the combined role and exclusive engine lease. CLI role wiring, worker
 profile/helper/secret capabilities, placement affinity and real multi-host failure/storage

@@ -5,9 +5,11 @@ journals, budgets, requests and read projections. `Artifacts` keeps immutable by
 data directory and metadata in PostgreSQL. A runtime artifact becomes visible when its producing
 node commits validated outputs; uploaded inputs are visible immediately.
 
-Temporal owns workflow history. PostgreSQL projections support client reads and may lag behind
-execution; clients do not schedule from these projections. The engine's advisory lock permits one
-owning process per engine ID.
+For the default River backend, PostgreSQL owns authoritative execution records and queue delivery.
+Execution transitions and their client projections commit together; bounded projections never
+replace complete execution values. Clients do not schedule from these projections. The engine's
+advisory lock permits one owning process per engine ID. Legacy Temporal runs retain their workflow
+history in Temporal, and their PostgreSQL projections may lag execution.
 
 ## Initial schema
 

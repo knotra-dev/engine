@@ -37,21 +37,20 @@ to stable keys such as `t('settings.language')`; English phrases are catalog val
 
 ## Connect a real engine
 
-Prepare PostgreSQL, Temporal, Docker/helper and Ollama using the
-[running guide](../docs/running.md). With the bundled Compose infrastructure, start the engine from
-the repository root:
+Prepare PostgreSQL, Docker/helper and Ollama using the [running guide](../docs/running.md). With the
+bundled Compose infrastructure, start the engine from the repository root:
 
 ```sh
 export KNOTRA_DATABASE_URL='postgres://knotra:knotra-development@127.0.0.1:25432/knotra?sslmode=disable'
 bin/knotra serve \
   --profile examples/local/profile.yaml \
-  --temporal-address 127.0.0.1:27233 \
   --cors-origin http://127.0.0.1:1420
 ```
 
-In Settings, save `http://127.0.0.1:8787` and connect. Native requests do not need CORS; browser
-preview requires the exact allowed origin above. Remote engines require HTTPS and a token;
-credentials are kept separate from draft exports.
+The engine uses River by default; no Temporal service is needed for a fresh engine. In Settings,
+save `http://127.0.0.1:8787` and connect. Native requests do not need CORS; browser preview requires
+the exact allowed origin above. Remote engines require HTTPS and a token; credentials are kept
+separate from draft exports.
 
 Open **Pipelines → Hello, model**, or create a copy through **New pipeline → Ready to run**. Choose
 **Run**, select profile `local`, and check admission or start. The engine publishes an immutable
@@ -124,7 +123,8 @@ KNOTRA_E2E_ENDPOINT=http://127.0.0.1:8787 \
 ```
 
 To compare both schedulers without downloading a model, run the literal client acceptance from the
-repository root. It needs Bun/Cargo on `PATH`, PostgreSQL, Temporal, Docker, the built helper and an
+repository root. This legacy compatibility comparison needs Bun/Cargo on `PATH`, PostgreSQL,
+Temporal (`docker compose --profile temporal up -d --wait`), Docker, the built helper and an
 installed Playwright Chromium. `KNOTRA_CHROMIUM` can name an existing Chrome executable.
 
 ```sh

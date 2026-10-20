@@ -5,11 +5,12 @@ contracts, checks and approvals; agents choose actions only within their granted
 Every run freezes its package and configuration. This makes its provenance inspectable, without
 promising identical model output on a new run.
 
-The engine and CLI use Go, Temporal, PostgreSQL and Docker; desktop uses Tauri/Rust and React. YAML
+The engine and CLI use Go, River, PostgreSQL and Docker; desktop uses Tauri/Rust and React. YAML
 parsing and JSON Schema checks are supplemented by a semantic compiler, while CEL evaluates bounded
 expressions without external I/O. Model protocols share an agent runtime and operation log. Versions
 are pinned in dependency manifests. See [setup](running.md), [API](api/desktop-v1.md) and
-[Temporal](temporal.md) for their operational details.
+[River implementation](scheduler-river-implementation.md) for their operational details. Temporal is
+retained as an optional legacy backend for existing runs and compatibility tests.
 
 ## Components
 
@@ -20,7 +21,7 @@ are pinned in dependency manifests. See [setup](running.md), [API](api/desktop-v
 | Engine API               | Receiving packages and commands, access to definitions, runs, events and artifacts     |
 | Plan Validation and Prep | Parsing YAML, validating schemas and dependencies, resolving settings, fixing the plan |
 | Knotra Orchestration     | Graph semantics, branching, limits, inputs and outputs                                 |
-| Temporal                 | Persistent workflow history, operation scheduling, waits and recovery                  |
+| River                    | Transactional job delivery, worker queues and queue maintenance                        |
 | Knotra Executors         | Invoking models and tools, working with environments and results                       |
 | Agent runtime            | Model-tool interaction cycle, context and completion of the node                       |
 | Connection Adapters      | Provider API differences, MCP and access configuration                                 |
@@ -32,8 +33,13 @@ process on a single host; PostgreSQL enforces sole ownership of the engine ID. C
 separate clients. Scaling the worker to multiple hosts requires shared file and payload storage and
 remains a direction for development.
 
+The internal runtime already separates API, scheduler and executor roles. A
+[three-executor process check](verification.md#three-executor-processes-20-october-2026) verifies
+work sharing and graceful removal on one host. The public `serve` command still runs the combined
+role; split-process CLI deployment and multiple-host acceptance remain further work.
+
 Desktop preserves drafts, receipts and SSE-cursors in SQLite; browser preview uses localStorage.
-These data do not replace Temporal history or the engine database.
+These data do not replace the engine's PostgreSQL records or durable artifact and outcome files.
 
 ## Path from YAML to Execution
 
@@ -42,7 +48,7 @@ These data do not replace Temporal history or the engine database.
 3. The engine re-validates the package, permissions, connections and executor capabilities.
 4. An immutable internal plan is formed: package version, inputs, allowed settings, links to
    connections and limits.
-5. A Temporal workflow is started, executing this plan according to Knotra rules.
+5. Admission saves the run and enqueues a River wakeup in the same PostgreSQL transaction.
 6. Executors perform operations and save results and events.
 7. CLI or desktop reads state and event stream via API. Client disconnection does not cancel the
    run.
@@ -50,24 +56,25 @@ These data do not replace Temporal history or the engine database.
 Secret values are not included in the user package or workflow history. The plan stores links to
 secrets. Their resolution occurs in a trusted component before use.
 
-## Separation of Knotra and Temporal
+## Knotra scheduling and River delivery
 
-Knotra defines what each node means, what data it needs and what constitutes completion. Temporal
-provides the mechanism for reliable execution of this logic.
+Knotra defines what each node means, what data it needs and what constitutes completion.
+`internal/scheduler` makes bounded decisions over persisted execution records without external I/O.
+`internal/queue` commits the resulting state changes and River deliveries together in PostgreSQL.
 
-Workflow executes deterministic control logic. Model calls, MCP, file and container work are
-performed in Activities. Replaying saved history should not by itself trigger external actions.
+River delivers advance, execution, finalization and cleanup jobs. `internal/executor` invokes the
+model, MCP, file and container adapters. Knotra records attempt ownership, operation intent and
+confirmed results; queue redelivery alone does not authorize repeating an external action.
 
-YAML lacks Temporal entities mandatory for the user. The plan must contain sufficient data to
-execute the fixed version without reading mutable drafts.
+Pipeline YAML contains graph semantics, not queue or backend entities. The admitted plan contains
+the fixed package and configuration needed for execution without reading mutable drafts.
 
-Agent workflow and Activities detailing must account for history cost, recovery points and side
-effects. One long-running agent node cannot be considered automatically recoverable just because it
-is started as an Activity.
+An attempt durably saves its validated result before database publication. Recovery can import that
+saved outcome; it cannot reconstruct a lost agent workspace or infer an unconfirmed external result.
 
 Code changes in executors and plan format must account for existing runs. Updating long-lived
-processes requires a worker and replay compatibility policy for saved histories; the current
-delivery does not promise automatic workflow migration between incompatible versions.
+processes requires compatibility with persisted execution formats; the current delivery does not
+promise automatic migration between incompatible versions or conversion between backends.
 
 ## Execution Graph
 
@@ -134,22 +141,31 @@ executors on different machines requires shared storage, for example via an S3 a
 
 | Data                                                | Storage Location                                                      |
 | --------------------------------------------------- | --------------------------------------------------------------------- |
-| History and authoritative workflow state            | Temporal                                                              |
+| Authoritative execution state and complete values   | PostgreSQL Knotra                                                     |
+| River jobs and queue maintenance records            | The same PostgreSQL database                                          |
 | Knotra definitions, versions, and metadata          | PostgreSQL Knotra                                                     |
-| State views for search and output                   | PostgreSQL Knotra, synchronized with Temporal                         |
+| State views for search and output                   | PostgreSQL Knotra, committed with execution transitions               |
 | Detailed events, usage accounting, and result links | PostgreSQL Knotra                                                     |
-| Files, large results, and saved materials           | Artifact Storage                                                      |
+| Artifact bytes and durable outcome evidence         | File storage under the engine's configured data directories           |
 | Secret values                                       | Environment of the trusted component; later separate secret providers |
 
-Temporal uses its own database, separated from the application database. At the first stage,
-databases may reside on one PostgreSQL server.
+River stores delivery records in the application database. Knotra's execution records retain
+complete values independently of bounded API projections; the scheduler never resumes from client
+previews. Events and streaming observations remain separate from authoritative execution state.
 
-The state view in Knotra does not create a second independent orchestrator. Possible lag from
-Temporal must be accounted for by the API and reconciliation mechanism.
+Recovery requires PostgreSQL plus complete artifact and outcome directories, including evidence not
+yet imported into the database. See the [backup procedure](running.md#river-backup-and-restore).
 
-Management history, detailed logs, and streaming response fragments have different storage
-requirements. Large files and every text fragment do not fit into Temporal history without
-necessity.
+### Legacy Temporal runs
+
+`--backend` selects admission for new runs and defaults to `river`. Startup also starts the workers
+needed by retained state: River for retained River runs, and Temporal for live Temporal runs or
+unsent legacy outbox commands. Commands keep using each run's immutable admitted backend.
+
+A River engine with no live legacy runs or unsent legacy commands needs no Temporal service.
+Retaining completed legacy projections alone does not require a Temporal connection. Legacy runs
+additionally depend on Temporal history and offloaded payload files; their implementation is
+documented in [Temporal](temporal.md).
 
 ## Errors and Recovery
 

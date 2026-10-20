@@ -5,9 +5,9 @@ Five scenarios demonstrate increasingly substantial work with
 `model_main`, with a 4096-token response budget. The same logical connection can use OpenAI or
 Anthropic in a cloud profile; the pipeline package stays unchanged. Python steps use `python_box`;
 the game uses `node_box`. No MCP servers, secrets, external search, or package installations are
-required by these pipelines. Prepare PostgreSQL, Temporal, Docker/helper and Ollama with the
+required by these pipelines. Prepare PostgreSQL, Docker/helper and Ollama with the
 [running guide](../../docs/running.md), including both `python:3.13-alpine` and `node:22-alpine`
-images.
+images. The engine uses River by default and needs no Temporal service for these examples.
 
 | Package                                            | What happens                                                                                                                                                               | Deliverables                                                                       |
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -53,9 +53,9 @@ gaps. The ZIP includes the dossier, JSON comparison and all three complete sourc
 
 Use `research-dossier/review.yaml` as the entrypoint. Its child `pipeline.yaml` shares the same
 package root and source files. When review opens, inspect the dossier and comparison in Inbox. Stop
-and restart the engine using the same database, Temporal and data directory: the request ID and
-artifacts remain available. Submit `approved: true`, a nonempty `reviewer` and `comments` (which may
-be empty). Cancel the run if the evidence is insufficient.
+and restart the engine using the same database and complete engine data directories: the request ID
+and artifacts remain available. Submit `approved: true`, a nonempty `reviewer` and `comments` (which
+may be empty). Cancel the run if the evidence is insufficient.
 
 Publication copies the reviewed dossier without model revision and verifies it against the source
 ZIP. `review.json` records the reviewer, comments and SHA-256 of both reviewed files. The final ZIP

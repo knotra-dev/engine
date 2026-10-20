@@ -1,8 +1,9 @@
 # Knotra v1: connections, environments and permissions
 
-Implementation is located in `internal/contract`, `internal/engine` and `internal/adapters`.
-Configuration is described in [startup guide](../running.md), verified scenarios and support
-boundaries — in [report](../verification.md).
+Implementation is located in `internal/contract`, `internal/execution`, `internal/scheduler` and
+`internal/adapters`; `internal/engine` retains legacy Temporal execution. Configuration is described
+in [startup guide](../running.md), verified scenarios and support boundaries — in
+[report](../verification.md).
 
 Status: normative contract v1, verified against implementation on October 5, 2026. Structural JSON
 Schema and textual semantics are applied jointly. Requirements for external systems are checked
@@ -20,7 +21,7 @@ installed by its operator. The pipeline package cannot load or modify the profil
 contains YAML with `kind: EngineProfile`.
 
 The engine selects one profile for startup before plan preparation. Profile installation method,
-profile selection via API, PostgreSQL and Temporal addresses, Docker access and server settings
+profile selection via API, PostgreSQL address, execution backend, Docker access and server settings
 themselves belong to deployment configuration and are not fields of this format. `metadata.name`
 identifies the profile; `metadata.version` serves as a user label, not a trust or immutability
 mechanism.
@@ -292,7 +293,7 @@ state of the session is not considered node output and does not replace data tra
 After session loss, its internal state cannot be silently considered restored. Continuation is
 possible only with a server-supported session or according to node re-execution rules; if the
 previous action result is uncertain, `onUnknownOutcome` is applied. MCP-server state does not
-automatically enter Temporal checkpoints.
+automatically enter engine checkpoints or operation journals.
 
 ### 5.5. ToolPolicy and repeated calls
 

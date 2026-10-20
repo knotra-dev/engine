@@ -67,16 +67,16 @@ atomically and are never overwritten unless `--force` is explicit. `--output -` 
 bytes and cannot be combined with `--json`.
 
 Run `knotra serve --help` for infrastructure options. The service requires at least one trusted
-`--profile FILE` and a PostgreSQL URL through `KNOTRA_DATABASE_URL` or `--database-url`; Temporal
-defaults to `127.0.0.1:7233`. Engine logs go to stderr.
+`--profile FILE` and a PostgreSQL URL through `KNOTRA_DATABASE_URL` or `--database-url`. River is
+the default execution backend. Engine logs go to stderr.
 
-The unreleased scheduler migration can be exercised with `knotra serve --backend river`
-(`KNOTRA_BACKEND=river`). This starts the embedded River queues and uses PostgreSQL without dialing
-Temporal. For an isolated test database, start just PostgreSQL with
-`docker compose up -d --wait postgres`. Keep the data directory across restarts: it contains durable
-outcomes and artifacts. `--execution-workers` bounds simultaneous River leaf deliveries (default
-16); existing profile concurrency and budgets still apply. The queue timeout covers current profile
-limits and the original durations of active admitted runs, with a one-minute margin.
+`knotra serve` starts the embedded River queues; `--backend river` (`KNOTRA_BACKEND=river`) selects
+this default explicitly. A fresh River engine uses PostgreSQL without dialing Temporal. For an
+isolated test database, start just PostgreSQL with `docker compose up -d --wait postgres`. Keep the
+data directory across restarts: it contains durable outcomes and artifacts. `--execution-workers`
+bounds simultaneous River leaf deliveries (default 16); existing profile concurrency and budgets
+still apply. The queue timeout covers current profile limits and the original durations of active
+admitted runs, with a one-minute margin.
 
 `--host-id` (`KNOTRA_HOST_ID`, default `local`) identifies the execution host across restarts. Use a
 stable ASCII name containing letters, digits, dots, underscores or hyphens, up to 128 characters,
@@ -88,5 +88,10 @@ filesystem must support hard links, atomic same-directory rename, file/directory
 consistent reads between clients; this flag does not enable concurrent engine processes. See the
 [storage acceptance notes](../../docs/scheduler-river-implementation.md#shared-filesystem-and-execution-host-identity).
 
-The default remains Temporal while the migration's remaining release gates are being verified. The
-combined service retains exclusive database ownership; cluster deployment is not enabled.
+`--backend temporal` selects the optional legacy backend; its address defaults to `127.0.0.1:7233`
+(`--temporal-address` / `KNOTRA_TEMPORAL_ADDRESS`). `--backend` controls new-run admission, while
+commands keep using the backend recorded on each admitted run. Startup also starts Temporal if the
+database contains live legacy runs or unsent legacy outbox commands. Once those finish, retained
+completed legacy projections do not require a Temporal connection.
+
+The combined service retains exclusive database ownership; cluster deployment is not enabled.

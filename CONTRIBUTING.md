@@ -9,7 +9,8 @@ runs.
 ## Development environment
 
 Use the Go version in `go.mod`. The [running guide](docs/running.md) describes local Docker/Colima,
-PostgreSQL, Temporal and Ollama setup. For fast development:
+PostgreSQL and Ollama setup. River runs inside the engine; Temporal is optional for legacy
+compatibility tests. For fast development:
 
 ```sh
 go mod download
@@ -46,22 +47,25 @@ PostgreSQL queries live in `internal/store/queries`; regenerate their typed pgx 
 
 ## Package boundaries
 
-| Package                                | Responsibility                                                                           |
-| -------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `internal/contract`                    | Package loading, strict parsing, semantic validation, CEL and immutable plan compilation |
-| `internal/engine`                      | Deterministic graph execution and Temporal workflow behavior                             |
-| `internal/adapters`                    | Model, MCP and isolated command execution behind injected durable hooks                  |
-| `internal/store`                       | PostgreSQL transactions, projections, durable operations and artifact metadata           |
-| `internal/api`, `internal/protocol`    | Versioned HTTP/SSE boundary and transport DTOs                                           |
-| `internal/client`, `internal/cli`      | Client mutation journals, event observation and command presentation                     |
-| `internal/app`                         | Dependency wiring and service lifecycle                                                  |
-| `app/src/lib/engine`, native `backend` | Engine API, command receipts, SSE and verified bytes                                     |
-| `app/src/components`                   | UI grouped by authoring, engine runs, review and artifacts                               |
+| Package                                    | Responsibility                                                                           |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `internal/contract`                        | Package loading, strict parsing, semantic validation, CEL and immutable plan compilation |
+| `internal/execution`, `internal/scheduler` | Shared execution types and pure bounded graph decisions                                  |
+| `internal/queue`, `internal/executor`      | River delivery, transactional execution lifecycle and adapter hosting                    |
+| `internal/engine`                          | Legacy Temporal workflow execution and replay compatibility                              |
+| `internal/adapters`                        | Model, MCP and isolated command execution behind injected durable hooks                  |
+| `internal/store`                           | PostgreSQL transactions, projections, durable operations and artifact metadata           |
+| `internal/api`, `internal/protocol`        | Versioned HTTP/SSE boundary and transport DTOs                                           |
+| `internal/client`, `internal/cli`          | Client mutation journals, event observation and command presentation                     |
+| `internal/app`                             | Dependency wiring and service lifecycle                                                  |
+| `app/src/lib/engine`, native `backend`     | Engine API, command receipts, SSE and verified bytes                                     |
+| `app/src/components`                       | UI grouped by authoring, engine runs, review and artifacts                               |
 
-Keep external I/O out of workflow code and expression evaluation. Pass `context.Context` through
-blocking work, bound reads and concurrency, preserve typed errors, and make cleanup ownership clear.
-Configuration and credentials are engine concerns; provider responses and pipeline content are
-untrusted data. Avoid global mutable state and broad interfaces added for hypothetical future use.
+Keep external I/O out of scheduler decisions, legacy workflow code and expression evaluation. Pass
+`context.Context` through blocking work, bound reads and concurrency, preserve typed errors, and
+make cleanup ownership clear. Configuration and credentials are engine concerns; provider responses
+and pipeline content are untrusted data. Avoid global mutable state and broad interfaces added for
+hypothetical future use.
 
 Use ordinary Go conventions: `gofmt`, small cohesive functions, explicit errors, table-driven tests
 where they clarify behavior, and comments explaining invariants or non-obvious decisions. Tests
@@ -156,9 +160,12 @@ Use a development database. Database tests create isolated schemas; Docker tests
 containers. No blanket database reset or Docker prune is needed. The manually triggered Go workflow
 runs these persistence, HTTP, sandbox and MCP checks without downloading a model.
 
-To include real local model calls, install `qwen3.5:9b` in Ollama and set:
+To include real local model calls, install `qwen3.5:9b` in Ollama. The concurrent-pipeline
+acceptance explicitly uses the legacy Temporal backend, and process-recovery tests compare both
+backends, so start the optional Temporal service as well:
 
 ```sh
+docker compose --profile temporal up -d --wait
 export KNOTRA_TEST_OLLAMA=http://127.0.0.1:11434
 export KNOTRA_TEST_TEMPORAL=127.0.0.1:27233
 export KNOTRA_TEST_REAL=1
@@ -191,10 +198,10 @@ Knotra is MIT licensed. Contributions are made under the same [license](LICENSE)
 Default adapter tests use literal Responses/Messages fixtures, including fragmented SSE, malformed
 responses, auth/status handling, tool ID correlation, budgets and operation replay. Real Docker
 agent checks use `KNOTRA_TEST_HELPER` and `KNOTRA_TEST_WORKDIR`. The recovery suite includes both
-fixture providers against real PostgreSQL/Temporal when `KNOTRA_TEST_RECOVERY=1`; the generation
-count must remain one across process restart. On Unix, `KNOTRA_TEST_RUNTIME_RECOVERY=1` also enables
-actual River Runtime SIGKILL checks against literal HTTP fixtures and isolated PostgreSQL schemas,
-with natural lease expiry. Run
+fixture providers against River/PostgreSQL and legacy Temporal/PostgreSQL when
+`KNOTRA_TEST_RECOVERY=1`; the generation count must remain one across process restart. On Unix,
+`KNOTRA_TEST_RUNTIME_RECOVERY=1` also enables actual River Runtime SIGKILL checks against literal
+HTTP fixtures and isolated PostgreSQL schemas, with natural lease expiry. Run
 `go test -race -count=1 -timeout=6m -run '^TestRuntimeProcessCrashBoundaries$' ./internal/queue`
 with `KNOTRA_TEST_DATABASE_URL` set.
 

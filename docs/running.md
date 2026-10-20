@@ -1,8 +1,8 @@
 # Running the engine and CLI
 
-The engine is started via a native Go binary and connects to PostgreSQL, Temporal, the API of the
-selected model, and Docker. The Compose setup below starts separate infrastructure for development;
-the engine itself remains on the host to use local Ollama and Docker/Colima.
+The engine is started via a native Go binary with embedded River queues and connects to PostgreSQL,
+the API of the selected model, and Docker. The Compose setup below starts development
+infrastructure; the engine itself remains on the host to use local Ollama and Docker/Colima.
 
 ## Quickstart from a CLI archive
 
@@ -10,9 +10,9 @@ You need a working Docker Engine, Docker Compose, and Ollama. Download the archi
 architecture from [Releases](https://github.com/michael-bill/knotra/releases/latest), unpack it, and
 keep both Linux helpers next to `knotra` (`knotra.exe` on Windows). Then run `./knotra doctor` and
 `./knotra quickstart`. Doctor checks dependencies and helper architecture without starting
-infrastructure. Quickstart starts PostgreSQL and Temporal with persistent volumes, loads required
-images and model, starts the engine, and downloads the first `greeting.txt`. It stays in the
-terminal until Ctrl-C.
+infrastructure. Quickstart starts PostgreSQL with a persistent volume, loads required images and
+model, starts the engine, and downloads the first `greeting.txt`. It stays in the terminal until
+Ctrl-C.
 
 The default directory is `knotra/quickstart` inside the user's system settings directory. The
 command prints the exact path. An explicit directory is more convenient for recovery:
@@ -40,7 +40,7 @@ first operation ID, profile, and examples are written once; your edits are not o
 and volumes remain after Ctrl-C. For another profile use a separate directory and free
 `--postgres-port`, `--listen`. `--no-run` starts the engine without greeting.
 `--cors-origin http://127.0.0.1:1420` is needed for preview. Engine data lies in `engine/`, logs in
-`engine.log`; keep this directory and both volumes together.
+`engine.log`; keep this directory and the PostgreSQL volume together.
 
 The persistent directory must be accessible to Docker. On macOS, choose a path shared with Colima or
 Docker Desktop. Quickstart copies the verified sandbox helper into this directory so execution does
@@ -56,7 +56,7 @@ it is not written to the profile. For example, after setting `OPENAI_API_KEY`:
 
 For Anthropic use `--provider anthropic` and `ANTHROPIC_API_KEY`. Quickstart with a cloud provider
 performs a paid model request for greeting; `--no-run` disables it. Support for a specific model and
-parameters depends on its API. These instructions do not promise production Temporal setup or signed
+parameters depends on its API. These instructions do not promise production infrastructure or signed
 desktop build.
 
 ## OpenAI and Anthropic Connections
@@ -139,13 +139,18 @@ Compose pins PostgreSQL 18.6 and mounts its volume in `/var/lib/postgresql`. Tem
 for legacy comparison tests: `docker compose --profile temporal up -d --wait` and
 `serve --backend temporal --temporal-address 127.0.0.1:27233`.
 
+`--backend` selects new-run admission. If the database still contains live Temporal runs or unsent
+legacy commands, startup also connects to Temporal to finish them, even with `--backend river`.
+Commands keep using each run's admitted backend. Completed legacy projections alone do not require
+Temporal; a fresh River engine uses only PostgreSQL for scheduling.
+
 ```sh
 docker compose stop
 docker compose start
 ```
 
 Stop preserves data. `docker compose down` removes containers, keeping named volumes.
-`docker compose down --volumes` also removes history and database; this command is needed only for
+`docker compose down --volumes` also removes the database; this command is needed only for
 intentional development environment reset.
 
 ## First Run
@@ -218,20 +223,20 @@ demo uses local data samples.
 
 File contents are flushed before publication on every OS. On Windows, an explicit directory flush is
 unavailable; persistence of directory entries across sudden power loss depends on NTFS. Use backups
-and preserve the database, Temporal storage and engine directory together.
+and preserve the database and complete engine data directories together.
 
-PostgreSQL stores definitions, accepted runs, projections, requests to humans, outbox, and logs of
-external operations. Temporal stores execution history. Catalog `--data-dir` stores artifact files
-and offloaded payload data from Temporal, as well as sandbox temporary materials. Recovery requires
-**all three storages**. A single PostgreSQL copy is insufficient. Do not delete `.knotra` while
-history is needed.
-
-For the default River backend, execution records and River delivery live in PostgreSQL. Its durable
-files are `artifacts/` and `outcomes/` under `--shared-data-dir`, which defaults to `--data-dir`.
-Keep complete directories, including outcome files whose publication has not committed, MCP
+For the default River backend, definitions, execution records, command receipts, requests, operation
+journals, projections, events and River delivery live in PostgreSQL. Its durable files are
+`artifacts/` and `outcomes/` under `--shared-data-dir`, which defaults to `--data-dir`. Keep
+complete directories, including outcome files whose publication has not committed, MCP
 initialization/session evidence and private artifact bytes. River job retention does not authorize
-deleting these files or Knotra history. A River-only engine does not need Temporal storage; a
-mixed-backend engine still needs all stores described above.
+deleting these files or Knotra history. A PostgreSQL copy alone is insufficient. Do not delete
+`.knotra` while its data is needed.
+
+A River-only engine does not need Temporal storage. A mixed or legacy engine additionally requires
+its Temporal history and offloaded `payloads/` directory under `--data-dir`. Preserve these with
+PostgreSQL and artifact/outcome storage for as long as the legacy runs or their replay history are
+needed. See the [legacy backend details](temporal.md).
 
 ### River backup and restore
 
@@ -305,8 +310,9 @@ filesystem faults, multi-host recovery and mixed-backend backups need separate a
 The current release is one API/worker process on one host. If the worker moves, it needs the same
 saved data, profile references, and compatible helpers/images. Multiple hosts with independent local
 `data-dir` do not form a correct shared engine. A shared PostgreSQL alone does not solve this
-problem. For production, separately prepared Temporal, PostgreSQL, file backups, and a chosen shared
-storage model are required; Compose is not a production recipe.
+problem. For production, plan PostgreSQL operations, complete file backups, and a storage model
+consistent with this single-host boundary; Compose is not a production recipe. Temporal is needed
+only when using the legacy backend or finishing retained legacy work.
 
 After engine restart, completed external responses are read from the log. If the record outcome is
 unknown or the working environment of an unfinished agent is lost, the engine requires explicit
@@ -375,8 +381,9 @@ Complete outputs and confirmed operation responses remain in their existing exec
 
 One engine ID is served by one process: ownership is secured by a separate PostgreSQL connection.
 This is a deployment limitation, not parallel run capability. The engine simultaneously executes
-multiple pipelines and multiple instances of one YAML with independent limits and sandbox. The
-Temporal task queue name is automatically appended with the engine ID so that different engine
+multiple pipelines and multiple instances of one YAML with independent limits and sandbox. The River
+queues are scoped by engine identity, with cleanup also scoped by host identity. For legacy
+execution, the Temporal task queue name is appended with the engine ID so that different engine
 databases do not pick up each other's tasks.
 
 Lists have cursors and are limited by record count and size. CLI flag `--all` bypasses all pages.

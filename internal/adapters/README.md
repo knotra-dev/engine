@@ -1,6 +1,7 @@
 # Execution adapters
 
-`Runner` executes one compiled leaf node. The graph scheduler remains in `engine`; transactional
+`Runner` executes one compiled leaf node. Graph scheduling belongs to `internal/scheduler` and
+`internal/queue` for River, or `internal/engine` for legacy Temporal execution; transactional
 budgets, artifacts and operation journals are supplied through `Hooks`. Use `WithHooks` for a
 request-scoped journal/budget binding while retaining run-scoped MCP sessions. Call `ReleaseRun`
 after a run becomes terminal and `Close` on server shutdown.
@@ -95,11 +96,13 @@ feedback while steps remain; a plain text answer is prompted to finish explicitl
 model turns, including completion, while the node deadline and enclosing model/tool budgets also
 apply.
 
-The full attempt is one Temporal activity. Individual external calls and the final validated result
-use durable operation journals. A completed attempt can return its recorded outputs; an interrupted
-attempt with a lost workspace cannot resume the in-memory conversation or automatically repeat its
-effects. See recovery below. The real integration scenario exercises file reads, MCP, file writes,
-Python execution and completion with three concurrent agents and independent artifacts.
+The full attempt is one River execution delivery, or one activity in the legacy Temporal backend.
+Individual external calls and the final validated result use durable operation journals. River also
+captures the completed result in a durable outcome file before database publication. A completed
+attempt can return its recorded outputs; an interrupted attempt with a lost workspace cannot resume
+the in-memory conversation or automatically repeat its effects. See recovery below. The real
+integration scenario exercises file reads, MCP, file writes, Python execution and completion with
+three concurrent agents and independent artifacts.
 
 ## Docker backend
 
@@ -194,5 +197,5 @@ go test -mod=readonly ./internal/adapters -run '^TestCloudRealStructuredAndAgent
 
 Set `OPENAI_API_KEY` in the environment first. Anthropic uses `ANTHROPIC_API_KEY` and
 `KNOTRA_TEST_ANTHROPIC_MODEL`. Each provider without both values is skipped. Docker/helper settings
-above enable the agent subtest. Agent tools and Temporal/PostgreSQL recovery are checked in
-`internal/integration`.
+above enable the agent subtest. Agent tools and PostgreSQL recovery on River and the legacy Temporal
+backend are checked in `internal/integration`.

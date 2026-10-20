@@ -1,4 +1,12 @@
-# Temporal in Knotra
+# Legacy Temporal backend
+
+River is the default execution backend. This document describes the retained Temporal implementation
+and its historical verification; it is not required infrastructure for a fresh River engine. See
+[architecture](architecture.md) and [running](running.md) for the current default.
+
+Temporal is used with `serve --backend temporal`, by legacy compatibility tests, or when startup
+finds live Temporal runs or unsent legacy commands in the database. Changing admission to River does
+not convert existing runs. Completed legacy projections alone do not require a Temporal connection.
 
 The implementation review and verification were completed on October 3, 2026. The Go SDK
 `go.temporal.io/sdk v1.49.0` is used; the behavior source for specific APIs is the pinned SDK
