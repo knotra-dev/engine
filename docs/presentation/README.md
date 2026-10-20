@@ -6,23 +6,26 @@ Nine slides in Russian: a five-minute project introduction and an extra slide ab
 Community. The layout uses Knotra’s light palette and logo, without a repeating header. Slide 2
 explains the use case alongside an interactive agent such as Codex. Slide 3 distinguishes one
 example graph from the full catalog of nine node types; the output file is not counted as a node
-type. Slide 4 highlights the local `qwen3.5:9b` model and automated test-feedback loop; the recorded
+type. Slide 6 highlights the local `qwen3.5:9b` model and automated test-feedback loop; the recorded
 repair run starts from a deliberately incorrect strategy. A separate generation run also passed. The
 presentation does not claim a measured success rate for a single prompt or guaranteed repair. Slide
-5 illustrates a seven-step customer support process: input validation, agent analysis using
+4 illustrates a seven-step customer support process: input validation, agent analysis using
 customer/order/history MCP tools, another agent using knowledge and policy tools to draft a reply,
 code checks, routing, optional human approval and delivery. Both agents have read access; the final
 tool step sends the answer. Typical answers bypass human approval; complex cases and failed checks
 go to an operator. This is an application scenario, not a recorded run or a bundled helpdesk
-integration; the MCP servers and helpdesk API would need to be connected separately. Slide 6
+integration; the MCP servers and helpdesk API would need to be connected separately. Slide 5
 separates the target multi-host architecture and example daily workload from the verified same-host
 worker test.
 
-Slide 4 shows the concrete failing strategy and the checks passed after correction. The raw counts
+Slide 6 shows the concrete failing strategy and the checks passed after correction. The raw counts
 of executed checks and game positions remain in speaker notes as testing detail.
 
-Slide 6 covers scaling and slide 7 the architecture. The final slide contains only a thank-you and
-the source-code link. Diagram arrows are SVG paths, not font glyphs.
+Slide 5 covers scaling, followed by the game on slide 6. Slide 7 shows the project architecture,
+following the root README diagram: clients, the Go engine with API, Knotra scheduling and River,
+workers, external model/MCP/sandbox connections, and shared PostgreSQL and file storage. The final
+slide contains only a thank-you and the source-code link. Diagram arrows are SVG paths, not font
+glyphs.
 
 Open `index.html` directly or serve this directory with any static HTTP server. All assets and the
 playable game are local; no engine, build step or internet connection is required.
@@ -41,7 +44,7 @@ screenshots come from the project’s recorded runs and the supplied Telegram po
 results describe a same-host test with fixed model responses.
 
 The narrative and claims are grounded in the root README, `docs/architecture.md`,
-`docs/verification.md`, and `docs/scheduler-river-implementation.md`. Slide 5 uses the engine’s
+`docs/verification.md`, and `docs/scheduler-river-implementation.md`. Slide 4 uses the engine’s
 `agent`, `tool`, `code`, `switch` and `human` node types to explain a possible application.
 
 Editorial references:

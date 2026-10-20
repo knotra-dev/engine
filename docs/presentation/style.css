@@ -824,126 +824,193 @@ svg {
   font-size: 23px;
 }
 .architecture {
-  margin-top: 29px;
-  padding: 29px 34px 28px;
+  position: relative;
+  height: 584px;
+  margin-top: 22px;
 }
-.architecture-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-}
-.architecture-top .flow-arrow {
-  margin: 0;
-}
-.architecture-client,
-.architecture-providers {
-  display: flex;
-  flex-direction: column;
-  width: 290px;
-}
-.architecture-client > span,
-.architecture-providers > strong {
-  font-size: 29px;
-  font-weight: 500;
-}
-.architecture-top small {
-  font-size: 18px;
-  color: var(--muted);
-  display: block;
-  margin-top: 8px;
-}
-.architecture-engine {
-  display: flex;
-  gap: 18px;
-  align-items: center;
-  padding: 20px 25px;
-  border: 1px solid var(--accent-border);
-  border-radius: 12px;
+.arch-engine {
+  position: absolute;
+  left: 384px;
+  top: 0;
+  width: 688px;
+  height: 406px;
+  border-color: var(--accent-border);
   background: var(--accent-surface);
 }
-.architecture-engine strong {
-  font-size: 30px;
+.arch-engine-heading {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 22px 29px;
+}
+.arch-engine-heading .brand-mark {
+  width: 36px;
+  height: 36px;
+}
+.arch-engine-heading strong {
+  font-size: 28px;
   font-weight: 500;
 }
-.architecture-engine .brand-mark {
-  width: 52px;
-  height: 52px;
-}
-.architecture-connectors {
-  display: flex;
-  justify-content: space-around;
-  padding: 9px 90px 8px 380px;
-  color: var(--accent-border);
-  line-height: 1.15;
-  height: 56px;
-}
-.architecture-connectors > svg {
-  width: 34px;
-  height: 39px;
-  stroke-width: 1.7;
-}
-.architecture-bottom {
-  display: grid;
-  grid-template-columns: 1.15fr 1fr;
-  gap: 24px;
-}
-.database,
-.file-store {
-  display: flex;
-  gap: 21px;
-  align-items: center;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 21px 25px;
-  background: #f0f6ef;
-}
-.file-store {
-  background: #f3f1f8;
-}
-.database .icon,
-.file-store .icon {
-  width: 42px;
-  height: 42px;
+.arch-engine-heading > span {
+  margin-left: auto;
+  font-size: 20px;
   color: var(--accent);
 }
-.file-store .icon {
-  color: var(--violet);
+.arch-connections {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 584px;
+  color: var(--accent-border);
+  stroke-width: 2;
 }
-.architecture-bottom strong {
-  font-size: 26px;
+.arch-both {
+  marker-start: url(#arch-arrow);
+  marker-end: url(#arch-arrow);
+}
+.arch-package-link {
+  stroke-dasharray: 4 5;
+}
+.arch-connections circle {
+  fill: currentColor;
+}
+.arch-node {
+  position: absolute;
+  width: 260px;
+  height: 92px;
+  padding: 15px 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.arch-node h3 {
+  font-size: 27px;
+  line-height: 1.2;
   font-weight: 500;
-  display: block;
+  letter-spacing: -0.5px;
 }
-.architecture-bottom small {
+.arch-node p {
+  margin-top: 7px;
   font-size: 18px;
+  line-height: 1.4;
   color: var(--muted);
-  display: block;
-  margin-top: 8px;
 }
-.architecture-takeaway {
+.arch-package {
+  left: 24px;
+  top: 24px;
+  height: 84px;
+  background: var(--surface-raised);
+}
+.arch-package h3 {
+  font-size: 25px;
+}
+.arch-package p {
+  margin-top: 4px;
+}
+.arch-desktop {
+  left: 24px;
+  top: 176px;
+}
+.arch-cli {
+  left: 24px;
+  top: 316px;
+}
+.arch-protocol,
+.arch-jobs {
+  position: absolute;
+  color: var(--muted);
+  font-size: 17px;
+}
+.arch-protocol {
+  left: 292px;
+  top: 110px;
+}
+.arch-api {
+  left: 414px;
+  top: 96px;
+  width: 252px;
+  height: 96px;
+}
+.arch-scheduler {
+  left: 414px;
+  top: 254px;
+  width: 252px;
+  height: 116px;
+}
+.arch-scheduler p {
+  font-size: 17px;
+}
+.arch-jobs {
+  left: 680px;
+  top: 280px;
+}
+.arch-workers {
+  left: 772px;
+  top: 234px;
+  width: 270px;
+  height: 136px;
+  padding-top: 22px;
+}
+.arch-models,
+.arch-mcp,
+.arch-sandbox {
+  left: 1196px;
+  height: 94px;
+}
+.arch-models {
+  top: 48px;
+}
+.arch-mcp {
+  top: 216px;
+}
+.arch-sandbox {
+  top: 384px;
+  background: var(--violet-surface);
+}
+.arch-storage {
+  position: absolute;
+  left: 384px;
+  top: 450px;
+  width: 688px;
+  height: 134px;
+  padding: 12px 24px 24px;
+}
+.arch-storage-label {
+  font-size: 16px;
+  color: var(--muted);
+  margin-bottom: 11px;
+}
+.arch-stores {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 26px;
+}
+.arch-stores > div {
   display: flex;
   align-items: center;
-  gap: 21px;
-  margin: 26px 0 0 13px;
+  gap: 14px;
 }
-.architecture-takeaway .node-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
+.arch-stores .icon {
+  width: 32px;
+  height: 36px;
+  color: var(--accent);
 }
-.architecture-takeaway svg {
-  width: 28px;
-  height: 28px;
+.arch-stores strong {
+  display: block;
+  font-size: 24px;
+  line-height: 1.2;
+  font-weight: 500;
 }
-.architecture-takeaway p {
-  font-size: 22px;
-  line-height: 1.65;
+.arch-stores span {
+  display: block;
+  margin-top: 5px;
+  font-size: 16px;
   color: var(--muted);
 }
-.architecture-takeaway strong {
-  font-weight: 400;
-  color: var(--secondary);
+.architecture-caption {
+  margin-top: 14px;
+  font-size: 19px;
+  color: var(--muted);
 }
 
 .scale-layout {

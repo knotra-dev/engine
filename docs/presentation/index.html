@@ -11,8 +11,8 @@
     />
     <title>Knotra — движок для процессов с AI-агентами</title>
     <link rel="icon" type="image/svg+xml" href="assets/knotra.svg" />
-    <link rel="stylesheet" href="style.css?v=20261020-clean-layout-v5" />
-    <script src="script.js?v=20261020-clean-layout-v5" defer></script>
+    <link rel="stylesheet" href="style.css?v=20261020-architecture-v6" />
+    <script src="script.js?v=20261020-architecture-v6" defer></script>
   </head>
   <body>
     <svg class="svg-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -273,89 +273,15 @@
         </section>
 
         <section
-          class="slide"
+          class="slide product-slide"
           id="slide-4"
-          data-title="Пример: игра"
-          data-duration="50"
+          data-title="Пример: поддержка"
+          data-duration="40"
           aria-labelledby="title-4"
           hidden
         >
-          <p class="eyebrow">Небольшая локальная модель · Ollama</p>
-          <h2 class="slide-title" id="title-4">Qwen 9B написала<br />крестики-нолики</h2>
-          <div class="game-layout">
-            <div class="game-evidence">
-              <div class="game-proof">
-                <div class="proof-row proof-failed">
-                  <span class="proof-status" aria-hidden="true">×</span>
-                  <p>
-                    <strong>Тест нашёл ошибку в стратегии</strong
-                    ><span>Компьютер проигрывал на конкретной последовательности ходов.</span>
-                  </p>
-                </div>
-                <div class="proof-row proof-passed">
-                  <span class="proof-status" aria-hidden="true">✓</span>
-                  <p>
-                    <strong>Исправленная версия прошла тесты</strong
-                    ><span>Проверены правила игры, допустимость ходов и стратегия.</span>
-                  </p>
-                </div>
-              </div>
-              <p class="evidence-copy">
-                Knotra вернула модели ошибку вместе с кодом<br />и автоматически проверила
-                исправление.<br /><strong>Без пройденных тестов готового файла нет.</strong>
-              </p>
-              <button
-                class="text-link"
-                data-image="assets/game-correction.png"
-                data-caption="Записанный прогон: вторая итерация, независимая проверка кода"
-                type="button"
-              >
-                Посмотреть реальный прогон <span>↗</span>
-              </button>
-            </div>
-            <div class="game-window panel">
-              <div class="window-bar">
-                <span class="window-dots"><i></i><i></i><i></i></span><span>index.html</span
-                ><span class="window-ok">✓ проверено</span>
-              </div>
-              <div class="game-preview">
-                <p class="game-wordmark">KNOTRA / PLAY</p>
-                <h3>Твой следующий ход.</h3>
-                <div class="mini-board" aria-hidden="true">
-                  <span>O</span><span></span><span></span><span></span><span>X</span><span></span
-                  ><span>X</span><span></span><span>O</span>
-                </div>
-                <a class="primary-button" href="assets/game.html" target="_blank" rel="noopener"
-                  >Открыть готовую игру <span>↗</span></a
-                >
-                <p class="game-caption">Реальный артефакт Knotra · работает офлайн</p>
-              </div>
-            </div>
-          </div>
-          <aside class="speech" hidden>
-            Эту игру написала небольшая локальная qwen3.5:9b через Ollama. В демонстрационном
-            repair-прогоне мы специально подали ошибочную стратегию. Тест нашёл последовательность
-            ходов, на которой компьютер проигрывал. Knotra вернула модели эту ошибку вместе с кодом
-            и автоматически проверила исправление. Со второй итерации тесты прошли. Они проверяют
-            правила игры, допустимость ходов и стратегию, затем отдельный sandbox проверяет и
-            собирает HTML. В отчёте сохранены 3159 проверок на 929 позициях: это объём тестирования
-            игры, а не оценка модели или число попыток. Один ответ на промпт не подтверждает
-            работоспособность. Готовность определяют фиксированные тесты. При исчерпании лимита
-            попыток запуск завершается ошибкой и не выдаёт игру. Генерация с нуля тоже прошла, в
-            отдельном запуске. Запись от 5 октября 2026, источник: docs/verification.md.
-          </aside>
-        </section>
-
-        <section
-          class="slide product-slide"
-          id="slide-5"
-          data-title="Пример: поддержка"
-          data-duration="40"
-          aria-labelledby="title-5"
-          hidden
-        >
           <p class="eyebrow">Пример сценария · 7 шагов</p>
-          <h2 class="slide-title" id="title-5">Поддержка: от обращения до ответа</h2>
+          <h2 class="slide-title" id="title-4">Поддержка: от обращения до ответа</h2>
           <p class="subtitle">
             Агенты разбирают обращение через MCP. Сложные случаи согласует оператор.
           </p>
@@ -446,14 +372,14 @@
 
         <section
           class="slide"
-          id="slide-6"
+          id="slide-5"
           data-title="Масштабирование"
           data-duration="35"
-          aria-labelledby="title-6"
+          aria-labelledby="title-5"
           hidden
         >
           <p class="eyebrow">Масштабирование в инфраструктуре компании</p>
-          <h2 class="slide-title" id="title-6">Больше задач — больше воркеров</h2>
+          <h2 class="slide-title" id="title-5">Больше задач — больше воркеров</h2>
           <p class="subtitle">
             Цель — одна система на множестве нод, с общей очередью и историей запусков.
           </p>
@@ -523,75 +449,189 @@
 
         <section
           class="slide"
+          id="slide-6"
+          data-title="Пример: игра"
+          data-duration="50"
+          aria-labelledby="title-6"
+          hidden
+        >
+          <p class="eyebrow">Небольшая локальная модель · Ollama</p>
+          <h2 class="slide-title" id="title-6">Qwen 9B написала<br />крестики-нолики</h2>
+          <div class="game-layout">
+            <div class="game-evidence">
+              <div class="game-proof">
+                <div class="proof-row proof-failed">
+                  <span class="proof-status" aria-hidden="true">×</span>
+                  <p>
+                    <strong>Тест нашёл ошибку в стратегии</strong
+                    ><span>Компьютер проигрывал на конкретной последовательности ходов.</span>
+                  </p>
+                </div>
+                <div class="proof-row proof-passed">
+                  <span class="proof-status" aria-hidden="true">✓</span>
+                  <p>
+                    <strong>Исправленная версия прошла тесты</strong
+                    ><span>Проверены правила игры, допустимость ходов и стратегия.</span>
+                  </p>
+                </div>
+              </div>
+              <p class="evidence-copy">
+                Knotra вернула модели ошибку вместе с кодом<br />и автоматически проверила
+                исправление.<br /><strong>Без пройденных тестов готового файла нет.</strong>
+              </p>
+              <button
+                class="text-link"
+                data-image="assets/game-correction.png"
+                data-caption="Записанный прогон: вторая итерация, независимая проверка кода"
+                type="button"
+              >
+                Посмотреть реальный прогон <span>↗</span>
+              </button>
+            </div>
+            <div class="game-window panel">
+              <div class="window-bar">
+                <span class="window-dots"><i></i><i></i><i></i></span><span>index.html</span
+                ><span class="window-ok">✓ проверено</span>
+              </div>
+              <div class="game-preview">
+                <p class="game-wordmark">KNOTRA / PLAY</p>
+                <h3>Твой следующий ход.</h3>
+                <div class="mini-board" aria-hidden="true">
+                  <span>O</span><span></span><span></span><span></span><span>X</span><span></span
+                  ><span>X</span><span></span><span>O</span>
+                </div>
+                <a class="primary-button" href="assets/game.html" target="_blank" rel="noopener"
+                  >Открыть готовую игру <span>↗</span></a
+                >
+                <p class="game-caption">Реальный артефакт Knotra · работает офлайн</p>
+              </div>
+            </div>
+          </div>
+          <aside class="speech" hidden>
+            Эту игру написала небольшая локальная qwen3.5:9b через Ollama. В демонстрационном
+            repair-прогоне мы специально подали ошибочную стратегию. Тест нашёл последовательность
+            ходов, на которой компьютер проигрывал. Knotra вернула модели эту ошибку вместе с кодом
+            и автоматически проверила исправление. Со второй итерации тесты прошли. Они проверяют
+            правила игры, допустимость ходов и стратегию, затем отдельный sandbox проверяет и
+            собирает HTML. В отчёте сохранены 3159 проверок на 929 позициях: это объём тестирования
+            игры, а не оценка модели или число попыток. Один ответ на промпт не подтверждает
+            работоспособность. Готовность определяют фиксированные тесты. При исчерпании лимита
+            попыток запуск завершается ошибкой и не выдаёт игру. Генерация с нуля тоже прошла, в
+            отдельном запуске. Запись от 5 октября 2026, источник: docs/verification.md.
+          </aside>
+        </section>
+
+        <section
+          class="slide"
           id="slide-7"
-          data-title="Архитектура"
+          data-title="Архитектура проекта"
           data-duration="40"
           aria-labelledby="title-7"
           hidden
         >
-          <p class="eyebrow">Внутри проекта</p>
-          <h2 class="slide-title" id="title-7">Go + River + PostgreSQL</h2>
-          <p class="subtitle">
-            Запуски и очередь заданий — в PostgreSQL. Файлы — в отдельном хранилище.
-          </p>
-          <div class="architecture panel">
-            <div class="architecture-top">
-              <div class="architecture-client">
-                <span>Desktop / CLI</span><small>React · Tauri (Rust)<br />CLI: Go</small>
-              </div>
-              <svg class="flow-arrow"><use href="#i-arrow" /></svg>
-              <div class="architecture-engine">
+          <h2 class="slide-title" id="title-7">Архитектура проекта</h2>
+          <div
+            class="architecture"
+            role="group"
+            aria-label="Архитектура Knotra. Пакет YAML и файлов открывают Desktop и CLI. Оба клиента общаются с API через HTTP и SSE. В Go-движке находятся API, планировщик Knotra с очередью River и воркеры с agent runtime. Воркеры обращаются к моделям, MCP-серверам и Docker. API и воркеры используют PostgreSQL и файловое хранилище."
+          >
+            <div class="arch-engine panel">
+              <div class="arch-engine-heading">
                 <img class="brand-mark" src="assets/knotra.svg" alt="" />
-                <p><strong>Go engine</strong><small>HTTP / SSE · граф · права · бюджеты</small></p>
-              </div>
-              <svg class="flow-arrow"><use href="#i-arrow" /></svg>
-              <div class="architecture-providers">
-                <strong>Исполнение</strong><small>Модели · MCP · Docker sandbox</small>
+                <strong>Knotra Engine</strong><span>Go</span>
               </div>
             </div>
-            <div class="architecture-connectors">
-              <svg viewBox="0 0 48 48" aria-hidden="true">
-                <use href="#i-arrow" transform="rotate(90 24 24)" /></svg
-              ><svg viewBox="0 0 48 48" aria-hidden="true">
-                <use href="#i-arrow" transform="rotate(90 24 24)" />
-              </svg>
+            <svg class="arch-connections" viewBox="0 0 1456 584" aria-hidden="true">
+              <defs>
+                <marker
+                  id="arch-arrow"
+                  markerWidth="8"
+                  markerHeight="8"
+                  refX="7"
+                  refY="4"
+                  orient="auto-start-reverse"
+                >
+                  <path d="m1 1 6 3-6 3" />
+                </marker>
+              </defs>
+              <path class="arch-package-link" d="M154 108v68" marker-end="url(#arch-arrow)" />
+              <path class="arch-package-link" d="M24 66H2v296h22" marker-end="url(#arch-arrow)" />
+              <path class="arch-both" d="M284 222h64v-78h66" />
+              <path d="M284 362h64V222" marker-start="url(#arch-arrow)" />
+              <circle cx="348" cy="222" r="3" />
+              <path d="M540 192v62" marker-end="url(#arch-arrow)" />
+              <path class="arch-both" d="M666 312h106" />
+              <path d="M1042 302h86M1128 95v336" />
+              <path d="M1128 95h68" marker-end="url(#arch-arrow)" />
+              <path d="M1128 263h68" marker-end="url(#arch-arrow)" />
+              <path d="M1128 431h68" marker-end="url(#arch-arrow)" />
+              <circle cx="1128" cy="302" r="3" />
+              <path class="arch-both" d="M728 406v44" />
+            </svg>
+            <div class="arch-node arch-package">
+              <h3>Пакет процесса</h3>
+              <p>YAML + файлы</p>
             </div>
-            <div class="architecture-bottom">
-              <div class="database">
-                <svg class="icon"><use href="#i-db" /></svg>
-                <p>
-                  <strong>PostgreSQL + River</strong
-                  ><small>Запуски · задания · попытки · события</small>
-                </p>
-              </div>
-              <div class="file-store">
-                <svg class="icon"><use href="#i-file" /></svg>
-                <p>
-                  <strong>Файловое хранилище</strong
-                  ><small>Артефакты и сохранённые результаты</small>
-                </p>
+            <div class="arch-node arch-desktop">
+              <h3>Desktop</h3>
+              <p>React + Tauri / Rust</p>
+            </div>
+            <div class="arch-node arch-cli">
+              <h3>CLI</h3>
+              <p>Go</p>
+            </div>
+            <span class="arch-protocol">HTTP / SSE</span>
+            <div class="arch-node arch-api">
+              <h3>Knotra API</h3>
+              <p>Запуски и команды</p>
+            </div>
+            <div class="arch-node arch-scheduler">
+              <h3>Планировщик</h3>
+              <p>Граф и лимиты: Knotra<br />Очередь заданий: River</p>
+            </div>
+            <span class="arch-jobs">Задания</span>
+            <div class="arch-node arch-workers">
+              <h3>Воркеры</h3>
+              <p>Исполнение шагов<br />Agent runtime и адаптеры</p>
+            </div>
+            <div class="arch-node arch-models">
+              <h3>Модели</h3>
+              <p>Ollama / API</p>
+            </div>
+            <div class="arch-node arch-mcp">
+              <h3>MCP-серверы</h3>
+              <p>Внешние инструменты</p>
+            </div>
+            <div class="arch-node arch-sandbox">
+              <h3>Docker sandbox</h3>
+              <p>Изолированный код</p>
+            </div>
+            <div class="arch-storage panel">
+              <p class="arch-storage-label">Общие хранилища API и воркеров</p>
+              <div class="arch-stores">
+                <div>
+                  <svg class="icon"><use href="#i-db" /></svg>
+                  <p><strong>PostgreSQL</strong><span>Состояние, события, River</span></p>
+                </div>
+                <div>
+                  <svg class="icon"><use href="#i-file" /></svg>
+                  <p><strong>Файлы</strong><span>Артефакты и результаты</span></p>
+                </div>
               </div>
             </div>
           </div>
-          <div class="architecture-takeaway">
-            <span class="node-icon lime"
-              ><svg><use href="#i-check" /></svg
-            ></span>
-            <p>
-              Запуск сохраняется независимо от открытого окна Desktop.<br /><strong
-                >Локальная модель через Ollama или API-провайдер — на выбор.</strong
-              >
-            </p>
-          </div>
+          <p class="architecture-caption">
+            River работает внутри движка и хранит очередь в PostgreSQL.
+          </p>
           <aside class="speech" hidden>
-            Движок и CLI написаны на Go, интерфейс — на React и Tauri. River доставляет задания
-            через PostgreSQL, а Knotra определяет готовность шагов, права и бюджеты. База хранит
-            состояние и события; отдельное хранилище — файлы и сохранённые результаты. Поэтому можно
-            закрыть Desktop и позже подключиться к тому же запуску. При восстановлении движок
-            использует сохранённые ответы. Если результат внешнего вызова неизвестен, требуется
-            явное решение оператора. Модель выбирается в подключениях: можно использовать API или
-            локальную Ollama. На своей инфраструктуре нужны и база, и файловое хранилище, и средства
-            исполнения шагов.
+            Это архитектура проекта. Пакет процесса состоит из YAML и связанных файлов. Слева два
+            клиента: Desktop на React и Tauri и CLI на Go. Они используют общий HTTP API и поток
+            событий SSE. В центре Go-движок: API принимает команды, планировщик Knotra определяет
+            готовность шагов и лимиты, River доставляет задания воркерам. Воркеры содержат agent
+            runtime и адаптеры к моделям, MCP и Docker. PostgreSQL хранит состояние, события и
+            очередь River, а файловое хранилище — артефакты и сохранённые результаты. API и воркеры
+            используют оба хранилища. Это логические компоненты: публичный serve пока запускает API,
+            планировщик и исполнителей в одном Go-процессе. River не требует отдельного сервиса.
           </aside>
         </section>
 
