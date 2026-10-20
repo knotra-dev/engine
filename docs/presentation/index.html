@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f5f7f3" />
+    <meta name="color-scheme" content="light" />
+    <meta
+      name="description"
+      content="Knotra — AI-процессы под контролем. Презентация проекта и публикация в GitHub Community."
+    />
+    <title>Knotra — AI-процессы под контролем</title>
+    <link rel="icon" type="image/svg+xml" href="assets/knotra.svg" />
+    <link rel="stylesheet" href="style.css?v=20261020-knotra-light" />
+    <script src="script.js?v=20261020-knotra-light" defer></script>
+  </head>
+  <body>
+    <svg class="svg-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <symbol id="i-spark" viewBox="0 0 48 48">
+          <path d="m24 5 5.6 13.4L43 24l-13.4 5.6L24 43l-5.6-13.4L5 24l13.4-5.6Z" />
+          <path d="m39 5 1.2 3.8L44 10l-3.8 1.2L39 15l-1.2-3.8L34 10l3.8-1.2Z" />
+        </symbol>
+        <symbol id="i-code" viewBox="0 0 48 48">
+          <path d="m16 13-11 11 11 11m16-22 11 11-11 11M28 7l-8 34" />
+        </symbol>
+        <symbol id="i-person" viewBox="0 0 48 48">
+          <circle cx="24" cy="15" r="8" />
+          <path d="M8 42v-5c0-8 7-13 16-13s16 5 16 13v5" />
+        </symbol>
+        <symbol id="i-file" viewBox="0 0 48 48">
+          <path d="M11 5h18l10 10v28H11ZM29 5v12h10M18 26h14m-14 7h14" />
+        </symbol>
+        <symbol id="i-check" viewBox="0 0 48 48"><path d="m9 25 10 10 21-23" /></symbol>
+        <symbol id="i-split" viewBox="0 0 48 48">
+          <path
+            d="M24 43V30c0-10-14-8-14-19V5m14 38V30c0-10 14-8 14-19V5M5 10l5-5 5 5m18 0 5-5 5 5"
+          />
+        </symbol>
+        <symbol id="i-server" viewBox="0 0 48 48">
+          <rect x="6" y="6" width="36" height="14" rx="4" />
+          <rect x="6" y="28" width="36" height="14" rx="4" />
+          <path d="M13 13h1m6 0h14M13 35h1m6 0h14" />
+        </symbol>
+        <symbol id="i-eye" viewBox="0 0 48 48">
+          <path d="M3 24S11 10 24 10s21 14 21 14-8 14-21 14S3 24 3 24Z" />
+          <circle cx="24" cy="24" r="6" />
+        </symbol>
+        <symbol id="i-db" viewBox="0 0 48 48">
+          <ellipse cx="24" cy="10" rx="16" ry="6" />
+          <path d="M8 10v28c0 8 32 8 32 0V10M8 24c0 8 32 8 32 0" />
+        </symbol>
+        <symbol id="i-arrow" viewBox="0 0 48 48"><path d="M7 24h34M29 12l12 12-12 12" /></symbol>
+      </defs>
+    </svg>
+
+    <div class="deck" id="deck">
+      <header class="masthead">
+        <a class="brand" href="#1" aria-label="Knotra — первый слайд"
+          ><img class="brand-mark" src="assets/knotra.svg" alt="" /><span>knotra</span></a
+        >
+        <span class="edition">AI <span>·</span> код <span>·</span> человек</span>
+      </header>
+
+      <main id="slides" aria-label="Презентация проекта Knotra">
+        <section
+          class="slide cover active"
+          id="slide-1"
+          data-title="Knotra"
+          data-duration="25"
+          aria-labelledby="title-1"
+        >
+          <div class="cover-copy">
+            <p class="eyebrow"><span class="status-light"></span> Открытый движок AI-процессов</p>
+            <h1 id="title-1">knotra<span class="title-dot">.</span></h1>
+            <h2>AI-процессы<br />под контролем</h2>
+            <p class="cover-description">Модели рассуждают.<br />Код проверяет. Человек решает.</p>
+            <div class="cover-signoff">
+              <span>Open source</span><span class="little-line"></span><span>MIT License</span>
+            </div>
+          </div>
+          <div
+            class="hero-graph panel"
+            aria-label="Схема процесса: модель, проверка и решение человека"
+          >
+            <div class="graph-toolbar">
+              <span>Execution graph</span><span class="graph-status"><i></i> completed</span>
+            </div>
+            <svg class="graph-connections" viewBox="0 0 680 560" aria-hidden="true">
+              <path d="M292 176h28v128h28M348 304h-28v128h-28" />
+              <circle cx="292" cy="176" r="5" />
+              <circle cx="348" cy="304" r="5" />
+              <circle cx="348" cy="304" r="5" />
+              <circle cx="292" cy="432" r="5" />
+            </svg>
+            <div class="hero-node hero-model">
+              <span class="node-label">llm / agent</span>
+              <h3>
+                <svg class="icon"><use href="#i-spark" /></svg>Модель
+              </h3>
+              <p>Предлагает результат</p>
+              <span class="node-completed">✓ completed</span>
+            </div>
+            <div class="hero-node hero-code">
+              <span class="node-label">code</span>
+              <h3>
+                <svg class="icon"><use href="#i-code" /></svg>Проверка
+              </h3>
+              <p>Исполняет тесты</p>
+              <span class="node-completed">✓ completed</span>
+            </div>
+            <div class="hero-node hero-human">
+              <span class="node-label">human</span>
+              <h3>
+                <svg class="icon"><use href="#i-person" /></svg>Решение
+              </h3>
+              <p>Согласует человек</p>
+              <span class="node-completed">✓ completed</span>
+            </div>
+            <div class="graph-footer">
+              <span class="status-light"></span> Один процесс. Вся история.
+            </div>
+          </div>
+          <aside class="speech" hidden>
+            Мы представляем Knotra — открытый движок для AI-процессов. Он связывает работу моделей,
+            обычный код и решения человека в один исполняемый граф. Основная идея простая: модель
+            предлагает результат, код проверяет его, а человек принимает решения там, где требуется
+            оценка. За пять минут покажу, как это устроено и что уже проверено на практике.
+          </aside>
+        </section>
+
+        <section
+          class="slide"
+          id="slide-2"
+          data-title="Задача"
+          data-duration="35"
+          aria-labelledby="title-2"
+          hidden
+        >
+          <p class="eyebrow">Зачем это нужно</p>
+          <h2 class="slide-title" id="title-2">За ответом модели —<br />целый процесс</h2>
+          <div class="problem-layout">
+            <div class="problem-list">
+              <div>
+                <span class="row-number">01</span>
+                <p>
+                  <strong>Проверить результат</strong
+                  ><span>Тесты, схема данных, наличие нужных файлов</span>
+                </p>
+              </div>
+              <div>
+                <span class="row-number">02</span>
+                <p>
+                  <strong>Связать несколько шагов</strong
+                  ><span>Параллельная работа, условия, исправления</span>
+                </p>
+              </div>
+              <div>
+                <span class="row-number">03</span>
+                <p>
+                  <strong>Сохранить прогресс</strong
+                  ><span>История, согласование и продолжение после перезапуска</span>
+                </p>
+              </div>
+            </div>
+            <div
+              class="task-stack"
+              aria-label="Пример составной задачи: генерация, тесты, исправление и согласование"
+            >
+              <div class="task-paper panel">
+                <span class="paper-index">Задача</span>
+                <h3>«Сделай<br />работающую игру»</h3>
+                <div class="paper-line"></div>
+                <p>Код — только начало.</p>
+              </div>
+              <span class="floating-chip chip-tests panel"
+                ><span class="status-light"></span> А тесты?</span
+              >
+              <span class="floating-chip chip-files panel"
+                ><svg class="icon"><use href="#i-file" /></svg> Где результат?</span
+              >
+              <span class="floating-chip chip-review panel"
+                ><svg class="icon"><use href="#i-person" /></svg> Кто согласует?</span
+              >
+            </div>
+          </div>
+          <aside class="speech" hidden>
+            Возьмём простую задачу: попросить модель написать игру. Получить текст программы
+            относительно легко. Но после этого нужно проверить правила и ошибки, запустить
+            независимые тесты, вернуть модели конкретную обратную связь, собрать файлы и убедиться,
+            что результат действительно работает. В других задачах добавляется согласование
+            человеком или несколько параллельных исполнителей. Если каждый шаг делать вручную,
+            процесс сложно повторить и легко потерять его состояние. Knotra позволяет описать эти
+            шаги заранее и выполнять их как единое целое.
+          </aside>
+        </section>
+
+        <section
+          class="slide"
+          id="slide-3"
+          data-title="Граф процесса"
+          data-duration="45"
+          aria-labelledby="title-3"
+          hidden
+        >
+          <p class="eyebrow">Как это работает</p>
+          <h2 class="slide-title" id="title-3">Граф управляет процессом</h2>
+          <p class="subtitle">Шаги, проверки и правила переходов задаются заранее в YAML.</p>
+          <div class="workflow panel">
+            <div class="flow-nodes">
+              <div class="flow-node">
+                <span class="node-icon aqua"
+                  ><svg><use href="#i-spark" /></svg></span
+                ><span class="node-kind">llm / agent</span>
+                <h3>Модель</h3>
+                <p>Генерирует<br />кандидат</p>
+              </div>
+              <svg class="flow-arrow"><use href="#i-arrow" /></svg>
+              <div class="flow-node">
+                <span class="node-icon lime"
+                  ><svg><use href="#i-code" /></svg></span
+                ><span class="node-kind">code</span>
+                <h3>Код</h3>
+                <p>Проверяет<br />результат</p>
+              </div>
+              <svg class="flow-arrow"><use href="#i-arrow" /></svg>
+              <div class="flow-node">
+                <span class="node-icon aqua"
+                  ><svg><use href="#i-split" /></svg></span
+                ><span class="node-kind">switch</span>
+                <h3>Условие</h3>
+                <p>Выбирает<br />дальнейший путь</p>
+              </div>
+              <svg class="flow-arrow"><use href="#i-arrow" /></svg>
+              <div class="flow-node">
+                <span class="node-icon pearl"
+                  ><svg><use href="#i-person" /></svg></span
+                ><span class="node-kind">human</span>
+                <h3>Человек</h3>
+                <p>Принимает<br />решение</p>
+              </div>
+              <svg class="flow-arrow"><use href="#i-arrow" /></svg>
+              <div class="flow-node result-node">
+                <span class="node-icon lime"
+                  ><svg><use href="#i-file" /></svg></span
+                ><span class="node-kind">выход графа</span>
+                <h3>Результат</h3>
+                <p>Проверенные<br />файлы</p>
+              </div>
+            </div>
+            <div class="feedback-path">
+              <span class="feedback-end">↑</span
+              ><span>Ошибка проверки → обратная связь → ограниченный цикл исправлений</span
+              ><span>↲</span>
+            </div>
+          </div>
+          <div class="contract-line">
+            <span class="schema-braces">{ }</span>
+            <p>
+              <strong>Типизированные входы и выходы</strong
+              ><span>Следующий шаг получает завершённый и проверенный результат.</span>
+            </p>
+            <span class="node-count"><b>9</b> типов узлов</span>
+          </div>
+          <aside class="speech" hidden>
+            Основа Knotra — граф, описанный в YAML. Узлы могут вызывать модель, запускать код,
+            обращаться к инструментам, выбирать ветку, ждать человека или выполнять вложенный
+            процесс. Всего поддерживается девять типов узлов, включая циклы и параллельные
+            коллекции. На схеме показан один пример: модель генерирует кандидат, код проверяет его,
+            условие выбирает дальнейший путь, человек согласует публикацию. Ошибка может вернуться в
+            ограниченный цикл исправления. Данные передаются через типизированные входы и выходы.
+            Поэтому успех шага определяется его контрактом, а не просто убедительным текстом ответа
+            модели.
+          </aside>
+        </section>
+
+        <section
+          class="slide"
+          id="slide-4"
+          data-title="Пример: игра"
+          data-duration="50"
+          aria-labelledby="title-4"
+          hidden
+        >
+          <p class="eyebrow">Работающий пример</p>
+          <h2 class="slide-title" id="title-4">
+            Модель исправляет игру<br />по результатам тестов
+          </h2>
+          <div class="game-layout">
+            <div class="game-evidence">
+              <div class="repair-path">
+                <span class="attempt failed"><i>1</i> Ошибка стратегии</span
+                ><span class="repair-arrow">→</span
+                ><span class="attempt passed"><i>2</i> Исправление</span>
+              </div>
+              <div class="metric-pair">
+                <div><strong>3 159</strong><span>независимых проверок</span></div>
+                <div><strong>929</strong><span>игровых позиций</span></div>
+              </div>
+              <p class="evidence-copy">
+                Точная ошибка возвращается модели.<br />Отдельный sandbox проверяет финальный код.
+              </p>
+              <button
+                class="text-link"
+                data-image="assets/game-correction.png"
+                data-caption="Записанный прогон: вторая итерация, независимая проверка кода"
+                type="button"
+              >
+                Посмотреть реальный прогон <span>↗</span>
+              </button>
+              <p class="source-note">
+                Записанный repair-прогон · 5 октября 2026<br />Подробности: docs/verification.md
+              </p>
+            </div>
+            <div class="game-window panel">
+              <div class="window-bar">
+                <span class="window-dots"><i></i><i></i><i></i></span><span>index.html</span
+                ><span class="window-ok">✓ проверено</span>
+              </div>
+              <div class="game-preview">
+                <p class="game-wordmark">KNOTRA / PLAY</p>
+                <h3>Твой следующий ход.</h3>
+                <div class="mini-board" aria-hidden="true">
+                  <span>O</span><span></span><span></span><span></span><span>X</span><span></span
+                  ><span>X</span><span></span><span>O</span>
+                </div>
+                <a class="primary-button" href="assets/game.html" target="_blank" rel="noopener"
+                  >Открыть готовую игру <span>↗</span></a
+                >
+                <p class="game-caption">Реальный артефакт Knotra · работает офлайн</p>
+              </div>
+            </div>
+          </div>
+          <aside class="speech" hidden>
+            Вот реальный пример из проекта — крестики-нолики. В записанном прогоне стартовая
+            стратегия специально содержала ошибку: компьютер проигрывал на допустимой
+            последовательности ходов. Движок выполнил фиксированные тесты и передал модели
+            конкретное падение вместе с предыдущим кодом. На второй итерации исправление прошло три
+            тысячи сто пятьдесят девять проверок на девятистах двадцати девяти позициях. После этого
+            отдельный sandbox повторно проверил код и собрал автономный HTML-файл. Справа можно
+            открыть именно этот готовый результат. Здесь важна связка: модель меняет код, но
+            критерий готовности задают независимые проверки. Эти цифры относятся к сохранённому
+            прогону, а не к новой генерации во время выступления.
+          </aside>
+        </section>
+
+        <section
+          class="slide product-slide"
+          id="slide-5"
+          data-title="Интерфейс"
+          data-duration="40"
+          aria-labelledby="title-5"
+          hidden
+        >
+          <div class="product-heading">
+            <div>
+              <p class="eyebrow">Наблюдаемость</p>
+              <h2 class="slide-title" id="title-5">Видно, что произошло</h2>
+            </div>
+            <span class="panel small-pill"><span class="status-light"></span> Desktop + CLI</span>
+          </div>
+          <div class="product-layout">
+            <button
+              class="app-window panel"
+              data-image="assets/release-graph.png"
+              data-caption="Реальный интерфейс Knotra: service fleet release gate, шесть сервисов и 30 узлов"
+              type="button"
+              aria-label="Увеличить скриншот реального интерфейса Knotra"
+            >
+              <span class="window-bar"
+                ><span class="window-dots"><i></i><i></i><i></i></span
+                ><span>Knotra Desktop / Release gate</span><span>↗</span></span
+              ><img
+                src="assets/release-graph.png"
+                alt="Knotra Desktop: граф проверок шести сервисов, ветки и состояния узлов"
+              />
+            </button>
+            <div class="product-points">
+              <div>
+                <span class="node-icon aqua"
+                  ><svg><use href="#i-eye" /></svg
+                ></span>
+                <h3>Каждый шаг</h3>
+                <p>Входы, выходы,<br />вызовы модели и tools</p>
+              </div>
+              <div>
+                <span class="node-icon pearl"
+                  ><svg><use href="#i-person" /></svg
+                ></span>
+                <h3>Согласование</h3>
+                <p>Сохранённый запрос<br />и файлы для проверки</p>
+              </div>
+              <div>
+                <span class="node-icon lime"
+                  ><svg><use href="#i-file" /></svg
+                ></span>
+                <h3>История и файлы</h3>
+                <p>Просмотр событий,<br />сравнение и экспорт</p>
+              </div>
+            </div>
+          </div>
+          <aside class="speech" hidden>
+            Помимо движка, в проекте есть desktop-приложение и CLI. На экране настоящий граф
+            сценария проверки релиза: шесть сервисов и тридцать узлов. Видны параллельные ветки и
+            состояние каждого шага. В инспекторе можно посмотреть входы и выходы, запросы к модели,
+            её видимый ответ и вызовы инструментов. В Inbox сохраняются запросы человеку вместе с
+            файлами для проверки. Историю можно просматривать и сравнивать между запусками. Закрытие
+            интерфейса не останавливает процесс: он продолжает выполняться в движке, а приложение
+            позже подключается к тому же состоянию.
+          </aside>
+        </section>
+
+        <section
+          class="slide"
+          id="slide-6"
+          data-title="Архитектура"
+          data-duration="40"
+          aria-labelledby="title-6"
+          hidden
+        >
+          <p class="eyebrow">Внутри проекта</p>
+          <h2 class="slide-title" id="title-6">Go + River + PostgreSQL</h2>
+          <p class="subtitle">Очередь и состояние исполнения живут в одной базе.</p>
+          <div class="architecture panel">
+            <div class="architecture-top">
+              <div class="architecture-client">
+                <span>Desktop / CLI</span><small>React · Tauri (Rust)<br />CLI: Go</small>
+              </div>
+              <svg class="flow-arrow"><use href="#i-arrow" /></svg>
+              <div class="architecture-engine">
+                <img class="brand-mark" src="assets/knotra.svg" alt="" />
+                <p><strong>Go engine</strong><small>HTTP / SSE · граф · права · бюджеты</small></p>
+              </div>
+              <svg class="flow-arrow"><use href="#i-arrow" /></svg>
+              <div class="architecture-providers">
+                <strong>Исполнение</strong><small>Модели · MCP · Docker sandbox</small>
+              </div>
+            </div>
+            <div class="architecture-connectors"><span>↓</span><span>↓</span></div>
+            <div class="architecture-bottom">
+              <div class="database">
+                <svg class="icon"><use href="#i-db" /></svg>
+                <p>
+                  <strong>PostgreSQL + River</strong
+                  ><small>Запуски · задания · попытки · события</small>
+                </p>
+              </div>
+              <div class="file-store">
+                <svg class="icon"><use href="#i-file" /></svg>
+                <p>
+                  <strong>Файловое хранилище</strong
+                  ><small>Артефакты и сохранённые результаты</small>
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="architecture-takeaway">
+            <span class="node-icon lime"
+              ><svg><use href="#i-check" /></svg
+            ></span>
+            <p>
+              После перезапуска движок использует сохранённое состояние.<br /><strong
+                >Неопределённый внешний результат требует явного решения.</strong
+              >
+            </p>
+          </div>
+          <aside class="speech" hidden>
+            Коротко об архитектуре. Движок и CLI написаны на Go, desktop — на React и Tauri с Rust.
+            Основной backend исполнения сейчас — River с PostgreSQL. River доставляет задания, а
+            Knotra определяет правила графа, права, бюджеты и готовность шагов. Переход состояния и
+            постановка следующего задания могут фиксироваться в одной транзакции. Файлы артефактов и
+            сохранённые результаты хранятся отдельно, поэтому для восстановления нужна и база, и
+            файлы. Завершённые ответы используются повторно. Если внешний вызов мог выполниться, но
+            подтверждения нет, движок сохраняет неопределённость и требует явного решения вместо
+            слепого повтора.
+          </aside>
+        </section>
+
+        <section
+          class="slide"
+          id="slide-7"
+          data-title="Три воркера"
+          data-duration="35"
+          aria-labelledby="title-7"
+          hidden
+        >
+          <p class="eyebrow">Проверено сегодня</p>
+          <h2 class="slide-title" id="title-7">Три независимых процесса</h2>
+          <div class="scale-layout">
+            <div class="worker-diagram panel">
+              <div class="queue-label">
+                <svg class="icon"><use href="#i-db" /></svg><span>Общие River / PostgreSQL</span>
+              </div>
+              <div class="worker-branches"><i></i><i></i><i></i></div>
+              <div class="workers">
+                <div>
+                  <span class="node-icon aqua"
+                    ><svg><use href="#i-server" /></svg></span
+                  ><strong>Executor 1</strong><span class="worker-status">работает → drain</span>
+                </div>
+                <div>
+                  <span class="node-icon aqua"
+                    ><svg><use href="#i-server" /></svg></span
+                  ><strong>Executor 2</strong><span class="worker-status">продолжает</span>
+                </div>
+                <div>
+                  <span class="node-icon aqua"
+                    ><svg><use href="#i-server" /></svg></span
+                  ><strong>Executor 3</strong><span class="worker-status">продолжает</span>
+                </div>
+              </div>
+              <p class="worker-outcome">Один штатно остановлен — два завершают новую работу.</p>
+            </div>
+            <div class="scale-evidence">
+              <div class="scale-number"><strong>18</strong><span>workflow завершены</span></div>
+              <div class="scale-number">
+                <strong>54</strong
+                ><span>вызова и списания бюджета<br />совпали с числом попыток</span>
+              </div>
+              <span class="check-label"
+                ><svg class="icon"><use href="#i-check" /></svg> Race detector: пройдено</span
+              >
+            </div>
+          </div>
+          <p class="scope-note">
+            Тест на одной машине с фиксированными ответами модели. Разделение ролей — через
+            внутренний API;<br />CLI для кластера, разные хосты и нагрузка 10 000 workflow/сутки ещё
+            не проверены.
+          </p>
+          <aside class="speech" hidden>
+            Сегодня дополнительно проверили независимые воркеры. Тест запускает три отдельных
+            процесса executor: у каждого собственное подключение к базе, River-клиент и heartbeat.
+            Они выполняют двенадцать процессов, затем один воркер штатно останавливается, и два
+            оставшихся завершают ещё шесть. Всего восемнадцать workflow и пятьдесят четыре вызова,
+            без повторных попыток и зависших слотов. Проверка с race detector прошла. Важно
+            обозначить границу: это отдельные процессы на одной машине с фиксированными ответами
+            модели. Разделение ролей есть внутри runtime; готовый кластерный запуск через CLI и
+            работа на разных машинах пока требуют дальнейшей проверки.
+          </aside>
+        </section>
+
+        <section
+          class="slide community-slide"
+          id="slide-8"
+          data-title="GitHub Community"
+          data-duration="30"
+          aria-labelledby="title-8"
+          hidden
+        >
+          <div class="community-copy">
+            <p class="eyebrow">Внимание сообщества</p>
+            <h2 class="slide-title" id="title-8">О нас написали<br />в GitHub Community</h2>
+            <p class="community-description">
+              Telegram-канал поделился Knotra<br />со своей аудиторией.
+            </p>
+            <div class="community-metric">
+              <strong>150 тыс.+</strong><span>подписчиков в канале</span>
+            </div>
+            <div class="community-tag panel">
+              <svg viewBox="0 0 48 48" aria-hidden="true">
+                <path d="m6 22 36-15-8 34-12-10-7 6 2-13 17-11-13 16-15-7Z" /></svg
+              ><span>Knotra в ленте GitHub Community</span>
+            </div>
+            <p class="source-note">154 882 подписчика на предоставленном скриншоте.</p>
+          </div>
+          <button
+            class="community-post panel"
+            data-image="assets/telegram-community.png"
+            data-caption="Публикация Knotra в Telegram-канале GitHub Community — предоставленный скриншот"
+            type="button"
+            aria-label="Увеличить публикацию в GitHub Community"
+          >
+            <span class="window-bar"
+              ><span class="window-dots"><i></i><i></i><i></i></span
+              ><span>Telegram / GitHub Community</span><span>↗</span></span
+            ><img
+              src="assets/telegram-community.png"
+              alt="Публикация о Knotra в GitHub Community: 154 882 подписчика, скриншот интерфейса и описание проекта"
+            />
+          </button>
+          <aside class="speech" hidden>
+            О проекте уже написали в Telegram-канале GitHub Community. У канала больше ста
+            пятидесяти тысяч подписчиков; на скриншоте видно сто пятьдесят четыре тысячи восемьсот
+            восемьдесят два. В публикации показали наш интерфейс и представили Knotra как систему
+            для изолированного исполнения AI-workflow со своим движком, CLI и desktop-приложением.
+            Для нас это возможность показать наш проект большой аудитории и получить обратную связь
+            от людей за пределами нашей команды.
+          </aside>
+        </section>
+
+        <section
+          class="slide closing"
+          id="slide-9"
+          data-title="Итог"
+          data-duration="30"
+          aria-labelledby="title-9"
+          hidden
+        >
+          <div class="closing-copy">
+            <p class="eyebrow">Knotra</p>
+            <h2 id="title-9">
+              AI-задача.<br />Явный процесс.<br /><span>Проверенный результат.</span>
+            </h2>
+            <p class="closing-description">
+              Графы, исполняемые проверки, согласование<br />и история — в одном открытом проекте.
+            </p>
+            <a
+              class="repository-link panel"
+              href="https://github.com/michael-bill/knotra"
+              target="_blank"
+              rel="noopener"
+              ><span class="repo-icon">{ }</span
+              ><span><small>Исходный код · MIT</small>github.com/michael-bill/knotra</span
+              ><span>↗</span></a
+            >
+          </div>
+          <div class="closing-art" aria-hidden="true">
+            <div class="finish-mark">
+              <svg><use href="#i-check" /></svg>
+            </div>
+            <span class="closing-caption panel">Есть вопросы?</span>
+          </div>
+          <aside class="speech" hidden>
+            В итоге Knotra объединяет модель, исполняемые проверки и человека в явном процессе с
+            сохранённой историей. Уже есть рабочий движок, desktop и CLI, девять типов узлов и
+            примеры: генерация игры, проверяемое исследование и согласование релиза. Независимые
+            процессы воркеров проверены; следующий этап — довести их до полноценного многомашинного
+            развёртывания. Проект открыт под лицензией MIT, код и примеры доступны на GitHub.
+            Спасибо, готовы ответить на вопросы.
+          </aside>
+        </section>
+      </main>
+
+      <footer class="controls panel" id="controls">
+        <div class="footer-left">
+          <span class="slide-number" id="slide-number">01 <span>/ 09</span></span>
+          <nav class="slide-dots" id="slide-dots" aria-label="Перейти к слайду"></nav>
+        </div>
+        <div class="presentation-tools">
+          <button
+            class="tool-button"
+            id="controls-toggle"
+            type="button"
+            title="Скрыть нижнюю панель · H"
+            aria-label="Скрыть нижнюю панель"
+            aria-controls="controls"
+            aria-expanded="true"
+          >
+            Скрыть <kbd>H</kbd></button
+          ><button
+            class="tool-button notes-button"
+            id="notes-toggle"
+            type="button"
+            title="Текст выступления · N"
+            aria-label="Показать текст выступления"
+            aria-expanded="false"
+          >
+            Текст <kbd>N</kbd></button
+          ><button
+            class="tool-button fullscreen-button"
+            id="fullscreen"
+            type="button"
+            title="Полный экран · F"
+            aria-label="Полный экран"
+          >
+            <span>⛶</span>
+          </button>
+        </div>
+        <div class="slide-nav">
+          <button id="previous" type="button" aria-label="Предыдущий слайд">
+            <svg><use href="#i-arrow" /></svg></button
+          ><button id="next" type="button" aria-label="Следующий слайд">
+            <svg><use href="#i-arrow" /></svg>
+          </button>
+        </div>
+      </footer>
+      <button
+        class="controls-restore"
+        id="controls-restore"
+        type="button"
+        title="Показать нижнюю панель · H"
+        aria-label="Показать нижнюю панель"
+        aria-controls="controls"
+        hidden
+      >
+        <svg aria-hidden="true"><use href="#i-eye" /></svg><kbd>H</kbd>
+      </button>
+      <div class="keyboard-hint" id="keyboard-hint">
+        ← → листать <span>·</span> F полный экран <span>·</span> N текст <span>·</span> H панель
+      </div>
+    </div>
+
+    <aside class="notes-panel panel" id="notes-panel" aria-label="Текст выступления" hidden>
+      <header>
+        <div>
+          <span id="notes-time"></span>
+          <h2 id="notes-title"></h2>
+        </div>
+        <button id="notes-close" type="button" aria-label="Закрыть текст выступления">×</button>
+      </header>
+      <p id="notes-copy"></p>
+      <p class="notes-foot">5 минут + дополнительный слайд · повторное нажатие N закроет текст</p>
+    </aside>
+    <dialog class="image-dialog" id="image-dialog">
+      <button type="button" id="image-close" aria-label="Закрыть изображение">×</button
+      ><img id="zoom-image" src="assets/release-graph.png" alt="" />
+      <p id="zoom-caption"></p>
+    </dialog>
+    <div class="sr-only" id="announcement" aria-live="polite"></div>
+    <noscript
+      ><p class="noscript-warning">
+        Для переключения слайдов включите JavaScript. Полный текст есть в файле «Текст
+        выступления.txt».
+      </p></noscript
+    >
+  </body>
+</html>
