@@ -16,7 +16,8 @@ tool step sends the answer. Typical answers bypass human approval; complex cases
 go to an operator. This is an application scenario, not a recorded run or a bundled helpdesk
 integration; the MCP servers and helpdesk API would need to be connected separately. Slide 5
 separates the target multi-host architecture and example daily workload from the verified same-host
-worker test.
+worker test. Its diagram distinguishes Knotra's API, scheduler and workers from PostgreSQL storage;
+River delivers jobs inside the engine.
 
 Slide 6 shows the concrete failing strategy and the checks passed after correction. The raw counts
 of executed checks and game positions remain in speaker notes as testing detail.

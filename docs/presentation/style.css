@@ -717,7 +717,7 @@ svg {
 .support-diagram {
   position: relative;
   width: 1456px;
-  height: 430px;
+  height: 478px;
   margin-top: 24px;
   background: var(--surface-raised);
 }
@@ -725,7 +725,7 @@ svg {
   position: absolute;
   inset: 0;
   width: 1456px;
-  height: 430px;
+  height: 478px;
   stroke: var(--accent-border);
   stroke-width: 2;
 }
@@ -766,14 +766,17 @@ svg {
 .support-review {
   top: 270px;
   left: 900px;
-  height: 136px;
+  height: 160px;
   background: #f7eedb;
   border-color: #b7985e;
 }
 .support-send {
   top: 270px;
   left: 1192px;
-  height: 136px;
+  height: 160px;
+}
+.support-diagram + .source-note {
+  margin-top: 14px;
 }
 .support-kind {
   display: block;
@@ -1020,25 +1023,61 @@ svg {
   margin-top: 25px;
 }
 .worker-diagram {
-  padding: 20px 30px;
+  padding: 18px 30px;
 }
 .deployment-label {
   font:
     14px/1.4 ui-monospace,
     monospace;
   color: var(--muted);
-  margin-bottom: 16px;
+  margin-bottom: 12px;
+}
+.scale-control {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 18px;
+  border: 1px solid var(--accent-border);
+  border-radius: 10px;
+  background: var(--accent-surface);
+}
+.scale-control strong {
+  display: block;
+  font-size: 25px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+.scale-control small {
+  display: block;
+  margin-top: 5px;
+  font-size: 17px;
+  line-height: 1.3;
+  color: var(--muted);
+}
+.scale-control-link {
+  display: block;
+  width: 100%;
+  height: 24px;
+  color: var(--accent-border);
+  stroke-width: 1.7;
 }
 .queue-label {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 15px;
-  padding: 12px;
-  border: 1px solid var(--accent-border);
-  background: var(--accent-surface);
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-raised);
   border-radius: 10px;
-  font-size: 25px;
+  font-size: 22px;
+}
+.queue-label strong {
+  font-weight: 500;
+}
+.queue-label > span {
+  font-size: 17px;
+  color: var(--muted);
 }
 .queue-label .icon {
   width: 30px;
@@ -1052,12 +1091,12 @@ svg {
   gap: 15px;
 }
 .worker-branches {
-  height: 38px;
+  height: 30px;
 }
 .worker-branches > svg {
   display: block;
   width: 100%;
-  height: 38px;
+  height: 30px;
   color: var(--accent-border);
   stroke-width: 1.7;
 }
@@ -1069,8 +1108,8 @@ svg {
   min-width: 0;
 }
 .workers .node-icon {
-  width: 72px;
-  height: 72px;
+  width: 58px;
+  height: 58px;
 }
 .workers .node-icon svg {
   width: 37px;
@@ -1079,17 +1118,17 @@ svg {
 .workers strong {
   font-size: 22px;
   font-weight: 500;
-  margin-top: 10px;
+  margin-top: 7px;
 }
 .worker-status {
   font-size: 15px;
   color: var(--accent);
-  margin-top: 7px;
+  margin-top: 4px;
 }
 .worker-outcome {
   font-size: 18px;
   text-align: center;
-  margin-top: 18px;
+  margin-top: 14px;
   color: var(--muted);
 }
 .scale-evidence {

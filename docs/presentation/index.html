@@ -11,8 +11,8 @@
     />
     <title>Knotra — движок для процессов с AI-агентами</title>
     <link rel="icon" type="image/svg+xml" href="assets/knotra.svg" />
-    <link rel="stylesheet" href="style.css?v=20261020-architecture-v6" />
-    <script src="script.js?v=20261020-architecture-v6" defer></script>
+    <link rel="stylesheet" href="style.css?v=20261020-workers-v7" />
+    <script src="script.js?v=20261020-workers-v7" defer></script>
   </head>
   <body>
     <svg class="svg-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -290,7 +290,7 @@
             role="group"
             aria-label="Семь шагов: проверка входных данных; агент читает через MCP клиента, заказ и историю обращений; другой агент ищет решение в базе знаний и готовит ответ; код проверяет ответ; граф выбирает маршрут; сложные случаи согласует оператор; отдельный инструмент отправляет ответ."
           >
-            <svg class="support-connections" viewBox="0 0 1456 430" aria-hidden="true">
+            <svg class="support-connections" viewBox="0 0 1456 478" aria-hidden="true">
               <defs>
                 <marker
                   id="support-arrow"
@@ -309,7 +309,7 @@
               <path d="M1140 132h52" />
               <path d="M1312 204v66" />
               <path d="M1312 204v30h-292v36" />
-              <path d="M1140 338h52" />
+              <path d="M1140 350h52" />
             </svg>
             <div class="support-node support-intake">
               <span class="support-kind">code · 1</span>
@@ -386,8 +386,19 @@
           <div class="scale-layout">
             <div class="worker-diagram panel">
               <p class="deployment-label">Целевая схема развёртывания</p>
+              <div class="scale-control">
+                <img class="brand-mark" src="assets/knotra.svg" alt="" />
+                <p>
+                  <strong>Knotra: API и планировщик</strong
+                  ><small>Граф и лимиты · доставка заданий через River</small>
+                </p>
+              </div>
+              <svg class="scale-control-link" viewBox="0 0 48 48" aria-hidden="true">
+                <use href="#i-arrow" transform="rotate(90 24 24)" />
+              </svg>
               <div class="queue-label">
-                <svg class="icon"><use href="#i-db" /></svg><span>Общие PostgreSQL / River</span>
+                <svg class="icon"><use href="#i-db" /></svg><strong>PostgreSQL</strong
+                ><span>Состояние и очередь заданий</span>
               </div>
               <div class="worker-branches">
                 <svg viewBox="0 0 48 48" aria-hidden="true">
@@ -402,17 +413,17 @@
                 <div>
                   <span class="node-icon aqua"
                     ><svg><use href="#i-server" /></svg></span
-                  ><strong>Нода 1</strong><span class="worker-status">executor</span>
+                  ><strong>Нода 1</strong><span class="worker-status">воркер Knotra</span>
                 </div>
                 <div>
                   <span class="node-icon aqua"
                     ><svg><use href="#i-server" /></svg></span
-                  ><strong>Нода 2</strong><span class="worker-status">executor</span>
+                  ><strong>Нода 2</strong><span class="worker-status">воркер Knotra</span>
                 </div>
                 <div>
                   <span class="node-icon aqua"
                     ><svg><use href="#i-server" /></svg></span
-                  ><strong>Нода N</strong><span class="worker-status">executor</span>
+                  ><strong>Нода N</strong><span class="worker-status">воркер Knotra</span>
                 </div>
               </div>
               <p class="worker-outcome">Общее хранилище файлов и результатов</p>
@@ -435,15 +446,15 @@
             хранилища; суточная нагрузка не измерялась.
           </p>
           <aside class="speech" hidden>
-            Если компания хочет обрабатывать десятки тысяч обращений в сутки, важно распределять
-            работу между машинами. Мы развиваем Knotra в эту сторону: одна система, общая очередь в
-            PostgreSQL, общее хранилище файлов и несколько нод с исполнителями. Например, каждое
-            обращение поддержки создаёт запуск одного и того же пайплайна. Внутри движка роли уже
-            разделены. Сегодня тест подтвердил работу трёх отдельных процессов: они завершили 18
-            workflow с 54 вызовами; после штатной остановки одного два других продолжили работу.
-            Тест шёл на одной машине с фиксированными ответами модели. Многомашинное развёртывание
-            ещё нужно довести, а десятки тысяч в сутки — целевой сценарий, не измеренная
-            производительность.
+            Для десятков тысяч обращений в сутки нужно распределять работу между машинами. Здесь
+            целевая схема одной системы Knotra: API принимает запуски, планировщик управляет графом
+            и лимитами, воркеры на нескольких нодах исполняют шаги. River работает внутри движка и
+            доставляет задания, PostgreSQL хранит состояние и очередь. Файлы и результаты доступны
+            всем исполнителям. Внутри движка роли уже разделены. Сегодня три отдельных процесса
+            завершили 18 workflow с 54 вызовами; после штатной остановки одного два других
+            продолжили работу. Тест шёл на одной машине с фиксированными ответами модели.
+            Многомашинное развёртывание ещё нужно довести, а десятки тысяч в сутки — целевой
+            сценарий, не измеренная производительность.
           </aside>
         </section>
 
@@ -524,12 +535,12 @@
         <section
           class="slide"
           id="slide-7"
-          data-title="Архитектура проекта"
+          data-title="Архитектура"
           data-duration="40"
           aria-labelledby="title-7"
           hidden
         >
-          <h2 class="slide-title" id="title-7">Архитектура проекта</h2>
+          <h2 class="slide-title" id="title-7">Архитектура</h2>
           <div
             class="architecture"
             role="group"
