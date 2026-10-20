@@ -12,16 +12,33 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/knotra-dev/engine/internal/contract"
+	"github.com/knotra-dev/engine/internal/protocol"
 )
 
 func (s *commandState) artifactsCommand() *cobra.Command {
 	root := &cobra.Command{Use: "artifacts", Short: "Upload, inspect and verify immutable files"}
-	var cursor string
+	var cursor, runID string
 	var all bool
-	list := &cobra.Command{Use: "list", Short: "List registered artifacts", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
-		page, err := fetchPages[contract.Artifact](cmd.Context(), s, "/artifacts", cursor, all)
-		if err != nil {
-			return err
+	list := &cobra.Command{Use: "list", Aliases: []string{"ls"}, Short: "List registered artifacts or a run's output files", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		var page protocol.Page[contract.Artifact]
+		if runID != "" {
+			if cursor != "" || all {
+				return fmt.Errorf("--run returns all run artifacts; omit --cursor and --all")
+			}
+			run, err := s.getRun(cmd.Context(), runID)
+			if err != nil {
+				return err
+			}
+			page.Items = run.Artifacts
+			if page.Items == nil {
+				page.Items = []contract.Artifact{}
+			}
+		} else {
+			var err error
+			page, err = fetchPages[contract.Artifact](cmd.Context(), s, "/artifacts", cursor, all)
+			if err != nil {
+				return err
+			}
 		}
 		if s.json {
 			return s.printJSON(page)
@@ -32,15 +49,16 @@ func (s *commandState) artifactsCommand() *cobra.Command {
 			rows = append(rows, []string{artifact.ID, artifact.Name, artifact.MediaType, fmt.Sprint(artifact.Size), artifact.SHA256})
 		}
 
-		if err = s.table([]string{"ID", "NAME", "MEDIA TYPE", "BYTES", "SHA256"}, rows); err != nil {
+		if err := s.table([]string{"ID", "NAME", "MEDIA TYPE", "BYTES", "SHA256"}, rows); err != nil {
 			return err
 		}
 		return s.nextCursor(page.NextCursor)
 	}}
 	pageFlags(list, &cursor, &all)
+	list.Flags().StringVar(&runID, "run", "", "Show all output artifacts for a run; excludes --cursor and --all")
 	var output string
 	var force bool
-	get := &cobra.Command{Use: "get ARTIFACT_ID", Short: "Show artifact metadata or download with --output", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	get := &cobra.Command{Use: "show ARTIFACT_ID", Aliases: []string{"get"}, Short: "Show artifact details or download with --output", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		if output != "" {
 			return s.download(cmd.Context(), args[0], output, force)
 		}
@@ -48,7 +66,10 @@ func (s *commandState) artifactsCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		return s.printJSON(map[string]any{"artifact": artifact})
+		if s.json {
+			return s.printJSON(map[string]any{"artifact": artifact})
+		}
+		return s.printArtifact(artifact)
 	}}
 	get.Flags().StringVarP(&output, "output", "o", "", "Write verified bytes to this path; - writes stdout")
 	get.Flags().BoolVar(&force, "force", false, "Replace an existing output file")
@@ -122,6 +143,6 @@ func (s *commandState) download(ctx context.Context, id, output string, force bo
 	if s.json {
 		return s.printJSON(map[string]any{"artifact": artifact, "path": output})
 	}
-	_, err = fmt.Fprintf(s.options.Out, "Saved %s (%d bytes, SHA-256 %s).\n", output, len(data), actual)
+	_, err = fmt.Fprintf(s.options.Out, "Saved %s (%d bytes, SHA-256 %s).\n", safeText(output), len(data), actual)
 	return err
 }

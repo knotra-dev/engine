@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -15,9 +16,12 @@ func (s *commandState) runCommand() *cobra.Command {
 	var root, profile, definition, inputsFile, artifactsFile, key string
 	var inputs, artifacts []string
 	var wait, watch bool
-	cmd := &cobra.Command{Use: "run [PIPELINE.yaml]", Short: "Admit and start an immutable pipeline run", Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		if (len(args) == 0) == (definition == "") {
-			return fmt.Errorf("provide one pipeline file or --definition ID")
+	cmd := &cobra.Command{Use: "run [PIPELINE.yaml]", Short: "Run a pipeline (defaults to pipeline.yaml)", Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) > 0 && definition != "" {
+			return fmt.Errorf("a pipeline file and --definition cannot be combined")
+		}
+		if definition != "" && root != "" {
+			return fmt.Errorf("--package-root applies to pipeline files; omit it with --definition")
 		}
 		if profile == "" {
 			return fmt.Errorf("--profile or KNOTRA_PROFILE is required")
@@ -36,8 +40,12 @@ func (s *commandState) runCommand() *cobra.Command {
 		id := operationKey(key)
 		engine := s.client()
 		definitionID := definition
-		if len(args) > 0 {
-			pkg, err := loadPackage(args[0], root)
+		if definition == "" {
+			file := "pipeline.yaml"
+			if len(args) > 0 {
+				file = args[0]
+			}
+			pkg, err := loadPackage(file, root)
 			if err != nil {
 				return err
 			}
@@ -65,7 +73,7 @@ func (s *commandState) runCommand() *cobra.Command {
 			return s.printRun(result.Run, id)
 		}
 		if !s.json {
-			if _, err = fmt.Fprintf(s.options.Out, "Accepted run %s (operation %s).\n", result.Run.ID, id); err != nil {
+			if _, err = fmt.Fprintf(s.options.Out, "Accepted run %s (operation %s).\n", safeText(result.Run.ID), safeText(id)); err != nil {
 				return err
 			}
 		}
@@ -85,7 +93,7 @@ func (s *commandState) runCommand() *cobra.Command {
 	}}
 	f := cmd.Flags()
 	f.StringVar(&root, "package-root", "", "Root of package-relative paths")
-	f.StringVar(&profile, "profile", s.env("KNOTRA_PROFILE", ""), "Engine profile ID")
+	f.StringVarP(&profile, "profile", "p", s.env("KNOTRA_PROFILE", ""), "Engine profile ID (KNOTRA_PROFILE)")
 	f.StringVar(&definition, "definition", "", "Start an already published definition ID")
 	f.StringVar(&key, "idempotency-key", "", "Stable operation ID for this exact run submission")
 	f.BoolVar(&wait, "wait", false, "Wait for terminal status; disconnecting does not cancel the run")
@@ -138,7 +146,7 @@ func (s *commandState) runsCommand() *cobra.Command {
 		return s.nextCursor(page.NextCursor)
 	}}
 	pageFlags(instances, &instanceCursor, &allInstances)
-	get := &cobra.Command{Use: "get RUN_ID", Short: "Show run inputs, outputs, instances and diagnostics", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	get := &cobra.Command{Use: "show RUN_ID", Aliases: []string{"get"}, Short: "Show run status, inputs, outputs and diagnostics", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		run, err := s.getRun(cmd.Context(), args[0])
 		if err != nil {
 			return err
@@ -164,6 +172,9 @@ func (s *commandState) runsCommand() *cobra.Command {
 	watch.Flags().StringVar(&eventCursor, "cursor", "", "Resume after this explicit event ID")
 	var timeout time.Duration
 	wait := &cobra.Command{Use: "wait RUN_ID", Short: "Wait for terminal status and print the final run", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		if timeout < 0 {
+			return fmt.Errorf("--timeout must be zero or a positive duration")
+		}
 		ctx := cmd.Context()
 		if timeout > 0 {
 			var cancel context.CancelFunc
@@ -265,11 +276,27 @@ func (s *commandState) printRun(run protocol.Run, operation string) error {
 		}
 		return s.printJSON(result)
 	}
-	if _, err := fmt.Fprintf(s.options.Out, "Run: %s\nStatus: %s\nProfile: %s\n", run.ID, run.Status, run.Profile); err != nil {
-		return err
+	fields := [][]string{{"Run", run.ID}, {"Title", run.Title}, {"Status", run.Status}, {"Profile", run.Profile}, {"Pipeline", run.DefinitionID}}
+	if !run.CreatedAt.IsZero() {
+		fields = append(fields, []string{"Created", run.CreatedAt.Format(time.RFC3339)})
+	}
+	if !run.UpdatedAt.IsZero() {
+		fields = append(fields, []string{"Updated", run.UpdatedAt.Format(time.RFC3339)})
 	}
 	if operation != "" {
-		if _, err := fmt.Fprintln(s.options.Out, "Operation:", operation); err != nil {
+		fields = append(fields, []string{"Operation", operation})
+	}
+	if len(run.AvailableActions) > 0 {
+		fields = append(fields, []string{"Actions", strings.Join(run.AvailableActions, ", ")})
+	}
+	if run.DataTruncated {
+		fields = append(fields, []string{"Preview", "Some run data is truncated by the engine."})
+	}
+	if err := s.fields(fields); err != nil {
+		return err
+	}
+	if len(run.Inputs) > 0 || len(run.InputArtifacts) > 0 {
+		if err := s.printJSON(map[string]any{"inputs": run.Inputs, "inputArtifacts": run.InputArtifacts}); err != nil {
 			return err
 		}
 	}
@@ -285,7 +312,7 @@ func (s *commandState) printRun(run protocol.Run, operation string) error {
 		}
 	}
 	if run.InstancesNextCursor != nil {
-		if _, err := fmt.Fprintf(s.options.Out, "More instances: knotra runs instances %s --cursor %s\n", run.ID, *run.InstancesNextCursor); err != nil {
+		if _, err := fmt.Fprintf(s.options.Out, "More instances: knotra runs instances %s --cursor %s\n", safeText(run.ID), safeText(*run.InstancesNextCursor)); err != nil {
 			return err
 		}
 	}
@@ -295,7 +322,11 @@ func (s *commandState) printRun(run protocol.Run, operation string) error {
 		}
 	}
 	if len(run.Artifacts) > 0 {
-		if err := s.printJSON(map[string]any{"artifacts": run.Artifacts}); err != nil {
+		rows := make([][]string, 0, len(run.Artifacts))
+		for _, artifact := range run.Artifacts {
+			rows = append(rows, []string{artifact.ID, artifact.Name, artifact.MediaType, fmt.Sprint(artifact.Size)})
+		}
+		if err := s.table([]string{"ARTIFACT", "NAME", "MEDIA TYPE", "BYTES"}, rows); err != nil {
 			return err
 		}
 	}
@@ -309,7 +340,7 @@ func (s *commandState) mutation(ctx context.Context, route string, payload any, 
 		return err
 	}
 	result["operationId"] = id
-	return s.printJSON(result)
+	return s.printMutation(result)
 }
 
 func fetchPages[T any](ctx context.Context, s *commandState, route, cursor string, all bool) (protocol.Page[T], error) {
@@ -345,7 +376,7 @@ func pageFlags(cmd *cobra.Command, cursor *string, all *bool) {
 
 func (s *commandState) nextCursor(cursor *string) error {
 	if cursor != nil {
-		_, err := fmt.Fprintln(s.options.Out, "Next cursor:", *cursor)
+		_, err := fmt.Fprintln(s.options.Out, "More results available. Use --cursor", safeText(*cursor), "or --all.")
 		return err
 	}
 	return nil

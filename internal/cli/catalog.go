@@ -11,10 +11,10 @@ import (
 )
 
 func (s *commandState) definitionsCommand() *cobra.Command {
-	root := &cobra.Command{Use: "definitions", Short: "Publish and inspect immutable pipeline packages"}
+	root := &cobra.Command{Use: "pipelines", Aliases: []string{"definitions"}, Short: "Publish and inspect pipeline packages"}
 	var cursor string
 	var all bool
-	list := &cobra.Command{Use: "list", Short: "List published definitions", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+	list := &cobra.Command{Use: "list", Aliases: []string{"ls"}, Short: "List published pipelines", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		page, err := fetchPages[protocol.Definition](cmd.Context(), s, "/definitions", cursor, all)
 		if err != nil {
 			return err
@@ -34,17 +34,20 @@ func (s *commandState) definitionsCommand() *cobra.Command {
 		return s.nextCursor(page.NextCursor)
 	}}
 	pageFlags(list, &cursor, &all)
-	get := &cobra.Command{Use: "get DEFINITION_ID", Short: "Get a definition with its exact package bytes", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	get := &cobra.Command{Use: "show PIPELINE_ID", Aliases: []string{"get"}, Short: "Show a published pipeline; --json includes the package", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		var result struct {
 			Definition protocol.Definition `json:"definition"`
 		}
 		if err := s.client().Get(cmd.Context(), "/definitions/"+url.PathEscape(args[0]), &result); err != nil {
 			return err
 		}
-		return s.printJSON(result)
+		if s.json {
+			return s.printJSON(result)
+		}
+		return s.printDefinition(result.Definition)
 	}}
 	var packageRoot, key string
-	create := &cobra.Command{Use: "create PIPELINE.yaml", Short: "Publish an immutable package version", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	create := &cobra.Command{Use: "publish PIPELINE.yaml", Aliases: []string{"create"}, Short: "Publish an immutable pipeline package", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		pkg, err := loadPackage(args[0], packageRoot)
 		if err != nil {
 			return err
@@ -61,8 +64,8 @@ func (s *commandState) requestsCommand() *cobra.Command {
 	root := &cobra.Command{Use: "requests", Short: "Inspect and answer requests to a human"}
 	var cursor, runFilter, statusFilter string
 	var all bool
-	list := &cobra.Command{Use: "list", Short: "List human requests and response schemas", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
-		page, err := fetchPages[protocol.HumanRequest](cmd.Context(), s, "/requests", cursor, all)
+	list := &cobra.Command{Use: "list", Aliases: []string{"ls"}, Short: "List human requests; --json includes response schemas", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		page, err := fetchPages[protocol.HumanRequest](cmd.Context(), s, "/requests", cursor, all || runFilter != "" || statusFilter != "")
 		if err != nil {
 			return err
 		}
@@ -100,8 +103,8 @@ func (s *commandState) requestsCommand() *cobra.Command {
 		return s.nextCursor(page.NextCursor)
 	}}
 	pageFlags(list, &cursor, &all)
-	list.Flags().StringVar(&runFilter, "run", "", "Filter the fetched requests by run ID")
-	list.Flags().StringVar(&statusFilter, "status", "", "Filter the fetched requests by status")
+	list.Flags().StringVar(&runFilter, "run", "", "Filter by run ID across all remaining pages")
+	list.Flags().StringVar(&statusFilter, "status", "", "Filter by status across all remaining pages")
 	var file, key string
 	var outputs []string
 	respond := &cobra.Command{Use: "respond REQUEST_ID", Short: "Submit a schema-checked response to one exact request", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
@@ -123,7 +126,7 @@ func (s *commandState) requestsCommand() *cobra.Command {
 
 func (s *commandState) operationsCommand() *cobra.Command {
 	root := &cobra.Command{Use: "operations", Short: "Inspect and reconcile locally journaled mutation commands"}
-	list := &cobra.Command{Use: "list", Short: "List durable command receipts for this endpoint", Args: cobra.NoArgs, RunE: func(_ *cobra.Command, _ []string) error {
+	list := &cobra.Command{Use: "list", Aliases: []string{"ls"}, Short: "List saved operation receipts for this endpoint", Args: cobra.NoArgs, RunE: func(_ *cobra.Command, _ []string) error {
 		items, err := s.client().Commands()
 		if err != nil {
 			return err
@@ -145,7 +148,7 @@ func (s *commandState) operationsCommand() *cobra.Command {
 			return err
 		}
 		result["operationId"] = args[0]
-		return s.printJSON(result)
+		return s.printMutation(result)
 	}}
 	root.AddCommand(list, retry)
 	return root

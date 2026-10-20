@@ -10,11 +10,24 @@ import (
 )
 
 func (s *commandState) validateCommand() *cobra.Command {
-	var root, profile, inputsFile, artifactsFile string
+	var root, profile, profileFile, inputsFile, artifactsFile string
 	var inputs, artifacts []string
 	var remote bool
-	cmd := &cobra.Command{Use: "validate PIPELINE.yaml", Short: "Validate a package offline or perform authoritative engine admission", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		pkg, err := loadPackage(args[0], root)
+	cmd := &cobra.Command{Use: "validate [PIPELINE.yaml]", Short: "Check a pipeline offline, or against an engine with --remote", Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		if remote && profileFile != "" {
+			return fmt.Errorf("--profile-file is for offline validation; use --profile ID with --remote")
+		}
+		if !remote && cmd.Flags().Changed("profile") {
+			return fmt.Errorf("--profile selects an engine profile with --remote; use --profile-file FILE for offline validation")
+		}
+		if remote && profile == "" {
+			return fmt.Errorf("--profile or KNOTRA_PROFILE is required with --remote")
+		}
+		file := "pipeline.yaml"
+		if len(args) > 0 {
+			file = args[0]
+		}
+		pkg, err := loadPackage(file, root)
 		if err != nil {
 			return err
 		}
@@ -31,9 +44,6 @@ func (s *commandState) validateCommand() *cobra.Command {
 			Diagnostics []contract.Diagnostic `json:"diagnostics"`
 		}
 		if remote {
-			if profile == "" {
-				return fmt.Errorf("--profile must name an engine profile for remote validation")
-			}
 			err = s.client().Validate(
 				cmd.Context(),
 				map[string]any{"package": pkg, "profile": profile, "inputs": in, "artifacts": art},
@@ -44,8 +54,8 @@ func (s *commandState) validateCommand() *cobra.Command {
 			}
 		} else {
 			var trusted *contract.Profile
-			if profile != "" {
-				data, err := s.readFile(profile, 1<<20)
+			if profileFile != "" {
+				data, err := s.readFile(profileFile, 1<<20)
 				if err != nil {
 					return err
 				}
@@ -125,7 +135,8 @@ func (s *commandState) validateCommand() *cobra.Command {
 		return nil
 	}}
 	cmd.Flags().StringVar(&root, "package-root", "", "Root of package-relative paths")
-	cmd.Flags().StringVar(&profile, "profile", "", "EngineProfile YAML file locally, or profile ID with --remote")
+	cmd.Flags().StringVar(&profileFile, "profile-file", "", "Trusted EngineProfile YAML file for offline checks")
+	cmd.Flags().StringVarP(&profile, "profile", "p", s.env("KNOTRA_PROFILE", ""), "Engine profile ID with --remote (KNOTRA_PROFILE)")
 	cmd.Flags().BoolVar(&remote, "remote", false, "Run authoritative admission against the engine")
 	inputFlags(cmd, &inputsFile, &inputs, &artifactsFile, &artifacts)
 	return cmd

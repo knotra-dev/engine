@@ -104,8 +104,8 @@ func (s *commandState) watchRun(ctx context.Context, runID, cursor string, fromS
 					s.options.Out,
 					"%s  %-20s %-20s %s\n",
 					event.At.Format(time.RFC3339),
-					event.Type,
-					event.InstanceID,
+					safeText(event.Type),
+					safeText(event.InstanceID),
 					safeText(event.Message),
 				)
 			}

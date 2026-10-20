@@ -30,6 +30,7 @@ type commandState struct {
 	options            Options
 	endpoint, stateDir string
 	json               bool
+	format             string
 }
 
 type ExitError struct {
@@ -54,6 +55,11 @@ func ExitCode(err error) int {
 }
 
 func New(options Options) *cobra.Command {
+	root, _ := newCommand(options)
+	return root
+}
+
+func newCommand(options Options) (*cobra.Command, *commandState) {
 	if options.In == nil {
 		options.In = os.Stdin
 	}
@@ -71,11 +77,23 @@ func New(options Options) *cobra.Command {
 	}
 	s := &commandState{options: options}
 	root := &cobra.Command{
-		Use:           "knotra",
-		Short:         "Describe, validate and execute AI pipelines",
-		Version:       options.Version,
-		SilenceUsage:  true,
-		SilenceErrors: true,
+		Use:              "knotra",
+		Short:            "Build and run AI workflows",
+		Long:             "Knotra validates pipeline packages and runs them on an engine.\nStart with 'knotra init', or use 'knotra quickstart' to set up a local engine.",
+		Version:          options.Version,
+		SilenceUsage:     true,
+		SilenceErrors:    true,
+		TraverseChildren: true,
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			if s.format != "text" && s.format != "json" {
+				return fmt.Errorf("--format must be text or json")
+			}
+			if s.json && cmd.Flags().Changed("format") && s.format == "text" {
+				return fmt.Errorf("--json and --format text cannot be combined")
+			}
+			s.json = s.json || s.format == "json"
+			return nil
+		},
 	}
 	root.SetIn(options.In)
 	root.SetOut(options.Out)
@@ -84,9 +102,10 @@ func New(options Options) *cobra.Command {
 	if err != nil {
 		dir = "."
 	}
-	root.PersistentFlags().StringVar(
+	root.PersistentFlags().StringVarP(
 		&s.endpoint,
 		"endpoint",
+		"e",
 		s.env("KNOTRA_ENDPOINT", "http://127.0.0.1:8787"),
 		"Engine base URL (KNOTRA_ENDPOINT)",
 	)
@@ -96,8 +115,12 @@ func New(options Options) *cobra.Command {
 		s.env("KNOTRA_STATE_DIR", filepath.Join(dir, "knotra")),
 		"Local durable command and event journal directory",
 	)
-	root.PersistentFlags().BoolVar(&s.json, "json", false, "Emit machine-readable JSON (JSON Lines for events)")
+	root.PersistentFlags().BoolVarP(&s.json, "json", "j", false, "Emit JSON (JSON Lines for events); same as --format json")
+	root.PersistentFlags().StringVar(&s.format, "format", "text", "Output format: text or json")
+	root.Flags().BoolP("version", "v", false, "Print the CLI version")
+	root.SetVersionTemplate("knotra {{.Version}}\n")
 	root.AddCommand(
+		s.initCommand(),
 		s.validateCommand(),
 		s.serveCommand(),
 		s.bootstrapCommand(false),
@@ -112,13 +135,19 @@ func New(options Options) *cobra.Command {
 		s.catalogCommand("resources"),
 		s.catalogCommand("info"),
 	)
-	return root
+	configureCommands(root)
+	return root, s
 }
 
 func Execute(ctx context.Context, args []string, options Options) error {
-	root := New(options)
+	root, state := newCommand(options)
 	root.SetArgs(args)
-	return root.ExecuteContext(ctx)
+	cmd, err := root.ExecuteContextC(ctx)
+	if err != nil {
+		state.errorFormat(root, args)
+		state.reportError(cmd, err)
+	}
+	return err
 }
 
 func (s *commandState) env(name, fallback string) string {
@@ -142,6 +171,10 @@ func (s *commandState) printJSON(v any) error {
 }
 
 func (s *commandState) table(headers []string, rows [][]string) error {
+	if len(rows) == 0 {
+		_, err := fmt.Fprintln(s.options.Out, "No results.")
+		return err
+	}
 	writer := tabwriter.NewWriter(s.options.Out, 0, 4, 2, ' ', 0)
 	if _, err := fmt.Fprintln(writer, strings.Join(headers, "\t")); err != nil {
 		return err
@@ -199,8 +232,11 @@ func (s *commandState) catalogCommand(kind string) *cobra.Command {
 		if err := s.client().Get(cmd.Context(), "/"+kind, &response); err != nil {
 			return err
 		}
-		if s.json || kind == "info" {
+		if s.json {
 			return s.printJSON(response)
+		}
+		if kind == "info" {
+			return s.printInfo(response)
 		}
 		items, _ := response["items"].([]any)
 		rows := [][]string{}

@@ -146,6 +146,18 @@ func TestRunUsesStableDistinctMutationKeys(t *testing.T) {
 	if mutations != 2 || keys["/v1/runs"] != "stable" || keys["/v1/definitions"] == "stable" || keys["/v1/definitions"] == "" {
 		t.Fatalf("invalid mutations %d %v", mutations, keys)
 	}
+	t.Chdir(filepath.Dir(file))
+	// The default filename must resolve to the same package and reuse both receipts.
+	for i, arg := range args {
+		if arg == file {
+			args = append(args[:i], args[i+1:]...)
+			break
+		}
+	}
+	out, _, err := invoke(t, args, "")
+	if err != nil || !strings.Contains(out, `"id":"run"`) || mutations != 2 {
+		t.Fatalf("default pipeline submission changed: %s, %v (mutations=%d)", out, err, mutations)
+	}
 }
 
 func TestArtifactDownloadIntegrityBeforeWriting(t *testing.T) {
