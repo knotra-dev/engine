@@ -4,9 +4,16 @@
 
 Nine slides in Russian: a five-minute project introduction and an extra slide about GitHub
 Community. The layout uses Knotra’s light palette and logo. Slide 2 explains the use case alongside
-an interactive agent such as Codex. Slide 5 shows eight steps from the reviewed research example,
-with nested graphs expanded. The three source offers are fictional teaching materials; the diagram
-shows the main dependencies. Slide 7 separates the target multi-host architecture and example daily
+an interactive agent such as Codex. Slide 4 highlights the local `qwen3.5:9b` model and automated
+test-feedback loop; the recorded repair run starts from a deliberately incorrect strategy. A
+separate generation run also passed. The presentation does not claim a measured success rate for a
+single prompt or guaranteed repair. Slide 5 illustrates a seven-step customer support process: input
+validation, agent analysis using customer/order/history MCP tools, another agent using knowledge and
+policy tools to draft a reply, code checks, routing, optional human approval and delivery. Both
+agents have read access; the final tool step sends the answer. Typical answers bypass human
+approval; complex cases and failed checks go to an operator. This is an application scenario, not a
+recorded run or a bundled helpdesk integration; the MCP servers and helpdesk API would need to be
+connected separately. Slide 7 separates the target multi-host architecture and example daily
 workload from the verified same-host worker test.
 
 Open `index.html` directly or serve this directory with any static HTTP server. All assets and the
@@ -26,8 +33,8 @@ screenshots come from the project’s recorded runs and the supplied Telegram po
 results describe a same-host test with fixed model responses.
 
 The narrative and claims are grounded in the root README, `docs/architecture.md`,
-`docs/verification.md`, `docs/scheduler-river-implementation.md`, and
-`examples/starter/research-dossier/{pipeline,review}.yaml`.
+`docs/verification.md`, and `docs/scheduler-river-implementation.md`. Slide 5 uses the engine’s
+`agent`, `tool`, `code`, `switch` and `human` node types to explain a possible application.
 
 Editorial references:
 [Slide Deck Builder](https://github.com/SkillMedev/skills/blob/main/skills/slide-deck-builder/SKILL.md)

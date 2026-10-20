@@ -11,8 +11,8 @@
     />
     <title>Knotra — движок для процессов с AI-агентами</title>
     <link rel="icon" type="image/svg+xml" href="assets/knotra.svg" />
-    <link rel="stylesheet" href="style.css?v=20261020-story-v2" />
-    <script src="script.js?v=20261020-story-v2" defer></script>
+    <link rel="stylesheet" href="style.css?v=20261020-support-agents-v2" />
+    <script src="script.js?v=20261020-support-agents-v2" defer></script>
   </head>
   <body>
     <svg class="svg-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -263,8 +263,8 @@
           aria-labelledby="title-4"
           hidden
         >
-          <p class="eyebrow">Работающий пример</p>
-          <h2 class="slide-title" id="title-4">Игра прошла тесты<br />со второй попытки</h2>
+          <p class="eyebrow">Небольшая локальная модель · Ollama</p>
+          <h2 class="slide-title" id="title-4">Qwen 9B написала<br />крестики-нолики</h2>
           <div class="game-layout">
             <div class="game-evidence">
               <div class="repair-path">
@@ -277,8 +277,9 @@
                 <div><strong>929</strong><span>игровых позиций</span></div>
               </div>
               <p class="evidence-copy">
-                Модель получает упавший тест и правит код.<br />Финальную версию проверяем в
-                отдельном sandbox.
+                Knotra сама запускает тесты.<br />Ошибки возвращаются модели на исправление.<br /><strong
+                  >Без пройденных тестов готового файла нет.</strong
+                >
               </p>
               <button
                 class="text-link"
@@ -312,43 +313,40 @@
             </div>
           </div>
           <aside class="speech" hidden>
-            В репозитории есть пример с крестиками-ноликами. Для демонстрации мы специально подали
-            стратегию с ошибкой: компьютер проигрывал на допустимой последовательности ходов. Тест
-            нашёл эту последовательность, и модель получила её вместе с исходным кодом. На второй
-            итерации исправление прошло 3159 проверок на 929 игровых позициях. Затем отдельный
-            sandbox повторно проверил код и собрал HTML-файл. По кнопке открывается сохранённая
-            игра. Это записанный прогон от 5 октября, поэтому цифры можно проверить после
-            выступления. Готовность здесь определяет фиксированный набор тестов; модель не оценивает
-            собственный ответ.
+            Эту игру написала небольшая локальная qwen3.5:9b через Ollama. Мы не ограничились
+            просьбой написать крестики-нолики: Knotra автоматически запускала фиксированные тесты и
+            возвращала ошибки модели вместе с кодом. Модель исправляла код, а пайплайн проверял его
+            снова. В показанном repair-прогоне мы специально подали ошибочную стратегию. Исправление
+            прошло 3159 проверок на 929 позициях со второй итерации, после чего отдельный sandbox
+            проверил и собрал HTML. Генерация с нуля тоже прошла, в отдельном запуске. Один ответ на
+            промпт сам по себе не подтверждает работоспособность игры. Здесь готовность определяют
+            тесты, которые модель не может менять. Исправление не гарантировано: при исчерпании
+            лимита попыток запуск завершается ошибкой и не выдаёт готовую игру.
           </aside>
         </section>
 
         <section
           class="slide product-slide"
           id="slide-5"
-          data-title="Пример: досье"
+          data-title="Пример: поддержка"
           data-duration="40"
           aria-labelledby="title-5"
           hidden
         >
-          <div class="product-heading">
-            <div>
-              <p class="eyebrow">Пример из репозитория · 8 шагов</p>
-              <h2 class="slide-title" id="title-5">Из трёх источников — согласованное досье</h2>
-            </div>
-          </div>
+          <p class="eyebrow">Пример сценария · 7 шагов</p>
+          <h2 class="slide-title" id="title-5">Поддержка: от обращения до ответа</h2>
           <p class="subtitle">
-            Сравниваем варианты запуска базы знаний: готовый сервис, CMS и собственная разработка.
+            Агенты разбирают обращение через MCP. Сложные случаи согласует оператор.
           </p>
           <div
-            class="research-diagram panel"
+            class="support-diagram panel"
             role="group"
-            aria-label="Восемь шагов: три агента читают источники, код проверяет факты, модель объясняет выбор, код собирает досье, человек согласует, код экспортирует файлы"
+            aria-label="Семь шагов: проверка входных данных; агент читает через MCP клиента, заказ и историю обращений; другой агент ищет решение в базе знаний и готовит ответ; код проверяет ответ; граф выбирает маршрут; сложные случаи согласует оператор; отдельный инструмент отправляет ответ."
           >
-            <svg class="research-connections" viewBox="0 0 1456 430" aria-hidden="true">
+            <svg class="support-connections" viewBox="0 0 1456 430" aria-hidden="true">
               <defs>
                 <marker
-                  id="research-arrow"
+                  id="support-arrow"
                   markerWidth="8"
                   markerHeight="8"
                   refX="7"
@@ -358,72 +356,70 @@
                   <path d="m1 1 6 3-6 3" />
                 </marker>
               </defs>
-              <path d="M290 138v43H144v59M728 138v43H290M1166 138v43H728" />
-              <path class="directed" d="M144 212v28" />
-              <path class="directed" d="M268 306h44" />
-              <path class="directed" d="M560 306h44" />
-              <path class="directed" d="M852 306h44" />
-              <path class="directed" d="M1144 306h44" />
+              <path d="M264 132h52" />
+              <path d="M556 132h52" />
+              <path d="M848 132h52" />
+              <path d="M1140 132h52" />
+              <path d="M1312 204v66" />
+              <path d="M1312 204v30h-292v36" />
+              <path d="M1140 338h52" />
             </svg>
-            <div class="research-node research-agent source-one">
-              <span class="research-kind">agent · 1</span>
-              <h3>Готовый сервис</h3>
-              <p>Факты и цитаты из файла</p>
+            <div class="support-node support-intake">
+              <span class="support-kind">code · 1</span>
+              <h3>Принять заявку</h3>
+              <p>Проверить формат<br />и обязательные поля</p>
             </div>
-            <div class="research-node research-agent source-two">
-              <span class="research-kind">agent · 2</span>
-              <h3>CMS</h3>
-              <p>Факты и цитаты из файла</p>
+            <div class="support-node support-agent support-analyze">
+              <span class="support-kind">agent · 2</span>
+              <h3>Разобрать заявку</h3>
+              <p>MCP: клиент, заказ<br />и история обращений</p>
             </div>
-            <div class="research-node research-agent source-three">
-              <span class="research-kind">agent · 3</span>
-              <h3>Своя разработка</h3>
-              <p>Факты и цитаты из файла</p>
+            <div class="support-node support-agent support-draft">
+              <span class="support-kind">agent · 3</span>
+              <h3>Составить ответ</h3>
+              <p>MCP: база знаний<br />и правила компании</p>
             </div>
-            <span class="research-merge">Сопоставить с оригиналами, учесть бюджет и срок</span>
-            <div class="research-node research-step step-compare">
-              <span class="research-kind">code · 4</span>
-              <h3>Проверить факты</h3>
-              <p>Цитаты, ограничения,<br />расчёт рейтинга</p>
+            <div class="support-node support-check">
+              <span class="support-kind">code · 4</span>
+              <h3>Проверить ответ</h3>
+              <p>Ссылки на источники<br />и правила компании</p>
             </div>
-            <div class="research-node research-step step-synthesize">
-              <span class="research-kind">llm · 5</span>
-              <h3>Объяснить выбор</h3>
-              <p>Плюсы, минусы<br />и пробелы в данных</p>
+            <div class="support-node support-route">
+              <span class="support-kind">switch · 5</span>
+              <h3>Выбрать маршрут</h3>
+              <p>Можно отправить<br />или нужен оператор?</p>
             </div>
-            <div class="research-node research-step step-package">
-              <span class="research-kind">code · 6</span>
-              <h3>Собрать досье</h3>
-              <p>Текст, расчёты<br />и исходные файлы</p>
-            </div>
-            <div class="research-node research-step step-review">
-              <span class="research-kind">human · 7</span>
+            <span class="support-branch support-manual-label">Нужно согласование</span>
+            <span class="support-branch support-auto-label">Типовой</span>
+            <div class="support-node support-review">
+              <span class="support-kind">human · 6</span>
               <h3>Согласовать</h3>
-              <p>Прочитать досье<br />и оставить комментарий</p>
+              <p>Исправить текст<br />и разрешить отправку</p>
             </div>
-            <div class="research-node research-step step-export">
-              <span class="research-kind">code · 8</span>
-              <h3>Выгрузить файлы</h3>
-              <p>Досье, ZIP<br />и запись согласования</p>
+            <div class="support-node support-send">
+              <span class="support-kind">tool · 7</span>
+              <h3>Отправить ответ</h3>
+              <p>Через API<br />системы поддержки</p>
             </div>
-            <p class="research-footer">
-              research-dossier/review.yaml · вложенные графы раскрыты · показаны основные
-              зависимости
-            </p>
+            <div class="support-ticket">
+              <span class="support-kind">Пример обращения</span>
+              <p>«Где мой заказ?»</p>
+              <span>У каждого обращения — свой запуск и история.</span>
+            </div>
           </div>
           <p class="source-note">
-            В Desktop можно открыть входы и выходы шага, вызовы инструментов, файлы и запрос на
-            согласование.
+            Агенты читают данные через MCP. Право отправить ответ есть только у финального шага.
           </p>
           <aside class="speech" hidden>
-            Вот ещё один готовый пример из репозитория — выбор подхода для запуска базы знаний. В
-            нём три агента по отдельности читают три учебных предложения и извлекают факты с
-            цитатами. Код сверяет их с оригиналами, применяет ограничения по бюджету и сроку, затем
-            рассчитывает рейтинг. Следующая модель объясняет уже рассчитанный выбор, не пересчитывая
-            его. Код собирает досье, человек читает его и согласует, после чего сохраняются итоговые
-            файлы и запись решения. На схеме раскрыты восемь шагов вложенного процесса. Это пример с
-            вымышленными исходными предложениями, а не исследование рынка. В Desktop каждый шаг
-            можно открыть и посмотреть его данные.
+            Представим поддержку интернет-магазина: покупатель спрашивает, где его заказ. Сначала
+            код проверяет входные данные. Затем агент через MCP запрашивает клиента, заказ и историю
+            обращений, чтобы понять проблему. Второй агент обращается к базе знаний и правилам
+            компании, подбирает решение и готовит ответ. Код проверяет ссылки и заданные
+            ограничения. Граф отправляет типовой ответ сразу, а сложный случай или ошибку проверки
+            передаёт оператору. Оператор может исправить текст и разрешить отправку. Агенты имеют
+            доступ к чтению данных; ответ отправляет отдельный инструмент после проверок. У каждого
+            обращения свой запуск с историей. Это схема применения Knotra: MCP-серверы и API
+            поддержки нужно подключить отдельно.
           </aside>
         </section>
 
