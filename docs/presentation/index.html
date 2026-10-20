@@ -11,8 +11,8 @@
     />
     <title>Knotra — движок для процессов с AI-агентами</title>
     <link rel="icon" type="image/svg+xml" href="assets/knotra.svg" />
-    <link rel="stylesheet" href="style.css?v=20261020-support-agents-v2" />
-    <script src="script.js?v=20261020-support-agents-v2" defer></script>
+    <link rel="stylesheet" href="style.css?v=20261020-node-types-v3" />
+    <script src="script.js?v=20261020-node-types-v3" defer></script>
   </head>
   <body>
     <svg class="svg-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -187,14 +187,16 @@
         >
           <p class="eyebrow">Как это работает</p>
           <h2 class="slide-title" id="title-3">Порядок работы задаётся в графе</h2>
-          <p class="subtitle">В YAML описаны зависимости, входные данные и условия переходов.</p>
+          <p class="subtitle">
+            Пример графа. В YAML заданы зависимости, входные данные и условия переходов.
+          </p>
           <div class="workflow panel">
             <div class="flow-nodes">
               <div class="flow-node">
                 <span class="node-icon aqua"
                   ><svg><use href="#i-spark" /></svg></span
-                ><span class="node-kind">llm / agent</span>
-                <h3>Модель</h3>
+                ><span class="node-kind">agent</span>
+                <h3>Агент</h3>
                 <p>Готовит<br />ответ</p>
               </div>
               <svg class="flow-arrow"><use href="#i-arrow" /></svg>
@@ -240,18 +242,23 @@
             <span class="schema-braces">{ }</span>
             <p>
               <strong>Типизированные входы и выходы</strong
-              ><span>Движок проверяет формат данных перед передачей следующему шагу.</span>
+              ><span>Движок проверяет формат данных перед следующим шагом.</span>
             </p>
-            <span class="node-count"><b>9</b> типов узлов</span>
+            <div class="node-catalog" aria-label="Все девять типов узлов в движке">
+              <strong>Все 9 типов в движке</strong><span>llm · agent · tool · code · switch</span
+              ><span>human · pipeline · foreach · loop</span>
+            </div>
           </div>
           <aside class="speech" hidden>
             Граф хранится в YAML. В нём описаны зависимости и контракты данных: что шаг получает и
-            что должен вернуть. Модель может подготовить ответ, код — проверить его, условие —
-            выбрать ветку, а человек — согласовать результат. Для исправлений есть цикл с заданным
-            пределом. В проекте девять типов узлов, включая вложенные процессы и обработку
-            коллекций. Агент выбирает действия внутри своего шага, а правила перехода между шагами
-            остаются в графе. Проверка формата данных при этом не заменяет проверку фактов: для неё
-            нужно написать отдельный код или добавить согласование.
+            что должен вернуть. Здесь показан один пример: агент готовит ответ, код проверяет его,
+            условие выбирает дальнейший путь, человек согласует результат. Последняя карточка
+            обозначает выходные файлы, это не отдельный тип узла. Всего в движке девять типов, они
+            перечислены внизу: llm, agent, tool, code, switch, human, pipeline, foreach и loop. Llm
+            вызывает модель, agent может выбирать инструменты, tool выполняет один вызов. Pipeline
+            запускает вложенный граф, foreach обрабатывает коллекцию, loop повторяет шаги в пределах
+            лимита. Проверка формата данных не заменяет проверку фактов: для неё нужны отдельные
+            проверки.
           </aside>
         </section>
 

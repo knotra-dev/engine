@@ -4,17 +4,18 @@
 
 Nine slides in Russian: a five-minute project introduction and an extra slide about GitHub
 Community. The layout uses Knotra’s light palette and logo. Slide 2 explains the use case alongside
-an interactive agent such as Codex. Slide 4 highlights the local `qwen3.5:9b` model and automated
-test-feedback loop; the recorded repair run starts from a deliberately incorrect strategy. A
-separate generation run also passed. The presentation does not claim a measured success rate for a
-single prompt or guaranteed repair. Slide 5 illustrates a seven-step customer support process: input
-validation, agent analysis using customer/order/history MCP tools, another agent using knowledge and
-policy tools to draft a reply, code checks, routing, optional human approval and delivery. Both
-agents have read access; the final tool step sends the answer. Typical answers bypass human
-approval; complex cases and failed checks go to an operator. This is an application scenario, not a
-recorded run or a bundled helpdesk integration; the MCP servers and helpdesk API would need to be
-connected separately. Slide 7 separates the target multi-host architecture and example daily
-workload from the verified same-host worker test.
+an interactive agent such as Codex. Slide 3 distinguishes one example graph from the full catalog of
+nine node types; the output file is not counted as a node type. Slide 4 highlights the local
+`qwen3.5:9b` model and automated test-feedback loop; the recorded repair run starts from a
+deliberately incorrect strategy. A separate generation run also passed. The presentation does not
+claim a measured success rate for a single prompt or guaranteed repair. Slide 5 illustrates a
+seven-step customer support process: input validation, agent analysis using customer/order/history
+MCP tools, another agent using knowledge and policy tools to draft a reply, code checks, routing,
+optional human approval and delivery. Both agents have read access; the final tool step sends the
+answer. Typical answers bypass human approval; complex cases and failed checks go to an operator.
+This is an application scenario, not a recorded run or a bundled helpdesk integration; the MCP
+servers and helpdesk API would need to be connected separately. Slide 7 separates the target
+multi-host architecture and example daily workload from the verified same-host worker test.
 
 Open `index.html` directly or serve this directory with any static HTTP server. All assets and the
 playable game are local; no engine, build step or internet connection is required.

@@ -539,19 +539,29 @@ svg {
   color: var(--muted);
   margin-top: 6px;
 }
-.node-count {
+.node-catalog {
   margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  flex: none;
+  width: 535px;
+}
+.node-catalog strong {
+  display: block;
   font-size: 20px;
+  line-height: 1.4;
+  font-weight: 500;
+  color: var(--secondary);
+  margin-bottom: 6px;
+}
+.node-catalog > span {
+  display: block;
+  font:
+    19px/1.55 ui-monospace,
+    monospace;
   color: var(--muted);
 }
-.node-count b {
-  font-size: 45px;
-  line-height: 1;
-  font-weight: 500;
-  color: var(--accent);
+.result-node .node-icon {
+  border-style: dashed;
+  background: var(--surface-raised);
 }
 
 .game-layout {
