@@ -98,6 +98,7 @@ def main():
     def cli(*args):
         return json.loads(docker(
             "run", "--rm", "--name", client, "--network", "host",
+            "--user", f"{os.getuid()}:{os.getgid()}",
             "--mount", f"type=bind,src={work},dst={work}",
             image, "--endpoint", endpoint, "--state-dir", work / "client", "--json", *args,
         ).stdout)
@@ -160,6 +161,7 @@ def main():
         assert artifact["sha256"] == hashlib.sha256(expected).hexdigest(), artifact
         download = work / "report.txt"
         cli("artifacts", "download", artifact["id"], "--output", download)
+        assert download.stat().st_uid == os.getuid(), "CLI download is not owned by the caller"
         assert download.read_bytes() == expected
         wait_for(lambda: not sandboxes(), timeout=15)
 
