@@ -24,6 +24,7 @@ native and real-engine client checks. Contract fixtures are documented
 | Go unit/race checks    | Contract validation, scheduler decisions, adapters, clients and recovery rules                           |
 | PostgreSQL integration | Transactions, ownership, budgets, receipts, requests and publication                                     |
 | Distributed roles      | Public service processes, independent local directories, S3 protocol, worker drain and remote outcome recovery |
+| Kubernetes acceptance  | Executor pod distribution, active scale-down, API replacement, forced pod deletion and Docker sandbox artifact transfers |
 | Docker/MCP integration | Isolation, tool execution, cancellation and resource cleanup                                             |
 | Process recovery       | SIGKILL boundaries, saved outcomes, stable requests, original deadlines and no repeated confirmed calls  |
 | Backup/restore         | Stopped River engine, real pg_dump/pg_restore, complete files and retained SSE/artifact bytes            |
@@ -36,6 +37,28 @@ create their own runs/artifacts; use a development engine. To inspect scheduler 
 measurements.
 
 ## Recorded examples
+
+On 21 October 2026, Kubernetes acceptance passed against OrbStack Kubernetes `v1.35.6+orb1`,
+PostgreSQL 18.6 and MinIO `RELEASE.2025-09-07T16-13-09Z`. The host test harness used `-race`;
+pods ran a Linux arm64 build of engine commit `4ac73bf`. API, scheduler and three executors used
+independent local directories and shared PostgreSQL/S3, with no shared filesystem between pods.
+`TestKubernetesWorkersShareS3AndRecoverPodLoss` completed 11 workflows with exactly 33 model-fixture
+calls and matching budget debits. Scaling three executors to two while calls were active preserved
+all workflows. A replacement API pod served the original binary artifact. Force-deleting an
+executor after its S3 write and before database publication recovered its saved result without
+another model call.
+
+`TestKubernetesCodeTransfersArtifactsAcrossPods` completed five real Python executions through
+local Docker sidecars. Three parallel consumers ran on three distinct executor pods, read the
+producer's artifact from S3 through read-only mounts, and produced reports for an aggregation step.
+Artifact bytes/hashes, five tool debits, released execution slots and five closed sandbox resources
+were verified. The sidecars used Docker 29.4.0 and its DinD setup wrapper for cgroup nesting.
+Initial fixture runs exposed missing PostgreSQL disconnected-client checks, an omitted DinD
+wrapper and stale port forwarding after API rollout; those setup issues were corrected before
+the passing runs. No engine runtime change was needed. See the
+[Kubernetes fixture setup](../internal/integration/testdata/kubernetes.md) to reproduce.
+All pods used one Kubernetes node; physical node loss and cross-machine network faults remain
+untested. These checks exercise the existing Docker sandbox backend inside pods.
 
 On 21 October 2026, `TestMultiworkerServeWithS3AndIndependentDataDirectories` and
 `TestMultiworkerRecoversS3OutcomeAfterExecutorCrash` passed with the race detector, PostgreSQL 18.6
