@@ -31,9 +31,9 @@ WHERE id=$1 AND engine_id=$2 AND run_id=$3 AND instance_id=$4 AND attempt_number
 UPDATE knotra_resources SET state='cleaning' WHERE id=$1;
 
 -- name: ReadResourceCleanupCandidates :many
-SELECT id,worker_id,ownership_generation
+SELECT id,host_id,worker_id,ownership_generation
 FROM knotra_resources
-WHERE engine_id=$1 AND host_id=$2 AND state<>'closed' AND id>sqlc.arg(cursor)
+WHERE engine_id=$1 AND (host_id=$2 OR kind='mcp_http') AND state<>'closed' AND id>sqlc.arg(cursor)
 ORDER BY id LIMIT 64;
 
 -- name: BumpResourceCleanupDelivery :one

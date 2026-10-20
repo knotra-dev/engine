@@ -82,6 +82,7 @@ func (FinalizeArgs) InsertOpts() river.InsertOpts {
 
 type CleanupArgs struct {
 	HostID              string `json:"hostId"`
+	Portable            bool   `json:"portable,omitempty"`
 	WorkerID            string `json:"workerId"`
 	ResourceID          string `json:"resourceId"`
 	OwnershipGeneration int64  `json:"ownershipGeneration"`

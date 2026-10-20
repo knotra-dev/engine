@@ -23,6 +23,7 @@ native and real-engine client checks. Contract fixtures are documented
 | ---------------------- | -------------------------------------------------------------------------------------------------------- |
 | Go unit/race checks    | Contract validation, scheduler decisions, adapters, clients and recovery rules                           |
 | PostgreSQL integration | Transactions, ownership, budgets, receipts, requests and publication                                     |
+| Distributed roles      | Public service processes, independent local directories, S3 protocol, worker drain and remote outcome recovery |
 | Docker/MCP integration | Isolation, tool execution, cancellation and resource cleanup                                             |
 | Process recovery       | SIGKILL boundaries, saved outcomes, stable requests, original deadlines and no repeated confirmed calls  |
 | Backup/restore         | Stopped River engine, real pg_dump/pg_restore, complete files and retained SSE/artifact bytes            |
@@ -35,6 +36,60 @@ create their own runs/artifacts; use a development engine. To inspect scheduler 
 measurements.
 
 ## Recorded examples
+
+On 21 October 2026, `TestMultiworkerServeWithS3AndIndependentDataDirectories` and
+`TestMultiworkerRecoversS3OutcomeAfterExecutorCrash` passed with the race detector, PostgreSQL 18.6
+and River 0.48.0. Public `app.Serve` ran in independent API, scheduler and executor OS processes,
+each with a separate local data directory and a shared S3 HTTP fixture. Three workers completed
+work, one drained, and the remaining two completed more: 30 physical model calls, matching budget
+debits and remote outcomes. An API replacement read the original binary artifact from remote
+storage. A separate SIGKILL check stopped an executor after its S3 write but before PostgreSQL
+publication; the scheduler recovered that result and a new executor finished the graph without
+repeating the call. Run these checks with:
+
+```sh
+KNOTRA_TEST_DATABASE_URL='postgres://USER:PASSWORD@127.0.0.1:5432/TEST_DATABASE?sslmode=disable' \
+  go test -race ./internal/integration -run '^TestMultiworker' -count=1 -v
+```
+
+The default fixture enforces conditional writes and serves stored bytes. The same two checks and
+`TestMultiworkerS3StorageContract` also passed with the race detector against real MinIO
+`RELEASE.2025-09-07T16-13-09Z` in an isolated, loopback-only Docker container, using the official
+image digest `minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e`.
+The storage contract checks concurrent identical creation, preservation after conflicting writes,
+ETag-based replacement and stale-write rejection, metadata reads, and missing-object classification.
+The model provider remained a fixed HTTP fixture. These checks do not cover other S3 providers,
+cross-host network faults, Kubernetes sandbox configuration, or communication between separate machines.
+
+`TestAttemptLeaseCoversBlockedOutcomeUpload` also passed with the race detector and PostgreSQL:
+attempt ownership renewed while a remote upload stayed blocked beyond an injected shorter lease,
+then published once with one model call and budget debit. S3 fault fixtures passed under the race
+detector for late timed-out mutable writes, retries after a lost successful upload response,
+ambiguous HTTP 404s, unavailable duplicate verification, and missing ETags or unsupported conditional
+replacement. These controlled faults do not establish availability during real provider outages.
+
+The Docker-enabled queue SIGKILL suite passed with the race detector (720.613 seconds), as did
+the Docker adapter suite (59.739 seconds) and stopped backup/restore acceptance. The broader
+integration run exposed an outdated run-session operation-count expectation: affinity now fences
+the second tool before creating its intent. That assertion was updated and the case passed on
+rerun; the other integration cases passed. The final upload-lease change was checked separately
+with the blocked-upload regression, runtime/affinity race tests and another real-MinIO run.
+
+To use a live S3-compatible provider, supply a disposable existing bucket and credentials through
+the normal AWS credential chain, then run the same test command above with these additional values:
+
+```sh
+export KNOTRA_TEST_S3_ENDPOINT='http://127.0.0.1:9000'
+export KNOTRA_TEST_S3_BUCKET='knotra-acceptance'
+export KNOTRA_TEST_S3_REGION='us-east-1'
+export KNOTRA_TEST_S3_PREFIX='acceptance'
+export KNOTRA_TEST_S3_PATH_STYLE='true'
+```
+
+Both endpoint and bucket are required for live tests. With neither set, tests use the local fixture.
+The provider must implement atomic conditional creation (`If-None-Match: *`) and replacement
+(`If-Match` with ETags), plus consistent reads. Tests leave objects under their isolated engine/test
+prefixes; remove the disposable bucket or prefixes after testing.
 
 On 20 October 2026, `TestThreeExecutorProcessesShareWorkAndSurviveDrain` passed with the race
 detector, real PostgreSQL 18.6 and River 0.48.0. Three executor OS processes shared local storage:
@@ -55,4 +110,4 @@ completion in Docker. These adapter checks do not exercise River/PostgreSQL rest
 - Unknown external effects require explicit resolution under
   [execution semantics](notation/execution.md).
 - The recorded backup check covers a stopped engine; online snapshots, network filesystem faults,
-  and multi-host recovery need separate acceptance.
+  and recovery across separate machines need separate acceptance.

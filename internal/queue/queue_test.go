@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/knotra-dev/engine/internal/contract"
 	"github.com/knotra-dev/engine/internal/execution"
+	"github.com/knotra-dev/engine/internal/store"
 )
 
 type testDatabase struct {
@@ -55,6 +57,14 @@ func newTestDatabase(t *testing.T, connections int32) testDatabase {
 		}
 		_ = admin.Close(ctx)
 	})
+	if u, err := url.Parse(dsn); err == nil && (u.Scheme == "postgres" || u.Scheme == "postgresql") {
+		query := u.Query()
+		query.Set("search_path", schema)
+		u.RawQuery = query.Encode()
+		dsn = u.String()
+	} else {
+		dsn += " search_path=" + schema
+	}
 	config, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		t.Fatal(err)
@@ -66,6 +76,11 @@ func newTestDatabase(t *testing.T, connections int32) testDatabase {
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
+	s, err := store.Open(ctx, config.ConnString())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
 	return testDatabase{pool, schema, config}
 }
 

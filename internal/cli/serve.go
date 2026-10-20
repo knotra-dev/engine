@@ -3,16 +3,30 @@ package cli
 import (
 	"fmt"
 	"log/slog"
+	"strconv"
 
 	"github.com/spf13/cobra"
 
 	"github.com/knotra-dev/engine/internal/app"
+	"github.com/knotra-dev/engine/internal/execution"
 )
 
 func (s *commandState) serveCommand() *cobra.Command {
 	o := app.Options{Version: s.options.Version}
+	var role string
 	var debug bool
-	cmd := &cobra.Command{Use: "serve", Short: "Run the HTTP engine and execution workers", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+	cmd := &cobra.Command{Use: "serve", Short: "Run an engine API, scheduler, executor, or combined service", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		o.Role = execution.Role(role)
+		if err := o.Role.Validate(); err != nil {
+			return err
+		}
+		if value := s.options.Getenv("KNOTRA_S3_PATH_STYLE"); value != "" && !cmd.Flags().Changed("s3-path-style") {
+			var err error
+			o.S3.PathStyle, err = strconv.ParseBool(value)
+			if err != nil {
+				return fmt.Errorf("KNOTRA_S3_PATH_STYLE must be a boolean")
+			}
+		}
 		if o.DatabaseURL == "" {
 			return fmt.Errorf("--database-url or KNOTRA_DATABASE_URL is required")
 		}
@@ -28,6 +42,12 @@ func (s *commandState) serveCommand() *cobra.Command {
 		return app.Serve(cmd.Context(), o, log)
 	}}
 	f := cmd.Flags()
+	f.StringVar(&role, "role", s.env("KNOTRA_ROLE", "all"), "Service role: all, api, scheduler, executor")
+	f.StringVar(&o.S3.Bucket, "s3-bucket", s.env("KNOTRA_S3_BUCKET", ""), "Existing S3-compatible bucket for durable artifacts and recovery evidence")
+	f.StringVar(&o.S3.Endpoint, "s3-endpoint", s.env("KNOTRA_S3_ENDPOINT", ""), "S3-compatible endpoint URL; empty uses AWS endpoints")
+	f.StringVar(&o.S3.Region, "s3-region", s.env("KNOTRA_S3_REGION", ""), "S3 signing region; defaults to AWS configuration or us-east-1")
+	f.StringVar(&o.S3.Prefix, "s3-prefix", s.env("KNOTRA_S3_PREFIX", ""), "Object key prefix; the engine identity is appended automatically")
+	f.BoolVar(&o.S3.PathStyle, "s3-path-style", false, "Use path-style S3 bucket addressing (KNOTRA_S3_PATH_STYLE)")
 	f.StringVar(&o.HostID, "host-id", s.env("KNOTRA_HOST_ID", "local"), "Stable execution host identity (retain across restarts)")
 	f.StringVar(&o.SharedDataDir, "shared-data-dir", s.env("KNOTRA_SHARED_DATA_DIR", ""), "Shared artifact/outcome directory; defaults to --data-dir")
 	f.IntVar(&o.ExecutionWorkers, "execution-workers", 16, "Maximum simultaneous River leaf deliveries")

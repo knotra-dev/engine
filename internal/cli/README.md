@@ -71,9 +71,11 @@ Run `knotra serve --help` for infrastructure options. The service requires at le
 the execution backend. Engine logs go to stderr.
 
 `knotra serve` starts the embedded River queues. For an isolated test database, start PostgreSQL
-with `docker compose up -d --wait postgres`. Keep the data directory across restarts: it contains
-durable outcomes and artifacts. `--execution-workers` bounds simultaneous River leaf deliveries
-(default 16); existing profile concurrency and budgets still apply. The queue timeout covers current
+with `docker compose up -d --wait postgres`. `--role` / `KNOTRA_ROLE` defaults to `all`; `api` serves HTTP/SSE,
+`scheduler` advances runs and `executor` performs work. Scheduler and executor roles are headless.
+Split roles require S3 storage or an explicit shared data directory. `--execution-workers` bounds
+simultaneous River leaf deliveries per executor (default 16); existing profile concurrency and
+budgets still apply. The queue timeout covers current
 profile limits and the original durations of active admitted runs, with a one-minute margin.
 
 `--host-id` (`KNOTRA_HOST_ID`, default `local`) identifies the execution host across restarts. Use a
@@ -85,3 +87,12 @@ is unchanged. Back up the shared directory together with PostgreSQL. The filesys
 hard links, atomic same-directory rename, file/directory syncing and consistent reads between
 clients. See
 [deployment and recovery](../../docs/running.md#data-recovery-and-deployment-boundaries).
+
+S3-compatible storage uses `--s3-bucket`, `--s3-prefix`, `--s3-region`, `--s3-endpoint` and
+`--s3-path-style`, with corresponding `KNOTRA_S3_BUCKET`, `KNOTRA_S3_PREFIX`, `KNOTRA_S3_REGION`,
+`KNOTRA_S3_ENDPOINT` and `KNOTRA_S3_PATH_STYLE` environment variables. Omit the endpoint for AWS S3;
+set it for another provider. Use path-style addressing when required by the provider. Credentials
+use the standard AWS credential chain, including environment credentials and workload identity.
+Every process must use the same database, bucket and prefix. S3 and `--shared-data-dir` are mutually
+exclusive. With S3, the data directory contains local staging; durable files are stored remotely.
+See [multiple pods or servers](../../docs/running.md#multiple-pods-or-servers).

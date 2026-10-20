@@ -41,7 +41,7 @@ func (r *Runtime) observeMetrics() (metric.Registration, error) {
 			return err
 		}
 		jobs, err := r.Client.River.JobList(ctx, river.NewJobListParams().First(1).
-			Queues(r.Client.advance, r.Client.execute, r.Client.maintenance, r.Client.cleanup).
+			Queues(r.Client.advance, r.Client.execute, r.Client.affinityExecute, r.Client.maintenance, r.Client.cleanup).
 			States(rivertype.JobStateAvailable, rivertype.JobStateRetryable, rivertype.JobStateScheduled).
 			OrderBy(river.JobListOrderByScheduledAt, river.SortOrderAsc))
 		if err != nil {
@@ -58,7 +58,7 @@ func (r *Runtime) observeMetrics() (metric.Registration, error) {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			saved, err := r.Outcomes.SavedAt(key)
+			saved, err := r.Outcomes.SavedAtContext(ctx, key)
 			if errors.Is(err, os.ErrNotExist) {
 				continue
 			}

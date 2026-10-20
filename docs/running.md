@@ -1,6 +1,7 @@
 # Running the engine and CLI
 
-Knotra connects to PostgreSQL, model APIs and Docker. River runs inside the engine. Quickstart and
+Knotra connects to PostgreSQL, model APIs and Docker, with S3-compatible storage for distributed
+workers. River runs inside the engine. Quickstart and
 the bundled Compose configuration prepare development infrastructure; production needs managed
 storage, backups and access configuration.
 
@@ -138,13 +139,89 @@ implemented. `--cors-origin` permits one browser origin. Keep credentials out of
 ## Data, recovery, and deployment boundaries
 
 Multiple hosts share PostgreSQL and durable artifact/outcome storage. Set a stable, distinct
-`--host-id` on each execution host. `--shared-data-dir` contains `artifacts/` and `outcomes/`;
-`--data-dir` keeps local staging. Shared filesystems need hard links, atomic same-directory rename,
-durable file/directory sync and consistent reads. Workers need compatible profiles, helpers and
-images. [EngineProfile](notation/engine-profile.md) defines resources and limits.
+`--host-id` on each execution host. Workers need compatible profiles, helpers and images.
+[EngineProfile](notation/engine-profile.md) defines resources and limits.
 
-Preserve PostgreSQL with the complete artifact/outcome directories, including unpublished envelopes
-and MCP recovery evidence. A database dump alone is insufficient. Storage files and Knotra history
+### Multiple pods or servers
+
+Use one PostgreSQL database and one S3-compatible bucket with a common prefix. The endpoint is
+configurable, so operators can use AWS S3 or their own compatible service. Start one API, one
+scheduler and several executors; roles can be scaled independently:
+
+| Role | Work | HTTP listener |
+| --- | --- | --- |
+| `all` (default) | API, scheduling and execution | Yes |
+| `api` | Admission, commands, inspection and artifact access | Yes |
+| `scheduler` | Persisted graph decisions, timers and recovery | No |
+| `executor` | Model/tool calls and sandbox execution | No |
+
+Configure these values in every process, using the deployment's secret mechanism for credentials:
+
+```sh
+export KNOTRA_DATABASE_URL='postgres://USER:PASSWORD@DATABASE/knotra?sslmode=require'
+export KNOTRA_S3_BUCKET='knotra'
+export KNOTRA_S3_PREFIX='production'
+export KNOTRA_S3_REGION='us-east-1'
+export KNOTRA_S3_ENDPOINT='https://YOUR-S3-ENDPOINT'
+export KNOTRA_S3_PATH_STYLE='true'
+# AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN, or workload identity.
+```
+
+Omit `KNOTRA_S3_ENDPOINT` for AWS S3. Set `KNOTRA_S3_PATH_STYLE` only when the provider requires
+path-style bucket addressing. The corresponding CLI flags are `--s3-bucket`, `--s3-prefix`,
+`--s3-region`, `--s3-endpoint` and `--s3-path-style`. Credentials use the AWS SDK's standard
+credential chain and are never flags or profile fields. Each role needs object read and write
+permissions, including metadata reads, under the configured prefix. Knotra adds the database's
+engine ID to isolate its objects; the bucket must already exist.
+
+Run each command on its intended pod/server, with its own local directory:
+
+```sh
+bin/knotra serve --role api --data-dir /var/lib/knotra/api --profile /etc/knotra/profile.yaml
+bin/knotra serve --role scheduler --data-dir /var/lib/knotra/scheduler --profile /etc/knotra/profile.yaml
+bin/knotra serve --role executor --host-id worker-1 --data-dir /var/lib/knotra/worker --profile /etc/knotra/profile.yaml
+```
+
+Give every concurrent executor a distinct host ID, stable across restarts when preserving its
+local resources. For Kubernetes, a StatefulSet pod name is one suitable identity. A second executor
+cannot hold the same host ID concurrently. API and scheduler processes can share a host ID.
+`--execution-workers` limits concurrent deliveries per executor; profile limits and budgets still
+apply across the database. `--role all` can also run on multiple hosts when using shared storage.
+
+All roles need the trusted profile files and the same database and S3 settings. The S3 service must
+provide strongly consistent reads, atomic conditional creation with `If-None-Match: *`, and
+conditional replacement with `If-Match` and object ETags. These preconditions prevent conflicting
+immutable writes and delayed updates from overwriting newer MCP recovery evidence; compatibility
+with basic uploads alone is insufficient. Knotra rejects conflicting immutable bytes.
+Do not expire or rewrite objects through bucket lifecycle rules while their execution history is
+retained. Protect object access and transport alongside database access: outputs and recovery
+evidence can contain user data.
+
+Executors use local Docker for sandbox nodes. API admission also needs Docker and the helper when
+resolving sandbox images. Kubernetes worker pods therefore need a supported local Docker setup;
+a native Kubernetes sandbox backend is not implemented. Model-only pipelines do not need Docker.
+A workflow using any run-scoped MCP session pins all its leaves to the first owning worker process,
+including unrelated leaves and human waits. Concurrency within that worker still applies, but the
+run cannot spread across workers. Losing that process leaves unfinished work requiring explicit
+resolution; restarting on the same host cannot recreate its session as a continuation. Graceful
+shutdown waits for pinned runs within the shutdown deadline.
+
+Send SIGINT or SIGTERM for graceful shutdown before removing a worker. A confirmed result is saved
+in object storage before its database publication, allowing another process to recover it after a
+crash. Arbitrary external side effects still require provider idempotency or reconciliation.
+
+For a shared filesystem deployment, use `--shared-data-dir` instead of S3 configuration. It contains
+`artifacts/` and `outcomes/`; `--data-dir` keeps local staging. The filesystem needs hard links,
+atomic same-directory rename, durable file/directory sync and consistent reads. Split roles require
+explicit shared storage. The default single-process layout remains entirely local.
+
+Use a fresh database for a new deployment. Existing installations need a stopped, offline schema
+and storage migration before adopting this execution format; automatic upgrade and file-to-S3
+migration are not provided. Do not reset a database to bypass a format error. Storage binding
+prevents accidentally starting an existing engine against a different durable backend or prefix.
+
+Preserve PostgreSQL with the complete artifact/outcome objects, including unpublished envelopes
+and MCP recovery evidence. A database dump alone is insufficient. Storage objects and Knotra history
 have no automatic cleanup; operators manage free space and backups. River job retention does not
 authorize deleting history or durable files. Individual artifacts are limited to 64 MiB.
 
@@ -159,17 +236,24 @@ shared addresses/proxies share access. See [adapter guarantees](../internal/adap
 
 The supported procedure uses a maintenance stop on all engine hosts. Stop admission and all
 API/scheduler/executor processes, wait for process exit, and keep all writers stopped until the
-database dump and file archives finish. After a crash, confirm all writers have exited before
-backing up the surviving database and files. An HTTP outage alone does not prove that writers have
+database dump and storage backup finish. After a crash, confirm all writers have exited before
+backing up the surviving database and objects. An HTTP outage alone does not prove that writers have
 stopped. This procedure preserves pending evidence without needing a distributed snapshot protocol.
 
 Record the exact Knotra release/binary, PostgreSQL major version, engine ID (`GET /v1/info` before
-stopping), host ID, data paths, profile/credential references, helper and image versions with the
-backup. Restore with that Knotra release and execution format; an older binary is not a rollback
+stopping), host IDs, data paths, S3 endpoint/bucket/prefix, profile/credential references, and helper
+and image versions with the backup. Restore with that Knotra release and execution format; an older binary is not a rollback
 procedure. Preserve credentials/TLS/configuration through the deployment's existing secure backup
 mechanism. Use PostgreSQL client tools matching the server major version.
 
-With writers stopped, set these paths and libpq connection settings for the existing database:
+For S3, keep writers stopped while dumping PostgreSQL and backing up every object under the
+configured prefix and engine ID, including unpublished outcomes and MCP evidence. Use the storage
+provider's backup mechanism and verify both copies before marking the backup complete. Restore
+the complete object set and database before restarting any role, using the original storage
+configuration. Bucket versioning alone does not coordinate a database snapshot.
+
+The following archive commands apply to filesystem storage. With writers stopped, set these paths
+and libpq connection settings for the existing database:
 
 ```sh
 set -eu

@@ -2,6 +2,7 @@ package execution
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/knotra-dev/engine/internal/blob"
 	"github.com/knotra-dev/engine/internal/fsutil"
 )
 
@@ -24,12 +26,21 @@ type outcomeFile struct {
 	Data   json.RawMessage `json:"data"`
 }
 
-// OutcomeFiles holds execution evidence on local or suitable shared filesystems. Outcomes and initialization
-// identities are immutable; a serialized MCP session replaces its current-call record.
-// Keep this directory with the database backup, including uncommitted outcomes
-// and MCP IDs.
-// The root handle confines access even if a directory is renamed concurrently.
-type OutcomeFiles struct{ root *os.Root }
+// OutcomeFiles holds durable execution evidence on a filesystem or object store.
+// Outcomes and initialization identities are immutable; a serialized MCP session
+// replaces its current-call record. Backups must include uncommitted outcomes
+// and MCP IDs together with the database.
+type OutcomeFiles struct {
+	root  *os.Root
+	blobs blob.Store
+}
+
+func OpenRemoteOutcomeFiles(blobs blob.Store) (*OutcomeFiles, error) {
+	if blobs == nil {
+		return nil, errors.New("durable outcome storage is required")
+	}
+	return &OutcomeFiles{blobs: blobs}, nil
+}
 
 func OpenOutcomeFiles(directory string) (*OutcomeFiles, error) {
 	root, err := fsutil.OpenPrivateRoot(directory)
@@ -39,13 +50,24 @@ func OpenOutcomeFiles(directory string) (*OutcomeFiles, error) {
 	return &OutcomeFiles{root: root}, nil
 }
 
-func (s *OutcomeFiles) Close() error { return s.root.Close() }
+func (s *OutcomeFiles) Close() error {
+	if s.root == nil {
+		return nil
+	}
+	return s.root.Close()
+}
 
-// SavedAt reads immutable envelope metadata without loading potentially large
-// execution outputs. It uses the same confined key and regular-file checks as Get.
+// SavedAt reads envelope metadata without loading potentially large outputs.
 func (s *OutcomeFiles) SavedAt(key string) (time.Time, error) {
+	return s.SavedAtContext(context.Background(), key)
+}
+
+func (s *OutcomeFiles) SavedAtContext(ctx context.Context, key string) (time.Time, error) {
 	if !validKey(key) {
 		return time.Time{}, fmt.Errorf("%w: invalid outcome key", ErrInvalidOutcome)
+	}
+	if s.blobs != nil {
+		return s.blobs.SavedAt(ctx, "outcomes/"+key+".json")
 	}
 	info, err := s.root.Lstat(key + ".json")
 	if err != nil {
@@ -57,9 +79,8 @@ func (s *OutcomeFiles) SavedAt(key string) (time.Time, error) {
 	return info.ModTime(), nil
 }
 
-// Put returns after syncing file contents and supported directory metadata. Link publishes
-// without replacing an existing result, including concurrent writers. Identical
-// delivery is idempotent; conflicting evidence is retained as an explicit error.
+// Put waits for durable publication without replacing an existing result.
+// Identical delivery is idempotent; conflicting evidence is an explicit error.
 func (s *OutcomeFiles) Put(outcome Outcome) (string, error) {
 	if err := outcome.Validate(); err != nil {
 		return "", err
@@ -84,6 +105,15 @@ func (s *OutcomeFiles) publish(key string, data []byte, replace bool) (string, e
 	encoded, err := json.Marshal(outcomeFile{SHA256: hex.EncodeToString(sum[:]), Data: data})
 	if err != nil {
 		return "", err
+	}
+	if s.blobs != nil {
+		if err := s.blobs.Put(context.Background(), "outcomes/"+key+".json", encoded, replace); err != nil {
+			if errors.Is(err, blob.ErrConflict) {
+				return "", ErrOutcomeConflict
+			}
+			return "", err
+		}
+		return key, nil
 	}
 	temporary := ".outcome-" + uuid.NewString()
 	file, err := s.root.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
@@ -155,12 +185,34 @@ func decodeStrict(data []byte, value any) error {
 }
 
 func (s *OutcomeFiles) read(key string) ([]byte, error) {
-	return s.readBounded(key, 0)
+	return s.readBoundedContext(context.Background(), key, 0)
 }
 
-func (s *OutcomeFiles) readBounded(key string, limit int64) ([]byte, error) {
+func (s *OutcomeFiles) readBoundedContext(ctx context.Context, key string, limit int64) ([]byte, error) {
 	if !validKey(key) {
 		return nil, fmt.Errorf("%w: invalid outcome key", ErrInvalidOutcome)
+	}
+	data, err := s.readEnvelope(ctx, key, limit)
+	if errors.Is(err, blob.ErrTooLarge) {
+		return nil, fmt.Errorf("%w: evidence exceeds byte limit", ErrInvalidOutcome)
+	}
+	if err != nil {
+		return nil, err
+	}
+	var envelope outcomeFile
+	if err := decodeStrict(data, &envelope); err != nil {
+		return nil, fmt.Errorf("%w: decode envelope: %w", ErrInvalidOutcome, err)
+	}
+	sum := sha256.Sum256(envelope.Data)
+	if hex.EncodeToString(sum[:]) != envelope.SHA256 {
+		return nil, fmt.Errorf("%w: checksum mismatch", ErrInvalidOutcome)
+	}
+	return envelope.Data, nil
+}
+
+func (s *OutcomeFiles) readEnvelope(ctx context.Context, key string, limit int64) ([]byte, error) {
+	if s.blobs != nil {
+		return s.blobs.Get(ctx, "outcomes/"+key+".json", limit)
 	}
 	name := key + ".json"
 	info, err := s.root.Lstat(name)
@@ -188,20 +240,16 @@ func (s *OutcomeFiles) readBounded(key string, limit int64) ([]byte, error) {
 	if limit > 0 && int64(len(data)) > limit {
 		return nil, fmt.Errorf("%w: evidence exceeds byte limit", ErrInvalidOutcome)
 	}
-	var envelope outcomeFile
-	if err := decodeStrict(data, &envelope); err != nil {
-		return nil, fmt.Errorf("%w: decode envelope: %w", ErrInvalidOutcome, err)
-	}
-	sum := sha256.Sum256(envelope.Data)
-	if hex.EncodeToString(sum[:]) != envelope.SHA256 {
-		return nil, fmt.Errorf("%w: checksum mismatch", ErrInvalidOutcome)
-	}
-	return envelope.Data, nil
+	return data, nil
 }
 
 func (s *OutcomeFiles) Get(key string) (Outcome, error) {
+	return s.GetContext(context.Background(), key)
+}
+
+func (s *OutcomeFiles) GetContext(ctx context.Context, key string) (Outcome, error) {
 	var outcome Outcome
-	data, err := s.read(key)
+	data, err := s.readBoundedContext(ctx, key, 0)
 	if err != nil {
 		return outcome, err
 	}

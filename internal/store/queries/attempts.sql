@@ -53,6 +53,20 @@ UPDATE knotra_execution_scopes SET active_attempts=active_attempts+1 WHERE run_i
 UPDATE knotra_execution_attempts SET state='claimed',dispatch_pending=false,owner=$4,
 		ownership_generation=$5,lease_expires_at=$6,outcome_key=$7 WHERE run_id=$1 AND instance_id=$2 AND number=$3;
 
+-- name: PinRunSessionWorker :execresult
+UPDATE knotra_runs SET session_worker_id=$2 WHERE id=$1 AND session_affinity AND session_worker_id IS NULL;
+
+-- name: ReadSessionWorker :one
+SELECT heartbeat_at FROM knotra_workers WHERE id=$1 FOR SHARE;
+
+-- name: ReadSessionDeliveryClient :one
+SELECT w.delivery_client_id FROM knotra_runs r JOIN knotra_workers w ON w.id=r.session_worker_id
+WHERE r.id=$1 AND r.session_affinity AND w.heartbeat_at>clock_timestamp()-interval '20 seconds';
+
+-- name: HasLiveSessionRuns :one
+SELECT EXISTS(SELECT 1 FROM knotra_runs WHERE session_worker_id=$1
+    AND document->>'status' NOT IN ('succeeded','failed','cancelled','skipped'))::boolean;
+
 -- name: SetNodeRunning :execresult
 UPDATE knotra_execution_nodes SET state='running',started_at=$3,revision=revision+1 WHERE run_id=$1 AND id=$2;
 

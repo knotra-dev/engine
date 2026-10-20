@@ -4,20 +4,147 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
 
 	"github.com/knotra-dev/engine/internal/contract"
 	"github.com/knotra-dev/engine/internal/execution"
 	"github.com/knotra-dev/engine/internal/protocol"
 	"github.com/knotra-dev/engine/internal/store"
 )
+
+func TestRemoteMCPCleanupSurvivesOwnerHostRemoval(t *testing.T) {
+	r := newTestRuntime(t)
+	ctx := t.Context()
+	owner := uuid.NewString()
+	if err := r.Store.RegisterWorker(ctx, owner, "removed-host"); err != nil {
+		t.Fatal(err)
+	}
+	var cancellations, deletions atomic.Int32
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("Mcp-Session-Id") != "original-session" || request.Header.Get("Mcp-Protocol-Version") != "2025-11-25" {
+			t.Error("replacement host changed remote session identity")
+		}
+		switch request.Method {
+		case http.MethodPost:
+			var notification struct {
+				Method string `json:"method"`
+				Params struct {
+					RequestID int `json:"requestId"`
+				} `json:"params"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&notification); err != nil || notification.Method != "notifications/cancelled" || notification.Params.RequestID != 42 {
+				t.Errorf("cleanup repeated execution or lost current call: %+v %v", notification, err)
+			}
+			cancellations.Add(1)
+			w.WriteHeader(http.StatusAccepted)
+		case http.MethodDelete:
+			deletions.Add(1)
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			t.Errorf("unexpected remote method: %s", request.Method)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}))
+	defer remote.Close()
+	plan := deliveryPlan("")
+	plan.Profile.Spec.MCP = map[string]contract.MCPConnection{"tools": {Transport: "streamable_http", URL: remote.URL}}
+	id := admitRuntimeRun(t, r, plan)
+	var claim *execution.Claim
+	if err := pgx.BeginFunc(ctx, r.Store.Pool, func(tx pgx.Tx) error {
+		if err := r.advanceTx(ctx, tx, plan, id, ""); err != nil {
+			return err
+		}
+		var err error
+		claim, err = r.Store.ClaimAttempt(ctx, tx, execution.AttemptID{RunID: id, InstanceID: execution.StableID("n", id+"/root/a"), Number: 1}, 1, owner)
+		return err
+	}); err != nil || claim == nil {
+		t.Fatalf("claim=%+v error=%v", claim, err)
+	}
+	resource, err := r.Store.RegisterOwnedResource(ctx, claim.Ownership, uuid.NewString(), "mcp_http", "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sandbox, err := r.Store.RegisterOwnedResource(ctx, claim.Ownership, uuid.NewString(), "sandbox", "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resource.MCP = &execution.MCPSessionRecord{Connection: "tools", SessionID: "original-session", ProtocolVersion: "2025-11-25"}
+	if err := r.Outcomes.PutMCPSession(resource); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Outcomes.PutMCPCall(resource, []byte("42"), false); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.reconcileResources(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var pending int
+	if err := r.Store.Pool.QueryRow(ctx, "SELECT count(*) FROM river_job WHERE kind='knotra_cleanup_v1'").Scan(&pending); err != nil || pending != 0 {
+		t.Fatalf("live remote owner was exposed to cleanup: jobs=%d error=%v", pending, err)
+	}
+	if _, err := r.Store.Pool.Exec(ctx, "UPDATE knotra_workers SET heartbeat_at=clock_timestamp()-interval '21 seconds' WHERE id=$1", owner); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.reconcileResources(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var args CleanupArgs
+	var encoded []byte
+	var queue string
+	if err := r.Store.Pool.QueryRow(ctx, "SELECT args,queue FROM river_job WHERE kind='knotra_cleanup_v1'").Scan(&encoded, &queue); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(encoded, &args); err != nil || !args.Portable || args.HostID != "removed-host" || args.ResourceID != resource.ID || queue != r.Client.execute {
+		t.Fatalf("remote cleanup lost original ownership/global routing: %+v queue=%s error=%v", args, queue, err)
+	}
+	for _, portable := range []bool{false, true} {
+		if err := r.cleanup(ctx, &river.Job[CleanupArgs]{Args: CleanupArgs{HostID: sandbox.HostID, Portable: portable, ResourceID: sandbox.ID,
+			WorkerID: sandbox.Ownership.WorkerID, OwnershipGeneration: sandbox.Ownership.Generation, DispatchGeneration: sandbox.DispatchGeneration}}); err == nil {
+			t.Fatalf("foreign sandbox cleanup accepted portable=%t", portable)
+		}
+	}
+	r.Host.Runner.EngineID, r.Host.Runner.HostID, r.Host.Runner.ResourceEvidence = r.Store.EngineID, r.HostID, r.Outcomes
+	client, err := New(r.Store.Pool, Config{Role: execution.RoleExecutor, EngineID: r.Store.EngineID, HostID: r.HostID,
+		Schema: r.Client.River.Schema(), Logger: r.Client.logger, ExecutionWorkers: 2, ExecutionTimeout: time.Minute},
+		Handlers{Execute: func(context.Context, *river.Job[ExecuteArgs]) error { return nil }, Cleanup: r.cleanup})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		stop, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := client.Stop(stop); err != nil {
+			t.Error(err)
+		}
+	})
+	if err := client.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	await(t, 5*time.Second, func() (bool, error) {
+		var closed bool
+		err := r.Store.Pool.QueryRow(ctx, "SELECT state='closed' FROM knotra_resources WHERE id=$1", resource.ID).Scan(&closed)
+		return closed, err
+	})
+	var host, worker, sandboxState string
+	var generation int64
+	if err := r.Store.Pool.QueryRow(ctx, "SELECT host_id,worker_id,ownership_generation,(SELECT state FROM knotra_resources WHERE id=$2) FROM knotra_resources WHERE id=$1", resource.ID, sandbox.ID).Scan(&host, &worker, &generation, &sandboxState); err != nil {
+		t.Fatal(err)
+	}
+	if host != "removed-host" || worker != owner || generation != claim.Generation || sandboxState != "active" || cancellations.Load() != 1 || deletions.Load() != 1 {
+		t.Fatalf("cleanup changed ownership or sandbox locality: host=%s worker=%s generation=%d sandbox=%s cancellations=%d deletions=%d", host, worker, generation, sandboxState, cancellations.Load(), deletions.Load())
+	}
+}
 
 func TestResourceScannerPagesPastLiveSessionsAndRepairsNativeDelivery(t *testing.T) {
 	r := newTestRuntime(t)

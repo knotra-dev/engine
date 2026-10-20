@@ -9,13 +9,16 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/knotra-dev/engine/internal/adapters"
 	"github.com/knotra-dev/engine/internal/api"
+	"github.com/knotra-dev/engine/internal/blob"
 	"github.com/knotra-dev/engine/internal/contract"
 	"github.com/knotra-dev/engine/internal/execution"
 	"github.com/knotra-dev/engine/internal/executor"
@@ -26,6 +29,8 @@ import (
 )
 
 type Options struct {
+	Role             execution.Role
+	S3               blob.S3Config
 	HostID           string
 	SharedDataDir    string
 	ExecutionWorkers int
@@ -43,7 +48,13 @@ type Options struct {
 	Profiles         []string
 }
 
-func Serve(ctx context.Context, o Options, log *slog.Logger) (serveErr error) {
+func (o *Options) validate() error {
+	if o.Role == "" {
+		o.Role = execution.RoleAll
+	}
+	if err := o.Role.Validate(); err != nil {
+		return err
+	}
 	if o.HostID == "" {
 		o.HostID = "local"
 	}
@@ -56,6 +67,39 @@ func Serve(ctx context.Context, o Options, log *slog.Logger) (serveErr error) {
 	if o.ExecutionWorkers < 1 {
 		return errors.New("execution workers must be positive")
 	}
+	if o.DatabaseURL == "" {
+		return errors.New("--database-url or KNOTRA_DATABASE_URL is required")
+	}
+	if len(o.Profiles) == 0 {
+		return errors.New("at least one --profile file is required")
+	}
+	if o.S3.Bucket != "" && o.SharedDataDir != "" {
+		return errors.New("--s3-bucket and --shared-data-dir are mutually exclusive")
+	}
+	if o.S3.Bucket == "" && (o.S3.Endpoint != "" || o.S3.Region != "" || o.S3.Prefix != "" || o.S3.PathStyle) {
+		return errors.New("--s3-bucket is required for S3 storage options")
+	}
+	if o.Role != execution.RoleAll && o.S3.Bucket == "" && o.SharedDataDir == "" {
+		return errors.New("split service roles require --s3-bucket or --shared-data-dir for shared durable storage")
+	}
+	if o.Role == execution.RoleAll || o.Role == execution.RoleAPI {
+		host, _, err := net.SplitHostPort(o.Listen)
+		if err != nil {
+			return err
+		}
+		ip := net.ParseIP(host)
+		local := host == "localhost" || (ip != nil && ip.IsLoopback())
+		if !local && (o.Token == "" || o.TLSCert == "" || o.TLSKey == "") {
+			return errors.New("remote listeners require bearer authentication and TLS certificate/key")
+		}
+	}
+	return nil
+}
+
+func Serve(ctx context.Context, o Options, log *slog.Logger) (serveErr error) {
+	if err := o.validate(); err != nil {
+		return err
+	}
 	stopTelemetry, err := telemetry.Start(ctx, o.Version)
 	if err != nil {
 		return err
@@ -66,15 +110,6 @@ func Serve(ctx context.Context, o Options, log *slog.Logger) (serveErr error) {
 		_ = stopTelemetry(ctx)
 	}()
 
-	host, _, err := net.SplitHostPort(o.Listen)
-	if err != nil {
-		return err
-	}
-	ip := net.ParseIP(host)
-	local := host == "localhost" || (ip != nil && ip.IsLoopback())
-	if !local && (o.Token == "" || o.TLSCert == "" || o.TLSKey == "") {
-		return errors.New("remote listeners require bearer authentication and TLS certificate/key")
-	}
 	profiles := map[string]contract.Profile{}
 
 	for _, path := range o.Profiles {
@@ -92,15 +127,21 @@ func Serve(ctx context.Context, o Options, log *slog.Logger) (serveErr error) {
 		profiles[p.Metadata.Name] = p
 	}
 
-	if len(profiles) == 0 {
-		return errors.New("at least one --profile file is required")
-	}
 	db, err := store.Open(ctx, o.DatabaseURL)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	lease, err := db.AcquireLease(ctx)
+	var lease *store.Lease
+	if o.Role == execution.RoleAll && o.S3.Bucket == "" && o.SharedDataDir == "" {
+		lease, err = db.AcquireLease(ctx)
+	} else {
+		hostID := ""
+		if o.Role == execution.RoleAll || o.Role == execution.RoleExecutor {
+			hostID = o.HostID
+		}
+		lease, err = db.AcquireServiceLease(ctx, hostID)
+	}
 	if err != nil {
 		return err
 	}
@@ -117,6 +158,30 @@ func Serve(ctx context.Context, o Options, log *slog.Logger) (serveErr error) {
 		}
 	}
 	artifacts := store.Artifacts{Root: filepath.Join(sharedDir, "artifacts"), Store: db}
+	var outcomes *execution.OutcomeFiles
+	storageID := "filesystem"
+	if o.S3.Bucket != "" {
+		o.S3.Prefix = path.Join(strings.Trim(o.S3.Prefix, "/"), db.EngineID)
+		blobs, err := blob.NewS3(ctx, o.S3)
+		if err != nil {
+			return err
+		}
+		artifacts.Blobs = blobs
+		outcomes, err = execution.OpenRemoteOutcomeFiles(blobs)
+		if err != nil {
+			return err
+		}
+		storageID = "s3:" + blobs.Identity()
+	} else {
+		outcomes, err = execution.OpenOutcomeFiles(filepath.Join(sharedDir, "outcomes"))
+		if err != nil {
+			return err
+		}
+	}
+	defer func() { _ = outcomes.Close() }()
+	if err := db.BindStorage(ctx, storageID, o.S3.Bucket != ""); err != nil {
+		return err
+	}
 	runner := &adapters.Runner{
 		EngineID:      db.EngineID,
 		DockerHost:    o.DockerHost,
@@ -131,9 +196,7 @@ func Serve(ctx context.Context, o Options, log *slog.Logger) (serveErr error) {
 		return runner.Prepare(ctx, p)
 	}}
 
-	config := queue.Config{EngineID: db.EngineID, HostID: o.HostID, Logger: log, ExecutionWorkers: o.ExecutionWorkers}
-	// The combined service holds the exclusive engine lease. Cluster host
-	// identities and placement are enabled separately after acceptance.
+	config := queue.Config{Role: o.Role, EngineID: db.EngineID, HostID: o.HostID, Logger: log, ExecutionWorkers: o.ExecutionWorkers}
 	for _, profile := range profiles {
 		duration, err := contract.Duration(profile.Spec.Limits.Timeout)
 		if err != nil {
@@ -157,11 +220,6 @@ func Serve(ctx context.Context, o Options, log *slog.Logger) (serveErr error) {
 	if err := queue.Migrate(ctx, db.Pool, config.Schema); err != nil {
 		return err
 	}
-	outcomes, err := execution.OpenOutcomeFiles(filepath.Join(sharedDir, "outcomes"))
-	if err != nil {
-		return err
-	}
-	defer func() { _ = outcomes.Close() }()
 	native := &queue.Runtime{Store: db, Host: &executor.Host{Store: db, Artifacts: artifacts, Runner: runner},
 		Outcomes: outcomes, WorkerID: uuid.NewString(), HostID: config.HostID}
 	native.Client, err = queue.New(db.Pool, config, native.Handlers())
@@ -192,11 +250,6 @@ func Serve(ctx context.Context, o Options, log *slog.Logger) (serveErr error) {
 		IdleTimeout:       2 * time.Minute,
 		MaxHeaderBytes:    64 << 10,
 	}
-	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", o.Listen)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = listener.Close() }()
 	serviceCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	leaseFailed := make(chan error, 1)
@@ -223,22 +276,23 @@ func Serve(ctx context.Context, o Options, log *slog.Logger) (serveErr error) {
 		}
 	}()
 	failures := make(chan error, 1)
-	go func() {
-		if o.TLSCert != "" {
-			failures <- server.ServeTLS(listener, o.TLSCert, o.TLSKey)
-		} else {
-			failures <- server.Serve(listener)
+	if o.Role == execution.RoleAll || o.Role == execution.RoleAPI {
+		listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", o.Listen)
+		if err != nil {
+			return err
 		}
-	}()
-	log.Info(
-		"Knotra engine listening",
-		"address",
-		listener.Addr().String(),
-		"engineId",
-		db.EngineID,
-		"backend",
-		execution.BackendRiver,
-	)
+		defer func() { _ = listener.Close() }()
+		go func() {
+			if o.TLSCert != "" {
+				failures <- server.ServeTLS(listener, o.TLSCert, o.TLSKey)
+			} else {
+				failures <- server.Serve(listener)
+			}
+		}()
+		log.Info("Knotra engine listening", "address", listener.Addr().String(), "engineId", db.EngineID, "role", o.Role, "backend", execution.BackendRiver)
+	} else {
+		log.Info("Knotra worker started", "engineId", db.EngineID, "hostId", o.HostID, "workerId", native.WorkerID, "role", o.Role, "backend", execution.BackendRiver)
+	}
 
 serveLoop:
 	for {

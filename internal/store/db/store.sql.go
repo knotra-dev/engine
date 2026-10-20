@@ -61,8 +61,8 @@ func (q *Queries) InsertEngineID(ctx context.Context, value string) (pgconn.Comm
 }
 
 const insertRun = `-- name: InsertRun :execresult
-INSERT INTO knotra_runs(id,definition_id,document,plan,inputs,scheduler_version,state_format_version,admitted_at,execution_deadline,wake_generation,dirty_since)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,1,$8)
+INSERT INTO knotra_runs(id,definition_id,document,plan,inputs,scheduler_version,state_format_version,admitted_at,execution_deadline,wake_generation,dirty_since,session_affinity)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,1,$8,$10)
 `
 
 type InsertRunParams struct {
@@ -75,6 +75,7 @@ type InsertRunParams struct {
 	StateFormatVersion int
 	AdmittedAt         time.Time
 	ExecutionDeadline  time.Time
+	SessionAffinity    bool
 }
 
 func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) (pgconn.CommandTag, error) {
@@ -88,6 +89,7 @@ func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) (pgconn.Co
 		arg.StateFormatVersion,
 		arg.AdmittedAt,
 		arg.ExecutionDeadline,
+		arg.SessionAffinity,
 	)
 }
 

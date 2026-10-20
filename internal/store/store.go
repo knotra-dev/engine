@@ -266,10 +266,17 @@ func insertRun(ctx context.Context, tx pgx.Tx, run protocol.Run, plan contract.P
 	if e != nil {
 		return e
 	}
+	// shortcut: pin the whole run for process-local MCP sessions; use scope affinity when these runs need cross-worker parallelism.
+	var sessionAffinity bool
+	for _, pipeline := range plan.Pipelines {
+		for _, resource := range pipeline.Spec.MCP {
+			sessionAffinity = sessionAffinity || resource.Session == "run"
+		}
+	}
 	_, e = db.New(tx).InsertRun(ctx, db.InsertRunParams{
 		ID: run.ID, DefinitionID: run.DefinitionID, Document: b, Plan: p, Inputs: i,
 		SchedulerVersion: execution.SchedulerVersion, StateFormatVersion: execution.StateFormatVersion,
-		AdmittedAt: admitted, ExecutionDeadline: deadline,
+		AdmittedAt: admitted, ExecutionDeadline: deadline, SessionAffinity: sessionAffinity,
 	})
 	if e != nil {
 		return e

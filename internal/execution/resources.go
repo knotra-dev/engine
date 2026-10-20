@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -136,11 +137,15 @@ func (s *OutcomeFiles) PutMCPSession(resource ResourceRecord) error {
 // GetMCPSession checks the complete immutable owner against the durable ledger.
 // Cleanup state and dispatch generation may have advanced since initialization.
 func (s *OutcomeFiles) GetMCPSession(resource ResourceRecord) (*MCPSessionRecord, error) {
+	return s.GetMCPSessionContext(context.Background(), resource)
+}
+
+func (s *OutcomeFiles) GetMCPSessionContext(ctx context.Context, resource ResourceRecord) (*MCPSessionRecord, error) {
 	key, err := mcpEvidenceKey(resource)
 	if err != nil {
 		return nil, err
 	}
-	data, err := s.readBounded(key, maxMCPEvidenceBytes)
+	data, err := s.readBoundedContext(ctx, key, maxMCPEvidenceBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -210,11 +215,15 @@ func (s *OutcomeFiles) PutMCPCall(resource ResourceRecord, id json.RawMessage, c
 // GetMCPCall returns only the last unconfirmed request, fenced to the original
 // session and resource owner. Initialization-only evidence has no active call.
 func (s *OutcomeFiles) GetMCPCall(resource ResourceRecord) (json.RawMessage, error) {
+	return s.GetMCPCallContext(context.Background(), resource)
+}
+
+func (s *OutcomeFiles) GetMCPCallContext(ctx context.Context, resource ResourceRecord) (json.RawMessage, error) {
 	key, err := mcpCallKey(resource)
 	if err != nil {
 		return nil, err
 	}
-	data, err := s.readBounded(key, maxMCPEvidenceBytes)
+	data, err := s.readBoundedContext(ctx, key, maxMCPEvidenceBytes)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}

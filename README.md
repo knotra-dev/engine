@@ -10,8 +10,10 @@ steps and keeps execution history, artifacts and pending human requests across r
 - Versioned HTTP/SSE API for submitting runs, inspecting execution and answering human requests.
 
 PostgreSQL stores execution state; River delivers work to engine workers. Multiple execution hosts
-can share the database and durable artifact/outcome storage. See [architecture](docs/architecture.md)
-for scheduling, persistence and recovery boundaries.
+can share the database and S3-compatible artifact/outcome storage. Run `serve --role api`,
+`scheduler` and `executor` in separate pods or servers, with your own S3 endpoint, bucket and
+credentials. See [deployment](docs/running.md#multiple-pods-or-servers) and
+[architecture](docs/architecture.md) for scheduling, persistence and recovery boundaries.
 
 [Desktop client](https://github.com/knotra-dev/desktop) ·
 [User documentation](https://knotra-dev.github.io/docs/) ·

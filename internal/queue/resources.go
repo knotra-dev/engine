@@ -25,13 +25,16 @@ func (r *Runtime) cleanup(ctx context.Context, job *river.Job[CleanupArgs]) (err
 		}
 	}()
 	args := job.Args
-	if args.HostID != r.HostID {
+	if !args.Portable && args.HostID != r.HostID {
 		return river.JobCancel(errors.New("cleanup delivery belongs to another host"))
 	}
 	var resource *execution.ResourceRecord
 	err = pgx.BeginFunc(ctx, r.Store.Pool, func(tx pgx.Tx) error {
 		var err error
 		resource, err = r.Store.ClaimResourceCleanupTx(ctx, tx, args.ResourceID, args.HostID, args.WorkerID, args.OwnershipGeneration, args.DispatchGeneration)
+		if err == nil && resource != nil && args.Portable && resource.Kind != "mcp_http" {
+			return river.JobCancel(errors.New("portable cleanup requires a remote MCP resource"))
+		}
 		return err
 	})
 	if err != nil {
@@ -45,7 +48,7 @@ func (r *Runtime) cleanup(ctx context.Context, job *river.Job[CleanupArgs]) (err
 		}()
 		if resource.Kind == "mcp_http" {
 			if resource.MCP == nil {
-				resource.MCP, err = r.Outcomes.GetMCPSession(*resource)
+				resource.MCP, err = r.Outcomes.GetMCPSessionContext(ctx, *resource)
 				if err != nil {
 					return err
 				}
@@ -86,7 +89,7 @@ func (r *Runtime) reconcileResources(ctx context.Context) error {
 	}
 	for _, row := range rows {
 		err := pgx.BeginFunc(ctx, r.Store.Pool, func(tx pgx.Tx) error {
-			resource, err := r.Store.ClaimResourceCleanupTx(ctx, tx, row.ID, r.HostID, row.WorkerID, row.OwnershipGeneration, 0)
+			resource, err := r.Store.ClaimResourceCleanupTx(ctx, tx, row.ID, row.HostID, row.WorkerID, row.OwnershipGeneration, 0)
 			if err != nil || resource == nil {
 				return err
 			}
@@ -125,7 +128,7 @@ func (r *Runtime) reconcilePhysicalResources(ctx context.Context) error {
 }
 
 func (r *Runtime) enqueueResourceCleanup(ctx context.Context, tx pgx.Tx, resource execution.ResourceRecord) error {
-	args := CleanupArgs{HostID: resource.HostID, WorkerID: resource.Ownership.WorkerID, ResourceID: resource.ID, OwnershipGeneration: resource.Ownership.Generation, DispatchGeneration: resource.DispatchGeneration, RoutingVersion: RoutingVersion}
+	args := CleanupArgs{HostID: resource.HostID, Portable: resource.Kind == "mcp_http", WorkerID: resource.Ownership.WorkerID, ResourceID: resource.ID, OwnershipGeneration: resource.Ownership.Generation, DispatchGeneration: resource.DispatchGeneration, RoutingVersion: RoutingVersion}
 	now, err := db.New(tx).DatabaseTime(ctx)
 	if err != nil {
 		return err

@@ -235,8 +235,9 @@ func (r *Runner) CleanupMCPSession(ctx context.Context, resource execution.Resou
 	if err := resource.Validate(); err != nil {
 		return err
 	}
-	if resource.Kind != "mcp_http" || resource.State != "cleaning" || resource.EngineID != r.EngineID || resource.HostID != r.HostID {
-		return fmt.Errorf("MCP cleanup does not match this runner and host")
+	// HTTP cleanup can move hosts; evidence retains the original resource owner.
+	if resource.Kind != "mcp_http" || resource.State != "cleaning" || resource.EngineID != r.EngineID {
+		return fmt.Errorf("MCP cleanup does not match this runner's engine")
 	}
 	if resource.MCP == nil {
 		return fmt.Errorf("MCP initialization outcome is unknown; remote cleanup identity is unavailable")
@@ -255,7 +256,7 @@ func (r *Runner) CleanupMCPSession(ctx context.Context, resource execution.Resou
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	if r.ResourceEvidence != nil {
-		id, err := r.ResourceEvidence.GetMCPCall(resource)
+		id, err := r.ResourceEvidence.GetMCPCallContext(ctx, resource)
 		if err != nil {
 			return err
 		}

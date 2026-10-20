@@ -17,7 +17,7 @@ import (
 	"github.com/knotra-dev/engine/internal/execution"
 )
 
-func TestMCPCleanupRejectsUnknownAndForeignIdentity(t *testing.T) {
+func TestMCPCleanupRejectsUnknownAndForeignEngine(t *testing.T) {
 	runner := &Runner{EngineID: "engine", HostID: "host"}
 	resource := execution.ResourceRecord{ID: uuid.NewString(), EngineID: "engine", HostID: "host", Kind: "mcp_http", State: "cleaning",
 		Ownership: execution.Ownership{AttemptID: execution.AttemptID{RunID: "run", InstanceID: "node", Number: 1}, WorkerID: "worker", Generation: 1}}
@@ -29,9 +29,9 @@ func TestMCPCleanupRejectsUnknownAndForeignIdentity(t *testing.T) {
 		t.Fatalf("stateless connection required a remote deletion: %v", err)
 	}
 	foreign := resource
-	foreign.HostID = "another-host"
+	foreign.EngineID = "another-engine"
 	if err := runner.CleanupMCPSession(t.Context(), foreign, contract.Profile{}); err == nil {
-		t.Fatal("foreign host authorized MCP cleanup")
+		t.Fatal("foreign engine authorized MCP cleanup")
 	}
 	resource.MCP.SessionID = "original-session"
 	if err := runner.CleanupMCPSession(t.Context(), resource, contract.Profile{}); err == nil {
@@ -47,7 +47,7 @@ func TestMCPCleanupCancelsRecordedCallBeforeDeleting(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer func() { _ = files.Close() }()
-			runner := &Runner{EngineID: "engine", HostID: "host", ResourceEvidence: files}
+			runner := &Runner{EngineID: "engine", HostID: "replacement-host", ResourceEvidence: files}
 			resource := execution.ResourceRecord{ID: uuid.NewString(), EngineID: "engine", HostID: "host", Kind: "mcp_http", Lifetime: "run", State: "cleaning",
 				Ownership: execution.Ownership{AttemptID: execution.AttemptID{RunID: "run", InstanceID: "node", Number: 1}, WorkerID: "worker", Generation: 1},
 				MCP:       &execution.MCPSessionRecord{Connection: "tools", SessionID: "original", ProtocolVersion: "2025-11-25"}}

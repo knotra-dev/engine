@@ -177,9 +177,9 @@ func (q *Queries) LockResourceCleanup(ctx context.Context, arg LockResourceClean
 }
 
 const readResourceCleanupCandidates = `-- name: ReadResourceCleanupCandidates :many
-SELECT id,worker_id,ownership_generation
+SELECT id,host_id,worker_id,ownership_generation
 FROM knotra_resources
-WHERE engine_id=$1 AND host_id=$2 AND state<>'closed' AND id>$3
+WHERE engine_id=$1 AND (host_id=$2 OR kind='mcp_http') AND state<>'closed' AND id>$3
 ORDER BY id LIMIT 64
 `
 
@@ -191,6 +191,7 @@ type ReadResourceCleanupCandidatesParams struct {
 
 type ReadResourceCleanupCandidatesRow struct {
 	ID                  string
+	HostID              string
 	WorkerID            string
 	OwnershipGeneration int64
 }
@@ -204,7 +205,12 @@ func (q *Queries) ReadResourceCleanupCandidates(ctx context.Context, arg ReadRes
 	items := []ReadResourceCleanupCandidatesRow{}
 	for rows.Next() {
 		var i ReadResourceCleanupCandidatesRow
-		if err := rows.Scan(&i.ID, &i.WorkerID, &i.OwnershipGeneration); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.HostID,
+			&i.WorkerID,
+			&i.OwnershipGeneration,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

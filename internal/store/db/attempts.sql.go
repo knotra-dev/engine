@@ -49,6 +49,18 @@ func (q *Queries) DrainWorker(ctx context.Context, arg DrainWorkerParams) (pgcon
 	return q.db.Exec(ctx, drainWorker, arg.ID, arg.EngineID)
 }
 
+const hasLiveSessionRuns = `-- name: HasLiveSessionRuns :one
+SELECT EXISTS(SELECT 1 FROM knotra_runs WHERE session_worker_id=$1
+    AND document->>'status' NOT IN ('succeeded','failed','cancelled','skipped'))::boolean
+`
+
+func (q *Queries) HasLiveSessionRuns(ctx context.Context, sessionWorkerID *string) (bool, error) {
+	row := q.db.QueryRow(ctx, hasLiveSessionRuns, sessionWorkerID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const increaseActiveAttempts = `-- name: IncreaseActiveAttempts :execresult
 UPDATE knotra_execution_scopes SET active_attempts=active_attempts+1 WHERE run_id=$1 AND id=$2
 `
@@ -344,6 +356,19 @@ func (q *Queries) MarkPausedAttemptForDispatch(ctx context.Context, arg MarkPaus
 	)
 }
 
+const pinRunSessionWorker = `-- name: PinRunSessionWorker :execresult
+UPDATE knotra_runs SET session_worker_id=$2 WHERE id=$1 AND session_affinity AND session_worker_id IS NULL
+`
+
+type PinRunSessionWorkerParams struct {
+	ID              string
+	SessionWorkerID *string
+}
+
+func (q *Queries) PinRunSessionWorker(ctx context.Context, arg PinRunSessionWorkerParams) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, pinRunSessionWorker, arg.ID, arg.SessionWorkerID)
+}
+
 const readClaimWorker = `-- name: ReadClaimWorker :one
 SELECT heartbeat_at,draining,($1::integer=ANY(scheduler_versions) AND $2::integer=ANY(state_format_versions)
     AND COALESCE(capabilities->>'role','all') IN ('all','executor')) AS compatible
@@ -394,6 +419,29 @@ func (q *Queries) ReadOwnedWorkerHeartbeat(ctx context.Context, arg ReadOwnedWor
 		arg.SchedulerVersion,
 		arg.StateFormatVersion,
 	)
+	var heartbeat_at time.Time
+	err := row.Scan(&heartbeat_at)
+	return heartbeat_at, err
+}
+
+const readSessionDeliveryClient = `-- name: ReadSessionDeliveryClient :one
+SELECT w.delivery_client_id FROM knotra_runs r JOIN knotra_workers w ON w.id=r.session_worker_id
+WHERE r.id=$1 AND r.session_affinity AND w.heartbeat_at>clock_timestamp()-interval '20 seconds'
+`
+
+func (q *Queries) ReadSessionDeliveryClient(ctx context.Context, id string) (*string, error) {
+	row := q.db.QueryRow(ctx, readSessionDeliveryClient, id)
+	var delivery_client_id *string
+	err := row.Scan(&delivery_client_id)
+	return delivery_client_id, err
+}
+
+const readSessionWorker = `-- name: ReadSessionWorker :one
+SELECT heartbeat_at FROM knotra_workers WHERE id=$1 FOR SHARE
+`
+
+func (q *Queries) ReadSessionWorker(ctx context.Context, id string) (time.Time, error) {
+	row := q.db.QueryRow(ctx, readSessionWorker, id)
 	var heartbeat_at time.Time
 	err := row.Scan(&heartbeat_at)
 	return heartbeat_at, err

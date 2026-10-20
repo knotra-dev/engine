@@ -720,7 +720,8 @@ func TestRiverProcessLossPreservesAgentAndMCPSessionUncertainty(t *testing.T) {
 				t.Fatal(err)
 			}
 			wantDecision := map[string]string{"succeeded": "completed", "failed": "failed", "not_started": "not_executed"}[test.outcome]
-			wantWorkers, wantOperations, wantCompleted := 2, 2, 1
+			// Session affinity fences the next tool before recording another operation intent.
+			wantWorkers, wantOperations, wantCompleted := 2, 1, 1
 			if test.boundary != "" {
 				wantWorkers = 3
 			}

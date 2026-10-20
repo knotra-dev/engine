@@ -18,6 +18,8 @@ import (
 
 var ErrExecutionOwnership = errors.New("execution ownership is no longer valid")
 
+var ErrExecutionAffinity = errors.New("run belongs to another live session worker")
+
 // RegisterWorker requires a fresh process incarnation. Reusing an expired ID
 // must not resurrect claims belonging to a previous process.
 func (s *Store) RegisterWorker(ctx context.Context, id, hostID string, roles ...execution.Role) error {
@@ -205,8 +207,16 @@ func (s *Store) ClaimAttempt(ctx context.Context, tx pgx.Tx, id execution.Attemp
 	if err != nil {
 		return nil, err
 	}
-	if storedClaimWorker.Draining || !compatible {
+	if (storedClaimWorker.Draining && (run.SessionWorkerID == nil || *run.SessionWorkerID != workerID)) || !compatible {
 		return nil, nil
+	}
+	var sessionHeartbeat *time.Time
+	if run.SessionAffinity && run.SessionWorkerID != nil && *run.SessionWorkerID != workerID {
+		heartbeat, err := db.New(inner).ReadSessionWorker(ctx, *run.SessionWorkerID)
+		if err != nil {
+			return nil, err
+		}
+		sessionHeartbeat = &heartbeat
 	}
 	rows, err := db.New(inner).LockClaimScopes(ctx, db.LockClaimScopesParams{RunID: id.RunID, ScopeIDs: ids})
 	if err != nil {
@@ -257,6 +267,18 @@ func (s *Store) ClaimAttempt(ctx context.Context, tx pgx.Tx, id execution.Attemp
 		return nil, inner.Commit(ctx)
 	}
 	claim := &execution.Claim{Ownership: execution.Ownership{AttemptID: id, WorkerID: workerID, Generation: storedClaimAttempt.OwnershipGeneration + 1}, Request: request}
+	if run.SessionAffinity {
+		if run.SessionWorkerID == nil {
+			if _, err := db.New(inner).PinRunSessionWorker(ctx, db.PinRunSessionWorkerParams{ID: id.RunID, SessionWorkerID: new(workerID)}); err != nil {
+				return nil, err
+			}
+		} else if sessionHeartbeat != nil {
+			if sessionHeartbeat.Add(execution.LeaseDuration).After(run.Now) {
+				return nil, ErrExecutionAffinity
+			}
+			claim.SessionWorkerLost = true
+		}
+	}
 	claim.PlanID = storedClaimNode.PlanDigest
 	claim.OutcomeKey, err = claim.Ownership.OutcomeKey()
 	if err != nil {

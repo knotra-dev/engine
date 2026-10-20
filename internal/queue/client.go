@@ -48,6 +48,8 @@ type Client struct {
 	River            *river.Client[pgx.Tx]
 	advance          string
 	execute          string
+	affinityExecute  string
+	executionSlots   chan struct{}
 	maintenance      string
 	cleanup          string
 	executionTimeout time.Duration
@@ -82,10 +84,12 @@ func New(pool *pgxpool.Pool, config Config, handlers Handlers) (*Client, error) 
 	}
 	config.Logger = config.Logger.With("engineId", config.EngineID, "hostId", config.HostID, "role", config.Role)
 	hostHash := sha256.Sum256([]byte(config.EngineID + "\x00" + config.HostID))
+	clientID := uuid.NewString()
 	c := &Client{
 		role:             config.Role,
 		advance:          "knotra_advance_" + config.EngineID,
 		execute:          "knotra_execute_" + config.EngineID,
+		affinityExecute:  affinityQueue(config.EngineID, clientID),
 		maintenance:      "knotra_maintenance_" + config.EngineID,
 		cleanup:          "knotra_cleanup_" + hex.EncodeToString(hostHash[:16]),
 		executionTimeout: config.ExecutionTimeout,
@@ -114,10 +118,12 @@ func New(pool *pgxpool.Pool, config Config, handlers Handlers) (*Client, error) 
 		river.AddWorker(workers, &deliveryWorker[ExecuteArgs]{work: handlers.Execute, timeout: config.ExecutionTimeout, client: c})
 		river.AddWorker(workers, &deliveryWorker[CleanupArgs]{work: handlers.Cleanup, timeout: 30 * time.Second, client: c})
 		queues[c.execute], queues[c.cleanup] = river.QueueConfig{MaxWorkers: config.ExecutionWorkers}, river.QueueConfig{MaxWorkers: 2}
+		queues[c.affinityExecute] = river.QueueConfig{MaxWorkers: config.ExecutionWorkers}
+		c.executionSlots = make(chan struct{}, config.ExecutionWorkers)
 	}
 	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		// River's hostname/time default can collide across simultaneous processes.
-		ID:     uuid.NewString(),
+		ID:     clientID,
 		Schema: config.Schema, Logger: config.Logger, Workers: workers,
 		Queues: queues,
 		// Split roles enqueue typed, validated jobs for other clients. River's
@@ -191,8 +197,28 @@ func (c *Client) InsertExecute(ctx context.Context, tx pgx.Tx, args ExecuteArgs)
 	if err != nil {
 		return err
 	}
-	_, err = c.River.InsertTx(ctx, tx, args, &river.InsertOpts{Queue: c.execute, Metadata: metadata})
+	queue, err := c.executionQueue(ctx, tx, args.Attempt.RunID)
+	if err != nil {
+		return err
+	}
+	_, err = c.River.InsertTx(ctx, tx, args, &river.InsertOpts{Queue: queue, Metadata: metadata})
 	return err
+}
+
+func affinityQueue(engineID, clientID string) string {
+	sum := sha256.Sum256([]byte(engineID + "\x00" + clientID))
+	return "knotra_session_" + hex.EncodeToString(sum[:16])
+}
+
+func (c *Client) executionQueue(ctx context.Context, tx pgx.Tx, runID string) (string, error) {
+	clientID, err := db.New(tx).ReadSessionDeliveryClient(ctx, runID)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && clientID == nil) {
+		return c.execute, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return affinityQueue(c.engineID, *clientID), nil
 }
 
 func (c *Client) InsertFinalize(ctx context.Context, tx pgx.Tx, args FinalizeArgs) error {
@@ -207,14 +233,18 @@ func (c *Client) InsertCleanup(ctx context.Context, tx pgx.Tx, args CleanupArgs)
 	if err := args.Validate(); err != nil {
 		return err
 	}
-	if args.HostID != c.hostID {
+	if args.HostID != c.hostID && !args.Portable {
 		return errors.New("cleanup delivery targets a different host")
 	}
 	metadata, err := json.Marshal(args)
 	if err != nil {
 		return err
 	}
-	_, err = c.River.InsertTx(ctx, tx, args, &river.InsertOpts{Queue: c.cleanup, Metadata: metadata})
+	queue := c.cleanup
+	if args.Portable {
+		queue = c.execute
+	}
+	_, err = c.River.InsertTx(ctx, tx, args, &river.InsertOpts{Queue: queue, Metadata: metadata})
 	return err
 }
 
@@ -312,11 +342,19 @@ func (c *Client) hasPendingAdvance(ctx context.Context, tx pgx.Tx, run execution
 // The metadata contains the same validated identities as args, never execution data.
 func (c *Client) hasDelivery(ctx context.Context, tx pgx.Tx, args deliveryArgs, now time.Time) (bool, error) {
 	queue, timeout := c.advance, 30*time.Second
-	if _, ok := args.(ExecuteArgs); ok {
-		queue, timeout = c.execute, c.executionTimeout
+	if execute, ok := args.(ExecuteArgs); ok {
+		var err error
+		queue, err = c.executionQueue(ctx, tx, execute.Attempt.RunID)
+		if err != nil {
+			return false, err
+		}
+		timeout = c.executionTimeout
 	}
-	if _, ok := args.(CleanupArgs); ok {
+	if cleanup, ok := args.(CleanupArgs); ok {
 		queue = c.cleanup
+		if cleanup.Portable {
+			queue = c.execute
+		}
 	}
 	identity, err := json.Marshal(args)
 	if err != nil {

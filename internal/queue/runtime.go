@@ -119,6 +119,9 @@ func (r *Runtime) Stop(ctx context.Context) error {
 		return nil
 	}
 	drainErr := r.Store.DrainWorker(ctx, r.WorkerID)
+	if drainErr == nil && r.Client.executes() && r.workCtx.Err() == nil {
+		drainErr = r.drainSessions(ctx)
+	}
 	err := r.Client.Stop(ctx)
 	r.cancel(context.Canceled)
 	select {
@@ -127,6 +130,24 @@ func (r *Runtime) Stop(ctx context.Context) error {
 		return errors.Join(drainErr, err, ctx.Err())
 	}
 	return errors.Join(drainErr, err)
+}
+
+func (r *Runtime) drainSessions(ctx context.Context) error {
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		active, err := db.New(r.Store.Pool).HasLiveSessionRuns(ctx, new(r.WorkerID))
+		if err != nil || !active {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-r.workCtx.Done():
+			return nil
+		case <-ticker.C:
+		}
+	}
 }
 
 func (r *Runtime) maintain(registration metric.Registration) {
@@ -704,11 +725,33 @@ func (r *Runtime) advanceGraphTx(ctx context.Context, tx pgx.Tx, plan contract.P
 }
 
 func (r *Runtime) execute(ctx context.Context, job *river.Job[ExecuteArgs]) error {
+	// Both execution queues share the process's physical execution limit.
+	select {
+	case r.Client.executionSlots <- struct{}{}:
+		defer func() { <-r.Client.executionSlots }()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 	var claim *execution.Claim
 	claimCtx, stopClaim := context.WithTimeout(ctx, 5*time.Second)
 	err := pgx.BeginFunc(claimCtx, r.Store.Pool, func(tx pgx.Tx) error {
 		var err error
 		claim, err = r.Store.ClaimAttempt(claimCtx, tx, job.Args.Attempt, job.Args.DispatchGeneration, r.WorkerID)
+		if errors.Is(err, store.ErrExecutionAffinity) {
+			if _, err := store.LockExecutionRun(claimCtx, tx, job.Args.Attempt.RunID); err != nil {
+				return err
+			}
+			if _, err := db.New(tx).MarkPausedAttemptForDispatch(claimCtx, db.MarkPausedAttemptForDispatchParams{
+				RunID: job.Args.Attempt.RunID, InstanceID: job.Args.Attempt.InstanceID, Number: job.Args.Attempt.Number, DispatchGeneration: job.Args.DispatchGeneration,
+			}); err != nil {
+				return err
+			}
+			if _, err := store.WakeExecution(claimCtx, tx, job.Args.Attempt.RunID, r.Wake); err != nil {
+				return err
+			}
+			_, err = river.JobCompleteTx[*riverpgxv5.Driver](claimCtx, tx, job)
+			return err
+		}
 		if err != nil {
 			return err
 		}
@@ -750,10 +793,19 @@ func (r *Runtime) execute(ctx context.Context, job *river.Job[ExecuteArgs]) erro
 			}
 		}
 	}()
-	result := r.Host.Execute(work, claim.Request)
-	close(finished)
-	<-leaseDone
-	cancel(context.Canceled)
+	// Durable upload and publication still need the attempt's live ownership.
+	defer func() {
+		close(finished)
+		<-leaseDone
+		cancel(context.Canceled)
+	}()
+	var result execution.ExecuteResult
+	if claim.SessionWorkerLost {
+		result.Failure = &execution.Failure{Code: "OUTCOME_UNKNOWN", Message: "run-scoped MCP worker was lost; session state cannot be reconstructed", Unknown: true,
+			OperationID: claim.RunID + "/session"}
+	} else {
+		result = r.Host.Execute(work, claim.Request)
+	}
 	outcome := execution.Outcome{FormatVersion: execution.StateFormatVersion, Ownership: claim.Ownership, PlanID: claim.PlanID,
 		CompletedAt: time.Now().UTC(), Outputs: result.Outputs, Failure: result.Failure, Artifacts: outcomeArtifacts(result.Outputs)}
 	key, err := r.Outcomes.Put(outcome)
@@ -761,7 +813,7 @@ func (r *Runtime) execute(ctx context.Context, job *river.Job[ExecuteArgs]) erro
 		return err
 	}
 	// Publication has its own bounded context. A cancelled execution context
-	// must not discard the fsynced envelope or prevent a finalization handoff.
+	// must not discard the durable envelope or prevent a finalization handoff.
 	publication, stop := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer stop()
 	err = r.publish(publication, outcome, false, func(tx pgx.Tx) error {
@@ -780,7 +832,7 @@ func (r *Runtime) execute(ctx context.Context, job *river.Job[ExecuteArgs]) erro
 }
 
 func (r *Runtime) finalize(ctx context.Context, job *river.Job[FinalizeArgs]) error {
-	outcome, err := r.Outcomes.Get(job.Args.OutcomeKey)
+	outcome, err := r.Outcomes.GetContext(ctx, job.Args.OutcomeKey)
 	if err != nil {
 		return err
 	}
@@ -933,7 +985,7 @@ func (r *Runtime) reconcileOutcomes(ctx context.Context) error {
 		}
 		r.outcomeCursor = *record.OutcomeKey
 		token := execution.Ownership{AttemptID: execution.AttemptID{RunID: record.RunID, InstanceID: record.InstanceID, Number: record.Number}, WorkerID: *record.Owner, Generation: record.OwnershipGeneration}
-		if _, err := r.Outcomes.Get(*record.OutcomeKey); err != nil {
+		if _, err := r.Outcomes.GetContext(ctx, *record.OutcomeKey); err != nil {
 			if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, execution.ErrInvalidOutcome) {
 				return err
 			}

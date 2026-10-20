@@ -4,7 +4,7 @@ A Pipeline defines dependencies, data contracts, checks and approvals. Agents ch
 its granted tools and limits. Every run freezes the package and configuration; a new run can still
 produce different model output.
 
-The engine supports multiple hosts sharing PostgreSQL and durable artifact/outcome storage. API,
+The engine supports multiple hosts sharing PostgreSQL and S3-compatible object storage. API,
 scheduler and executor are separate runtime roles; CLI and desktop are HTTP/SSE clients. The stack
 is Go, River and Docker, with Tauri/Rust and React for desktop.
 
@@ -41,15 +41,25 @@ See [notation](notation.md) for the authoritative execution and permission contr
 | ------------------------------------------------------------------------------------ | -------------------------------------------- |
 | Immutable definitions/plans, execution state, budgets, requests and command receipts | PostgreSQL                                   |
 | River jobs, projections and event history                                            | The same PostgreSQL database                 |
-| Artifact bytes, outcome envelopes and MCP recovery evidence                          | Shared `artifacts/` and `outcomes/`          |
+| Artifact bytes, outcome envelopes and MCP recovery evidence                          | S3-compatible object storage or shared filesystem |
 | Sandbox staging                                                                      | Host-local data directory                    |
 | Desktop drafts, receipts and cursors                                                 | SQLite; browser preview uses browser storage |
 
 Client caches and bounded previews never replace authoritative execution records. Artifact bytes are
 immutable and become visible after validated publication. Input uploads are visible immediately.
-Shared filesystems must support hard links, atomic rename, durable sync and consistent reads across
-clients. Recovery needs PostgreSQL and the complete durable directories together; see
+Object storage uses immutable conditional writes for artifacts and outcome envelopes, and ETag
+conditional replacement for current MCP call records. Every role
+shares the configured bucket and prefix; engine identity separates object keys. Providers must
+support conditional writes and strongly consistent reads. Shared filesystems remain an option and
+must support hard links, atomic rename, durable sync and consistent reads across clients.
+Recovery needs PostgreSQL and the complete durable objects together; see
 [backup and restore](running.md#river-backup-and-restore).
+
+Run `serve --role api`, `scheduler` or `executor` to scale the roles independently. The default
+`all` combines them for local operation. API processes publish commands and serve HTTP/SSE;
+schedulers make persisted graph decisions; executors consume physical work and own local resources.
+Executors require distinct host IDs. PostgreSQL ownership and delivery queues coordinate processes;
+local staging directories are never used to exchange artifacts between hosts.
 
 ## Recovery
 
@@ -59,8 +69,12 @@ an interrupted commit.
 
 An unconfirmed external effect requires verification or explicit `resolve`. Arbitrary external APIs
 have no exactly-once guarantee. A lost agent workspace or MCP session cannot be silently recreated
-as a continuation. Cancellation stops admission and interrupts supported active work while keeping
-confirmed results. Deadlines and spent budgets survive recovery.
+as a continuation. A workflow using any run-scoped MCP session is pinned in full to its first
+owning worker process, including unrelated leaves and human waits. Its leaves can run concurrently
+within that process but cannot be spread across workers. Restarting a process on the same host
+does not restore its in-memory session.
+Cancellation stops admission and interrupts supported active work while keeping confirmed results.
+Deadlines and spent budgets survive recovery.
 
 Saved execution formats must remain compatible across updates; automatic conversion between
 incompatible versions is not promised. [Execution semantics](notation/execution.md) define retries,

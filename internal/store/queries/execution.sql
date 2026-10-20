@@ -9,7 +9,7 @@ INSERT INTO knotra_execution_timers(run_id,id,generation,kind,due_at) VALUES($1,
 -- in the inner SELECT would happen before a contended FOR UPDATE finishes.
 WITH locked AS MATERIALIZED (
 SELECT backend,scheduler_version,state_format_version,admitted_at,execution_deadline,
-		state_revision,wake_generation,applied_generation,cancel_requested,admission_paused,stop_cause,(document->>'status')::text AS status,graph_cursor,graph_scan_again,delivery_cursor
+		state_revision,wake_generation,applied_generation,cancel_requested,admission_paused,stop_cause,(document->>'status')::text AS status,graph_cursor,graph_scan_again,delivery_cursor,session_affinity,session_worker_id
 		FROM knotra_runs WHERE id=$1 FOR UPDATE
 )
 SELECT locked.*,clock_timestamp()::timestamptz AS now FROM locked;

@@ -26,10 +26,11 @@ const (
 // The caller commits its transaction before passing Request to the executor.
 type Claim struct {
 	Ownership
-	Request        ExecuteRequest
-	OutcomeKey     string
-	LeaseExpiresAt time.Time
-	PlanID         string
+	Request           ExecuteRequest
+	OutcomeKey        string
+	LeaseExpiresAt    time.Time
+	PlanID            string
+	SessionWorkerLost bool
 }
 
 // RunState contains control metadata, never a snapshot of all graph values.
@@ -51,6 +52,8 @@ type RunState struct {
 	GraphCursor        string
 	GraphScanAgain     bool
 	DeliveryCursor     string
+	SessionAffinity    bool
+	SessionWorkerID    *string
 }
 
 // GraphRecord stores the complete values of one independently advancing graph.

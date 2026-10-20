@@ -232,6 +232,8 @@ CREATE TABLE knotra_runs (
     graph_cursor text DEFAULT ''::text NOT NULL,
     graph_scan_again boolean DEFAULT false NOT NULL,
     delivery_cursor text DEFAULT ''::text NOT NULL,
+    session_affinity boolean DEFAULT false NOT NULL,
+    session_worker_id text,
     CONSTRAINT knotra_runs_applied_generation_check CHECK ((applied_generation >= 0)),
     CONSTRAINT knotra_runs_backend_check CHECK (backend = 'river'),
     CONSTRAINT knotra_runs_execution_event_sequence_check CHECK ((execution_event_sequence >= 0)),
@@ -328,6 +330,9 @@ ALTER TABLE ONLY knotra_settings
 
 ALTER TABLE ONLY knotra_workers
     ADD CONSTRAINT knotra_workers_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY knotra_runs
+    ADD CONSTRAINT knotra_runs_session_worker_fkey FOREIGN KEY (session_worker_id) REFERENCES knotra_workers(id);
 
 CREATE INDEX knotra_artifacts_published ON knotra_artifacts USING btree (id) WHERE published;
 

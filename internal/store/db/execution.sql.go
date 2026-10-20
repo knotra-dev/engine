@@ -49,10 +49,10 @@ func (q *Queries) InsertRootScope(ctx context.Context, arg InsertRootScopeParams
 const lockExecutionRun = `-- name: LockExecutionRun :one
 WITH locked AS MATERIALIZED (
 SELECT backend,scheduler_version,state_format_version,admitted_at,execution_deadline,
-		state_revision,wake_generation,applied_generation,cancel_requested,admission_paused,stop_cause,(document->>'status')::text AS status,graph_cursor,graph_scan_again,delivery_cursor
+		state_revision,wake_generation,applied_generation,cancel_requested,admission_paused,stop_cause,(document->>'status')::text AS status,graph_cursor,graph_scan_again,delivery_cursor,session_affinity,session_worker_id
 		FROM knotra_runs WHERE id=$1 FOR UPDATE
 )
-SELECT locked.backend, locked.scheduler_version, locked.state_format_version, locked.admitted_at, locked.execution_deadline, locked.state_revision, locked.wake_generation, locked.applied_generation, locked.cancel_requested, locked.admission_paused, locked.stop_cause, locked.status, locked.graph_cursor, locked.graph_scan_again, locked.delivery_cursor,clock_timestamp()::timestamptz AS now FROM locked
+SELECT locked.backend, locked.scheduler_version, locked.state_format_version, locked.admitted_at, locked.execution_deadline, locked.state_revision, locked.wake_generation, locked.applied_generation, locked.cancel_requested, locked.admission_paused, locked.stop_cause, locked.status, locked.graph_cursor, locked.graph_scan_again, locked.delivery_cursor, locked.session_affinity, locked.session_worker_id,clock_timestamp()::timestamptz AS now FROM locked
 `
 
 type LockExecutionRunRow struct {
@@ -71,6 +71,8 @@ type LockExecutionRunRow struct {
 	GraphCursor        string
 	GraphScanAgain     bool
 	DeliveryCursor     string
+	SessionAffinity    bool
+	SessionWorkerID    *string
 	Now                time.Time
 }
 
@@ -95,6 +97,8 @@ func (q *Queries) LockExecutionRun(ctx context.Context, id string) (LockExecutio
 		&i.GraphCursor,
 		&i.GraphScanAgain,
 		&i.DeliveryCursor,
+		&i.SessionAffinity,
+		&i.SessionWorkerID,
 		&i.Now,
 	)
 	return i, err

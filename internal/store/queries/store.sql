@@ -29,8 +29,8 @@ SELECT document FROM knotra_runs WHERE id=$1;
 SELECT plan FROM knotra_runs WHERE id=$1;
 
 -- name: InsertRun :execresult
-INSERT INTO knotra_runs(id,definition_id,document,plan,inputs,scheduler_version,state_format_version,admitted_at,execution_deadline,wake_generation,dirty_since)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,1,$8);
+INSERT INTO knotra_runs(id,definition_id,document,plan,inputs,scheduler_version,state_format_version,admitted_at,execution_deadline,wake_generation,dirty_since,session_affinity)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,1,$8,$10);
 
 -- name: EventIDExists :one
 SELECT EXISTS(SELECT 1 FROM knotra_events WHERE run_id=$1 AND id=$2);

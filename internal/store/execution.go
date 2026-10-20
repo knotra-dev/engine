@@ -109,6 +109,8 @@ func LockExecutionRun(ctx context.Context, tx pgx.Tx, id string) (execution.RunS
 		r.GraphCursor = storedExecutionRun.GraphCursor
 		r.GraphScanAgain = storedExecutionRun.GraphScanAgain
 		r.DeliveryCursor = storedExecutionRun.DeliveryCursor
+		r.SessionAffinity = storedExecutionRun.SessionAffinity
+		r.SessionWorkerID = storedExecutionRun.SessionWorkerID
 		r.Now = storedExecutionRun.Now
 	}
 	if err != nil {

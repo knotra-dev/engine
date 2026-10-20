@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/knotra-dev/engine/internal/blob"
 	"github.com/knotra-dev/engine/internal/contract"
 	"github.com/knotra-dev/engine/internal/fsutil"
 	"github.com/knotra-dev/engine/internal/store/db"
@@ -26,6 +27,7 @@ var hashPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 type Artifacts struct {
 	Root  string
 	Store *Store
+	Blobs blob.Store
 }
 
 func (a Artifacts) Write(name, mediaType string, data []byte, origin map[string]string) (contract.Artifact, error) {
@@ -34,48 +36,12 @@ func (a Artifacts) Write(name, mediaType string, data []byte, origin map[string]
 	}
 	sum := sha256.Sum256(data)
 	hash := hex.EncodeToString(sum[:])
-	root, e := fsutil.OpenPrivateRoot(a.Root)
-	if e != nil {
-		return contract.Artifact{}, e
-	}
-	defer func() { _ = root.Close() }()
-	tmp := ".upload-" + uuid.NewString()
-	f, e := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
-	if e != nil {
-		return contract.Artifact{}, e
-	}
-	defer func() { _ = root.Remove(tmp) }()
-	if _, e = f.Write(data); e != nil {
-		_ = f.Close()
-		return contract.Artifact{}, e
-	}
-	if e = f.Sync(); e != nil {
-		_ = f.Close()
-		return contract.Artifact{}, e
-	}
-	if e = f.Close(); e != nil {
-		return contract.Artifact{}, e
-	}
-	// A shared writer must never replace content that is already published.
-	if e = root.Link(tmp, hash); e != nil {
-		if !errors.Is(e, os.ErrExist) {
-			return contract.Artifact{}, e
+	if a.Blobs != nil {
+		if err := a.Blobs.Put(context.Background(), "artifacts/"+hash, data, false); err != nil {
+			return contract.Artifact{}, err
 		}
-		if _, e = readArtifactFile(root, contract.Artifact{SHA256: hash, Size: int64(len(data))}); e != nil {
-			return contract.Artifact{}, e
-		}
-	}
-	dir, e := root.Open(".")
-	if e != nil {
-		return contract.Artifact{}, e
-	}
-	e = fsutil.SyncOpenDir(dir)
-	closeErr := dir.Close()
-	if e != nil {
-		return contract.Artifact{}, e
-	}
-	if closeErr != nil {
-		return contract.Artifact{}, closeErr
+	} else if err := a.writeFile(hash, data); err != nil {
+		return contract.Artifact{}, err
 	}
 	if origin == nil {
 		origin = map[string]string{}
@@ -88,6 +54,53 @@ func (a Artifacts) Write(name, mediaType string, data []byte, origin map[string]
 		SHA256:    hash,
 		Origin:    origin,
 	}, nil
+}
+
+func (a Artifacts) writeFile(hash string, data []byte) error {
+	root, e := fsutil.OpenPrivateRoot(a.Root)
+	if e != nil {
+		return e
+	}
+	defer func() { _ = root.Close() }()
+	tmp := ".upload-" + uuid.NewString()
+	f, e := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if e != nil {
+		return e
+	}
+	defer func() { _ = root.Remove(tmp) }()
+	if _, e = f.Write(data); e != nil {
+		_ = f.Close()
+		return e
+	}
+	if e = f.Sync(); e != nil {
+		_ = f.Close()
+		return e
+	}
+	if e = f.Close(); e != nil {
+		return e
+	}
+	// A shared writer must never replace content that is already published.
+	if e = root.Link(tmp, hash); e != nil {
+		if !errors.Is(e, os.ErrExist) {
+			return e
+		}
+		if _, e = readArtifactFile(root, contract.Artifact{SHA256: hash, Size: int64(len(data))}); e != nil {
+			return e
+		}
+	}
+	dir, e := root.Open(".")
+	if e != nil {
+		return e
+	}
+	e = fsutil.SyncOpenDir(dir)
+	closeErr := dir.Close()
+	if e != nil {
+		return e
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	return nil
 }
 
 func RegisterArtifact(ctx context.Context, tx pgx.Tx, art contract.Artifact) error {
@@ -136,6 +149,24 @@ func (a Artifacts) Get(ctx context.Context, id string) ([]byte, error) {
 	}
 	if e != nil {
 		return nil, e
+	}
+	return a.read(ctx, v)
+}
+
+func (a Artifacts) read(ctx context.Context, v contract.Artifact) ([]byte, error) {
+	if a.Blobs != nil {
+		if !hashPattern.MatchString(v.SHA256) || v.Size < 0 || v.Size > MaxArtifactBytes {
+			return nil, fmt.Errorf("invalid artifact checksum or size")
+		}
+		data, err := a.Blobs.Get(ctx, "artifacts/"+v.SHA256, MaxArtifactBytes)
+		if err != nil {
+			return nil, err
+		}
+		sum := sha256.Sum256(data)
+		if int64(len(data)) != v.Size || hex.EncodeToString(sum[:]) != v.SHA256 {
+			return nil, fmt.Errorf("artifact size or checksum changed")
+		}
+		return data, nil
 	}
 	root, e := os.OpenRoot(a.Root)
 	if e != nil {
