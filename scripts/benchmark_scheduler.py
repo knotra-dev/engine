@@ -757,9 +757,7 @@ def main():
                     )
                     for container in containers
                 }
-                statements_before = (
-                    statement_stats(args) if args.profile_sql else {}
-                )
+                statements_before = statement_stats(args) if args.profile_sql else {}
                 with lock:
                     call_start = len(physical)
                     tool_start = len(physical_tools)
@@ -769,8 +767,7 @@ def main():
                     time.sleep(args.idle_seconds)
                 elif name == "queue_retention":
                     assert (
-                        int(sql(args, f"SELECT count(*) FROM {schema}.knotra_runs"))
-                        > 0
+                        int(sql(args, f"SELECT count(*) FROM {schema}.knotra_runs")) > 0
                     )
                     snapshot_query = f"""SELECT md5(jsonb_build_object(
                         'runs',(SELECT jsonb_agg(document::jsonb ORDER BY id) FROM {schema}.knotra_runs),
@@ -844,15 +841,13 @@ def main():
                         "files": [
                             {
                                 "path": "pipeline.yaml",
-                                "content": base64.b64encode(
-                                    source.encode()
-                                ).decode(),
+                                "content": base64.b64encode(source.encode()).decode(),
                             }
                         ],
                     }
-                    definition = request(
-                        base, "/definitions", {"package": package}
-                    )["definition"]["id"]
+                    definition = request(base, "/definitions", {"package": package})[
+                        "definition"
+                    ]["id"]
                     record["advance_backlog_before_admission"] = json.loads(
                         sql(
                             args,
@@ -871,9 +866,7 @@ def main():
                         "/runs",
                         {"definitionId": definition, "profile": "benchmark"},
                     )["run"]["id"]
-                    record["admission_ms"] = (
-                        time.monotonic() - admit_started
-                    ) * 1000
+                    record["admission_ms"] = (time.monotonic() - admit_started) * 1000
                     if name in (
                         "human_wait",
                         "human_resume",
@@ -910,9 +903,7 @@ def main():
                                     sql(args, snapshot_query)
                                 )
                                 assert len(original_requests) == node_count
-                                original_run = request(base, "/runs/" + run_id)[
-                                    "run"
-                                ]
+                                original_run = request(base, "/runs/" + run_id)["run"]
                                 with process_lock:
                                     engine_cpu_offset += process_stats(process.pid)[
                                         "cpu_seconds"
@@ -920,9 +911,7 @@ def main():
                                     old_pid = process.pid
                                     recovery_started = time.monotonic()
                                     process.kill()
-                                    assert (
-                                        process.wait(timeout=15) == -signal.SIGKILL
-                                    )
+                                    assert process.wait(timeout=15) == -signal.SIGKILL
                                     process = start_process()
                                     assert process.pid != old_pid
                                     assert wait_ready() == engine_id
@@ -933,16 +922,12 @@ def main():
                                     json.loads(sql(args, snapshot_query))
                                     == original_requests
                                 )
-                                recovered_run = request(base, "/runs/" + run_id)[
-                                    "run"
-                                ]
+                                recovered_run = request(base, "/runs/" + run_id)["run"]
                                 assert recovered_run["id"] == original_run["id"]
                                 assert {
                                     n["id"] for n in recovered_run["instances"]
                                 } == {n["id"] for n in original_run["instances"]}
-                                record["preserved_requests"] = len(
-                                    original_requests
-                                )
+                                record["preserved_requests"] = len(original_requests)
                                 record["engine_cpu_is_lower_bound"] = True
                             if name == "human_wait":
                                 request(base, "/runs/" + run_id + "/cancel", {})
@@ -1011,20 +996,14 @@ def main():
                                         f"SELECT json_agg(extract(epoch FROM consumed_at-due_at)*1000) FROM {schema}.knotra_execution_timers WHERE run_id='{run_id}' AND kind='node_deadline' AND consumed_at IS NOT NULL",
                                     )
                                 )
-                                assert (
-                                    len(record["due_timer_consumption_ms"]) == 1
-                                )
-                                assert (
-                                    record["due_timer_consumption_ms"][0] >= 0
-                                )
+                                assert len(record["due_timer_consumption_ms"]) == 1
+                                assert record["due_timer_consumption_ms"][0] >= 0
                     else:
                         run = wait_run(base, run_id, "succeeded")
                         if run["outputs"]["result"] != expected:
                             raise AssertionError("full run export changed")
                     finished = time.monotonic()
-                    record["admission_to_terminal_seconds"] = (
-                        finished - admit_started
-                    )
+                    record["admission_to_terminal_seconds"] = finished - admit_started
                     with lock:
                         times = physical[call_start:]
                         tool_values = physical_tools[tool_start:]
@@ -1038,10 +1017,7 @@ def main():
                             f"SELECT COALESCE(sum(used),0) FROM {schema}.knotra_budgets WHERE run_id='{run_id}' AND scope='{run_id}' AND kind='model'",
                         )
                     )
-                    if (
-                        budget != expected_calls
-                        or len(run["instances"]) != node_count
-                    ):
+                    if budget != expected_calls or len(run["instances"]) != node_count:
                         raise AssertionError(
                             f"{name}: budget={budget}, nodes={len(run['instances'])}, want {expected_calls}/{node_count}"
                         )
@@ -1223,19 +1199,11 @@ def main():
                                 item["containers"][container]["working_set_bytes"]
                                 for item in window
                             ),
-                            "cpu_seconds": after["containers"][container][
-                                "cpu_seconds"
-                            ]
+                            "cpu_seconds": after["containers"][container]["cpu_seconds"]
                             - before["containers"][container]["cpu_seconds"],
-                            "allocated_storage_before_bytes": storage_before[
-                                container
-                            ],
-                            "allocated_storage_after_bytes": storage_after[
-                                container
-                            ],
-                            "allocated_storage_growth_bytes": storage_after[
-                                container
-                            ]
+                            "allocated_storage_before_bytes": storage_before[container],
+                            "allocated_storage_after_bytes": storage_after[container],
+                            "allocated_storage_growth_bytes": storage_after[container]
                             - storage_before[container],
                         }
                         for container in containers
