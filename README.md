@@ -42,9 +42,10 @@ Run the game in a second terminal (`.\knotra.exe` on Windows):
 ./knotra run knotra-data/examples/tic-tac-toe/pipeline.yaml --profile local --wait
 ```
 
-Use `artifacts list --run RUN_ID` and `artifacts download ARTIFACT_ID --output index.html` to
-retrieve it. [First run](docs/first-run.md) walks through inspection, correction and human review;
-[running](docs/running.md) covers source builds, cloud models and engine configuration.
+Use `runs get RUN_ID` to find its artifact IDs, then
+`artifacts download ARTIFACT_ID --output index.html` to retrieve it. [First run](docs/first-run.md)
+walks through inspection, correction and human review; [running](docs/running.md) covers source
+builds, cloud models and engine configuration.
 
 ## Workflow in pictures
 

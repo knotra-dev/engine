@@ -98,6 +98,7 @@ export interface EngineRun {
   instances: EngineInstance[];
   diagnostics: EngineDiagnostic[];
   availableActions: ('cancel' | 'resume' | 'resolve')[];
+  dataTruncated?: boolean;
 }
 
 export interface EngineRequest {
@@ -113,7 +114,9 @@ export interface EngineRequest {
     values: Record<string, Json>;
     artifacts: Record<string, ContextArtifact | ContextArtifact[]>;
   };
-  responseSchema: DataSchema;
+  responseSchema: DataSchema | null;
+  responseSchemaJSON?: string;
+  dataTruncated?: boolean;
 }
 
 export interface Definition {

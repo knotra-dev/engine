@@ -17,6 +17,9 @@ func (s *Server) run(w http.ResponseWriter, r *http.Request) {
 		s.err(w, e)
 		return
 	}
+	if javascriptPreview(r) {
+		v = previewRun(v)
+	}
 	s.write(w, 200, map[string]any{"run": v})
 }
 
@@ -44,7 +47,13 @@ func (s *Server) runs(w http.ResponseWriter, r *http.Request) {
 		s.err(w, e)
 		return
 	}
-	s.write(w, 200, page(v, func(x protocol.Run) string { return x.ID }))
+	p := page(v, func(x protocol.Run) string { return x.ID })
+	if javascriptPreview(r) {
+		for i := range p.Items {
+			p.Items[i] = previewRun(p.Items[i])
+		}
+	}
+	s.write(w, 200, p)
 }
 
 func (s *Server) requests(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +62,13 @@ func (s *Server) requests(w http.ResponseWriter, r *http.Request) {
 		s.err(w, e)
 		return
 	}
-	s.write(w, 200, page(v, func(x protocol.HumanRequest) string { return x.ID }))
+	p := page(v, func(x protocol.HumanRequest) string { return x.ID })
+	if javascriptPreview(r) {
+		for i := range p.Items {
+			p.Items[i] = previewRequest(p.Items[i])
+		}
+	}
+	s.write(w, 200, p)
 }
 
 func (s *Server) cancel(w http.ResponseWriter, r *http.Request) {

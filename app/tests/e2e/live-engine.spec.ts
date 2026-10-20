@@ -53,7 +53,8 @@ async function start(page: Page) {
   await expect(page.getByRole('dialog')).toContainText('Engine admission checks passed');
   const started = page.waitForResponse(
     (response) =>
-      response.url() === `${endpoint}/v1/runs` && response.request().method() === 'POST',
+      response.url().split('?')[0] === `${endpoint}/v1/runs` &&
+      response.request().method() === 'POST',
   );
   await page.getByRole('button', { name: 'Start run', exact: true }).click();
   const { run } = await (await started).json();
@@ -223,7 +224,8 @@ Path(os.environ['KNOTRA_OUTPUT_JSON']).write_text('{}')
   await artifacts.selectOption(artifactId!);
   const started = page.waitForResponse(
     (response) =>
-      response.url() === `${endpoint}/v1/runs` && response.request().method() === 'POST',
+      response.url().split('?')[0] === `${endpoint}/v1/runs` &&
+      response.request().method() === 'POST',
   );
   await page.getByRole('button', { name: 'Start run', exact: true }).click();
   const { run: startedRun } = await (await started).json();

@@ -199,6 +199,21 @@ func (s *Server) command(w http.ResponseWriter, r *http.Request, payload []byte,
 		s.err(w, e)
 		return
 	}
+	if javascriptPreview(r) && r.Pattern == "POST /v1/runs" && status == http.StatusCreated {
+		var receipt struct {
+			Run protocol.Run `json:"run"`
+		}
+		if err := json.Unmarshal(b, &receipt); err != nil {
+			s.err(w, err)
+			return
+		}
+		receipt.Run = previewRun(receipt.Run)
+		b, e = json.Marshal(receipt)
+		if e != nil {
+			s.err(w, e)
+			return
+		}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_, _ = w.Write(b)

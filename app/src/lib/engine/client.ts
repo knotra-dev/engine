@@ -47,18 +47,26 @@ function writeCache(value: EngineCache) {
 
 export function parseEngineJSON(text: string): any {
   try {
-    return JSON.parse(text, (_, value) => {
-      if (typeof value === 'number' && Number.isInteger(value) && !Number.isSafeInteger(value))
-        throw new EngineError(
-          'precision',
-          'Engine returned an integer outside JavaScript’s safe range. The value was not accepted by the app.',
-        );
-      return value;
-    });
+    const value = JSON.parse(text);
+    checkSafeNumbers(
+      value,
+      'Engine returned an integer outside JavaScript’s safe range. The value was not accepted by the app.',
+    );
+    return value;
   } catch (error) {
     if (error instanceof EngineError) throw error;
     throw new EngineError('protocol', 'Engine returned invalid JSON.');
   }
+}
+
+function checkSafeNumbers(value: unknown, message: string): void {
+  if (
+    typeof value === 'number' &&
+    (!Number.isFinite(value) || (Number.isInteger(value) && !Number.isSafeInteger(value)))
+  )
+    throw new EngineError('precision', message);
+  if (value && typeof value === 'object')
+    for (const item of Object.values(value)) checkSafeNumbers(item, message);
 }
 
 function endpoint(url: string, token?: string) {
@@ -139,7 +147,10 @@ async function jsonRequest(
   if (connection?.token) headers.Authorization = `Bearer ${connection.token}`;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (operationId) headers['Idempotency-Key'] = operationId;
-  const response = await fetch(url(path, cursor, instanceId), {
+  const target = url(path, cursor, instanceId);
+  if ((path[0] === 'runs' && path.length <= 2) || (path[0] === 'requests' && path.length === 1))
+    target.searchParams.set('preview', 'javascript');
+  const response = await fetch(target, {
     method: body === undefined ? 'GET' : 'POST',
     body: body === undefined ? undefined : JSON.stringify(body),
     headers,
@@ -406,6 +417,10 @@ export async function engineCall<T>(call: EngineCall): Promise<T> {
         );
       if (completed) return completed.response as T;
       if (!old) {
+        checkSafeNumbers(
+          call,
+          'The app cannot send numbers outside JavaScript’s safe range. Use the CLI for exact values.',
+        );
         data.pending.push({ id: operationId, request: call });
         writeCache(data);
       }
@@ -455,6 +470,10 @@ export async function engineCall<T>(call: EngineCall): Promise<T> {
     );
     return task;
   }
+  checkSafeNumbers(
+    call,
+    'The app cannot send numbers outside JavaScript’s safe range. Use the CLI for exact values.',
+  );
   const { path, body, cursor, instanceId } = route(call);
   const value = await jsonRequest(path, body, undefined, cursor, instanceId);
   if (revision !== sessionRevision) throw new EngineError('disconnected', 'Connection changed.');

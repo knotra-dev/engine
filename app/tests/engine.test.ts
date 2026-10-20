@@ -111,6 +111,190 @@ it('rejects unsafe integers consistently in REST and SSE JSON before accepting d
   expect(() => parseEngineJSON('{')).toThrow('invalid JSON');
 });
 
+it('requests safe previews for run refresh, admission receipts and human review', async () => {
+  const entries = new Map<string, string>();
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => entries.get(key) ?? null,
+    setItem: (key: string, value: string) => entries.set(key, value),
+  });
+  const run = {
+    id: 'int64-run',
+    definitionId: 'd1',
+    title: 'Exact integer run',
+    status: 'succeeded',
+    createdAt: '2026-10-04T00:00:00Z',
+    updatedAt: '2026-10-04T00:00:00Z',
+    profile: 'local',
+    package: enginePackage(freshState().workspaces[0]),
+    inputs: { safe: 'kept' },
+    inputArtifacts: {},
+    outputs: {},
+    artifacts: [],
+    instances: [],
+    diagnostics: [],
+    availableActions: [],
+    dataTruncated: true,
+  };
+  const request = {
+    id: 'request1',
+    runId: run.id,
+    instanceId: 'n1',
+    attemptId: 'n1.a1',
+    status: 'open',
+    prompt: 'Review',
+    createdAt: run.createdAt,
+    deadline: run.updatedAt,
+    inputs: { values: {}, artifacts: {} },
+    responseSchema: null,
+    responseSchemaJSON: '{"const":9223372036854775807}',
+    dataTruncated: true,
+  };
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (target: URL, init: RequestInit) => {
+      if (target.pathname === '/v1/info')
+        return Response.json({
+          protocol: 'knotra.desktop/1',
+          engineId: 'int64-preview',
+          principalId: 'local',
+          version: '1',
+          capabilities: [],
+        });
+      expect(target.searchParams.get('preview')).toBe('javascript');
+      if (target.pathname === '/v1/requests')
+        return Response.json({ items: [request], nextCursor: null });
+      if (target.pathname === '/v1/runs' && init.method === 'GET')
+        return Response.json({ items: [run], nextCursor: null });
+      return Response.json({ run }, { status: init.method === 'POST' ? 201 : 200 });
+    }),
+  );
+  try {
+    await connectEngine('http://localhost:8080');
+    expect(await engineCall({ op: 'runs', cursor: null })).toEqual({
+      items: [run],
+      nextCursor: null,
+    });
+    expect(await engineCall({ op: 'run', runId: run.id })).toEqual({ run });
+    expect(await engineCall({ op: 'requests', cursor: null })).toEqual({
+      items: [request],
+      nextCursor: null,
+    });
+    const start = {
+      op: 'start' as const,
+      definitionId: 'd1',
+      profile: 'local',
+      inputs: {},
+      artifacts: {},
+      operationId: 'start-int64',
+    };
+    expect(await engineCall(start)).toEqual({ run });
+    expect(await engineCall(start)).toEqual({ run });
+    expect((await engineCache()).pending).toEqual([]);
+    const beforeUnsafe = await engineCache();
+    await expect(
+      engineCall({ ...start, operationId: 'unsafe-start', inputs: { exact: 2 ** 53 } }),
+    ).rejects.toMatchObject({ code: 'precision' });
+    expect(await engineCache()).toEqual(beforeUnsafe);
+    expect(fetch).toHaveBeenCalledTimes(5);
+    expect((await engineCache()).cache[JSON.stringify({ op: 'runs', cursor: null })]).toEqual({
+      items: [run],
+      nextCursor: null,
+    });
+  } finally {
+    await disconnectEngine();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('recovers retained unsafe commands while rejecting new unsafe commands', async () => {
+  const entries = new Map<string, string>();
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => entries.get(key) ?? null,
+    setItem: (key: string, value: string) => entries.set(key, value),
+  });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (target: URL, init: RequestInit) => {
+      if (target.pathname === '/v1/info')
+        return Response.json({
+          protocol: 'knotra.desktop/1',
+          engineId: 'retained-unsafe',
+          principalId: 'local',
+          version: '1',
+          capabilities: [],
+        });
+      expect(init.body).toContain('"exact":9007199254740992');
+      const headers = init.headers as Record<string, string>;
+      if (target.pathname === '/v1/runs') {
+        expect(headers['Idempotency-Key']).toBe('retained-start');
+        expect(target.searchParams.get('preview')).toBe('javascript');
+        return Response.json(
+          { run: { id: 'recovered-run', dataTruncated: true } },
+          { status: 201 },
+        );
+      }
+      expect(target.pathname).toBe('/v1/requests/h1/response');
+      expect(headers['Idempotency-Key']).toBe('retained-response');
+      return Response.json({ accepted: true, requestId: 'h1' });
+    }),
+  );
+  try {
+    await connectEngine('http://localhost:8080');
+    const start = {
+      op: 'start' as const,
+      definitionId: 'd1',
+      profile: 'local',
+      inputs: { exact: 2 ** 53 },
+      artifacts: {},
+      operationId: 'retained-start',
+    };
+    const respond = {
+      op: 'respond' as const,
+      requestId: 'h1',
+      outputs: { exact: 2 ** 53 },
+      operationId: 'retained-response',
+    };
+    const completed = { ...start, operationId: 'completed-start' };
+    const receipt = { run: { id: 'completed-run' } };
+    entries.set(
+      engineSessionKey()!,
+      JSON.stringify({
+        cache: { 'operation:completed-start': { request: completed, response: receipt } },
+        pending: [
+          { id: start.operationId, request: start },
+          { id: respond.operationId, request: respond },
+        ],
+      }),
+    );
+    expect(await engineCall(completed)).toEqual(receipt);
+    expect(await engineCall(start)).toEqual({ run: { id: 'recovered-run', dataTruncated: true } });
+    expect(await engineCall(respond)).toEqual({ accepted: true, requestId: 'h1' });
+    expect(await engineCall(start)).toEqual({ run: { id: 'recovered-run', dataTruncated: true } });
+    await expect(engineCall({ ...start, inputs: { exact: 2 ** 53 + 2 } })).rejects.toMatchObject({
+      code: 'conflict',
+    });
+    const before = await engineCache();
+    await expect(engineCall({ ...start, operationId: 'new-unsafe' })).rejects.toMatchObject({
+      code: 'precision',
+    });
+    await expect(
+      engineCall({
+        op: 'validate',
+        package: enginePackage(freshState().workspaces[0]),
+        profile: 'local',
+        inputs: start.inputs,
+        artifacts: {},
+      }),
+    ).rejects.toMatchObject({ code: 'precision' });
+    expect(await engineCache()).toEqual(before);
+    expect((await engineCache()).pending).toEqual([]);
+    expect(fetch).toHaveBeenCalledTimes(3);
+  } finally {
+    await disconnectEngine();
+    vi.unstubAllGlobals();
+  }
+});
+
 it('does not overwrite the last valid cached page with a malformed read model', async () => {
   const entries = new Map<string, string>();
   vi.stubGlobal('localStorage', {

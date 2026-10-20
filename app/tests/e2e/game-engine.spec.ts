@@ -43,7 +43,8 @@ test('engine code-test loop builds an independently verified game that plays fro
     await expect(page.getByRole('dialog')).toContainText('Engine admission checks passed');
     const started = page.waitForResponse(
       (response) =>
-        response.url() === `${endpoint}/v1/runs` && response.request().method() === 'POST',
+        response.url().split('?')[0] === `${endpoint}/v1/runs` &&
+        response.request().method() === 'POST',
     );
     await page.getByRole('button', { name: 'Start run', exact: true }).click();
     const { run: startedRun } = await (await started).json();

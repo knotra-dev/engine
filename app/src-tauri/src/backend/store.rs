@@ -95,7 +95,13 @@ impl Store {
         Ok(json!({"cache":cache,"pending":pending}))
     }
     // Record BEFORE sending. A lost response must reuse the same key and exact body after restart.
-    pub fn prepare(&self, engine: &str, id: &str, request: &Value) -> Result<Option<Value>> {
+    pub fn prepare(
+        &self,
+        engine: &str,
+        id: &str,
+        request: &Value,
+        validate_new: impl FnOnce() -> Result<()>,
+    ) -> Result<Option<Value>> {
         let db = self.db()?;
         let old: Option<(String, Option<String>)> = db
             .query_row(
@@ -116,6 +122,8 @@ impl Store {
                 .map(|text| serde_json::from_str(&text).map_err(Error::storage))
                 .transpose();
         }
+        // Retained commands replay their exact body even if admission checks changed.
+        validate_new()?;
         db.execute(
             "INSERT INTO operations(engine,id,request) VALUES(?1,?2,?3)",
             params![engine, id, request.to_string()],
@@ -188,14 +196,22 @@ mod tests {
     fn operation_recovery_rejects_changed_payload() {
         let s = store();
         let command = json!({"op":"respond","requestId":"r1","outputs":{"x":1}});
-        assert!(s.prepare("a", "op1", &command).unwrap().is_none());
-        assert!(s.prepare("a", "op1", &json!({"requestId":"r2"})).is_err());
+        assert!(s
+            .prepare("a", "op1", &command, || Ok(()))
+            .unwrap()
+            .is_none());
+        assert!(s
+            .prepare("a", "op1", &json!({"requestId":"r2"}), || Ok(()))
+            .is_err());
         s.complete("a", "op1", &json!({"accepted":true})).unwrap();
         assert_eq!(
-            s.prepare("a", "op1", &command).unwrap(),
+            s.prepare("a", "op1", &command, || Ok(())).unwrap(),
             Some(json!({"accepted":true}))
         );
-        assert!(s.prepare("b", "op1", &command).unwrap().is_none());
+        assert!(s
+            .prepare("b", "op1", &command, || Ok(()))
+            .unwrap()
+            .is_none());
     }
 
     #[test]
@@ -223,7 +239,8 @@ mod tests {
             let s = Store::open(&path).unwrap();
             s.save(&json!({"version":1,"workspaces":[],"runs":[]}))
                 .unwrap();
-            s.prepare("a", "op", &json!({"op":"cancel"})).unwrap();
+            s.prepare("a", "op", &json!({"op":"cancel"}), || Ok(()))
+                .unwrap();
             s.event("a", "r", "e1", &json!({"id":"e1"})).unwrap();
         }
         {

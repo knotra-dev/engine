@@ -169,7 +169,8 @@ fn definitive_schema_rejection_keeps_request_retriable_with_new_operation() {
             .prepare(
                 "fixture",
                 "response-2",
-                &json!({"op":"respond","requestId":"request-A","outputs":{"feedback":"valid"}})
+                &json!({"op":"respond","requestId":"request-A","outputs":{"feedback":"valid"}}),
+                || Ok(())
             )
             .unwrap()
             .is_none());
@@ -297,7 +298,7 @@ fn mismatched_download_metadata_is_rejected_before_fetching_content() {
 fn pagination_preserves_structured_engine_rejections() {
     runtime().block_on(async {
         let (session, task) = fixture(1, |_, request| {
-            assert!(request.starts_with("GET /v1/runs?cursor=page-2 "));
+            assert!(request.starts_with("GET /v1/runs?cursor=page-2&preview=javascript "));
             (
                 401,
                 "application/json",
@@ -414,7 +415,7 @@ fn malformed_read_page_does_not_replace_the_last_valid_cache() {
         });
         let expected = page.clone();
         let (session, task) = fixture(2, move |index, request| {
-            assert!(request.starts_with("GET /v1/runs "));
+            assert!(request.starts_with("GET /v1/runs?preview=javascript "));
             let response = if index == 0 {
                 page.clone()
             } else {
@@ -431,6 +432,157 @@ fn malformed_read_page_does_not_replace_the_last_valid_cache() {
             "protocol"
         );
         assert_eq!(store.snapshot("fixture").unwrap(), before);
+        task.join().unwrap();
+    });
+}
+
+#[test]
+fn javascript_previews_keep_refresh_and_admission_receipts_readable() {
+    runtime().block_on(async {
+        let run = json!({
+            "id":"r1", "definitionId":"d1", "title":"Exact integers", "status":"succeeded",
+            "createdAt":"2026-10-04T00:00:00Z", "updatedAt":"2026-10-04T00:00:00Z",
+            "profile":"local", "package":{"entrypoint":"pipeline.yaml", "source":"", "files":[{"path":"pipeline.yaml","content":""}]},
+            "inputs":{"safe":"kept"}, "inputArtifacts":{}, "outputs":{}, "artifacts":[],
+            "instances":[], "diagnostics":[], "availableActions":[], "dataTruncated":true
+        });
+        let expected = run.clone();
+        let (session, task) = fixture(4, move |index, request| {
+            let response = match index {
+                0 => {
+                    assert!(request.starts_with("GET /v1/runs?preview=javascript "));
+                    json!({"items":[run.clone()], "nextCursor":null})
+                }
+                1 => {
+                    assert!(request.starts_with("GET /v1/runs/r1?preview=javascript "));
+                    json!({"run":run.clone()})
+                }
+                2 => {
+                    assert!(request.starts_with("GET /v1/requests?preview=javascript "));
+                    json!({"items":[{
+                        "id":"h1", "runId":"r1", "instanceId":"n1", "attemptId":"n1.a1",
+                        "status":"open", "prompt":"Review", "createdAt":"2026-10-04T00:00:00Z",
+                        "deadline":"2026-10-04T00:00:00Z", "inputs":{"values":{}, "artifacts":{}},
+                        "responseSchema":null, "responseSchemaJSON":"{\"const\":9223372036854775807}",
+                        "dataTruncated":true
+                    }], "nextCursor":null})
+                }
+                _ => {
+                    assert!(request.starts_with("POST /v1/runs?preview=javascript "));
+                    json!({"run":run.clone()})
+                }
+            };
+            (if index == 3 { 201 } else { 200 }, "application/json", serde_json::to_vec(&response).unwrap())
+        });
+        let store = store::Store::open(std::path::Path::new(":memory:")).unwrap();
+        assert_eq!(execute(&store, &session, &Call::Runs { cursor:None }).await.unwrap()["items"][0], expected);
+        assert_eq!(execute(&store, &session, &Call::Run { run_id:"r1".into() }).await.unwrap()["run"], expected);
+        let requests = execute(&store, &session, &Call::Requests { cursor:None }).await.unwrap();
+        assert!(requests["items"][0]["responseSchema"].is_null());
+        assert_eq!(requests["items"][0]["responseSchemaJSON"], "{\"const\":9223372036854775807}");
+        let start = Call::Start { definition_id:"d1".into(), profile:"local".into(), inputs:json!({}), artifacts:json!({}), operation_id:"start-int64".into() };
+        assert_eq!(execute(&store, &session, &start).await.unwrap()["run"], expected);
+        assert_eq!(execute(&store, &session, &start).await.unwrap()["run"], expected);
+        let unsafe_start = Call::Start { definition_id:"d1".into(), profile:"local".into(), inputs:json!({"exact":9007199254740993u64}), artifacts:json!({}), operation_id:"unsafe-start".into() };
+        assert_eq!(execute(&store, &session, &unsafe_start).await.unwrap_err().code, "precision");
+        assert!(store.snapshot("fixture").unwrap()["pending"].as_array().unwrap().is_empty());
+        task.join().unwrap();
+    });
+}
+
+#[test]
+fn retained_unsafe_commands_reconcile_without_admitting_new_unsafe_commands() {
+    runtime().block_on(async {
+        let (session, task) = fixture(2, |index, request| {
+            let body: Value =
+                serde_json::from_str(request.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+            if index == 0 {
+                assert!(request.starts_with("POST /v1/runs?preview=javascript "));
+                assert!(request
+                    .to_lowercase()
+                    .contains("idempotency-key: retained-start"));
+                assert_eq!(body["inputs"]["exact"], json!(9007199254740992u64));
+                (
+                    201,
+                    "application/json",
+                    br#"{"run":{"id":"recovered-run","dataTruncated":true}}"#.to_vec(),
+                )
+            } else {
+                assert!(request.starts_with("POST /v1/requests/h1/response "));
+                assert!(request
+                    .to_lowercase()
+                    .contains("idempotency-key: retained-response"));
+                assert_eq!(body["outputs"]["exact"], json!(9007199254740992u64));
+                (
+                    200,
+                    "application/json",
+                    br#"{"accepted":true,"requestId":"h1"}"#.to_vec(),
+                )
+            }
+        });
+        let store = store::Store::open(std::path::Path::new(":memory:")).unwrap();
+        let start = |id: &str, exact: u64| Call::Start {
+            definition_id: "d1".into(),
+            profile: "local".into(),
+            inputs: json!({"exact":exact}),
+            artifacts: json!({}),
+            operation_id: id.into(),
+        };
+        let pending_start = start("retained-start", 9007199254740992);
+        let pending_response = Call::Respond {
+            request_id: "h1".into(),
+            outputs: json!({"exact":9007199254740992u64}),
+            operation_id: "retained-response".into(),
+        };
+        let completed_start = start("completed-start", 9007199254740992);
+        for call in [&pending_start, &pending_response, &completed_start] {
+            store
+                .prepare(
+                    "fixture",
+                    call.operation().unwrap(),
+                    &serde_json::to_value(call).unwrap(),
+                    || Ok(()),
+                )
+                .unwrap();
+        }
+        let completed = json!({"run":{"id":"completed-run"}});
+        store
+            .complete("fixture", "completed-start", &completed)
+            .unwrap();
+        assert_eq!(
+            execute(&store, &session, &completed_start).await.unwrap(),
+            completed
+        );
+        assert_eq!(
+            execute(&store, &session, &pending_start).await.unwrap()["run"]["id"],
+            "recovered-run"
+        );
+        assert_eq!(
+            execute(&store, &session, &pending_response).await.unwrap()["accepted"],
+            true
+        );
+        assert_eq!(
+            execute(&store, &session, &pending_start).await.unwrap()["run"]["id"],
+            "recovered-run"
+        );
+        assert_eq!(
+            execute(&store, &session, &start("retained-start", 9007199254740994))
+                .await
+                .unwrap_err()
+                .code,
+            "conflict"
+        );
+        assert_eq!(
+            execute(&store, &session, &start("new-start", 9007199254740992))
+                .await
+                .unwrap_err()
+                .code,
+            "precision"
+        );
+        assert!(store.snapshot("fixture").unwrap()["pending"]
+            .as_array()
+            .unwrap()
+            .is_empty());
         task.join().unwrap();
     });
 }

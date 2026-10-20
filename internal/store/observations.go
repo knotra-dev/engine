@@ -74,7 +74,7 @@ func observationContext(values contract.Values) (map[string]any, bool) {
 		value := values[key]
 		if len(value.JSON) > 0 {
 			decoded, err := contract.DecodeJSON(value.JSON)
-			if err != nil || !clientPreviewNumbers(decoded) {
+			if err != nil || !ClientPreviewNumbers(decoded) {
 				truncated = true
 				continue
 			}
@@ -95,10 +95,11 @@ func observationContext(values contract.Values) (map[string]any, bool) {
 	return contract.ContextEnvelope(bounded), truncated
 }
 
+// ClientPreviewNumbers accepts numbers a JavaScript preview can read safely.
 // Internal CEL values may use the full int64 range. A preview must not make an
 // otherwise readable run fail the desktop client's lossless-number validation.
 // Omit the whole port rather than rounding or changing its declared value type.
-func clientPreviewNumbers(value any) bool {
+func ClientPreviewNumbers(value any) bool {
 	const maximum = 9007199254740991
 	switch value := value.(type) {
 	case int64:
@@ -107,13 +108,13 @@ func clientPreviewNumbers(value any) bool {
 		return !math.IsNaN(value) && !math.IsInf(value, 0) && (math.Trunc(value) != value || math.Abs(value) <= maximum)
 	case map[string]any:
 		for _, item := range value {
-			if !clientPreviewNumbers(item) {
+			if !ClientPreviewNumbers(item) {
 				return false
 			}
 		}
 	case []any:
 		for _, item := range value {
-			if !clientPreviewNumbers(item) {
+			if !ClientPreviewNumbers(item) {
 				return false
 			}
 		}

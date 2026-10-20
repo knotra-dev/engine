@@ -294,6 +294,7 @@ function EngineRunDetail({
         </div>
       </header>
       <Diagnostics diagnostics={run.diagnostics} />
+      {run.dataTruncated && <p role="status">{t('observe.dataTruncated')}</p>}
       <div className="underline-tabs">
         {[
           'graph',

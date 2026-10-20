@@ -61,6 +61,7 @@ type Run struct {
 	Instances        []Instance                 `json:"instances"`
 	Diagnostics      []contract.Diagnostic      `json:"diagnostics"`
 	AvailableActions []string                   `json:"availableActions"`
+	DataTruncated    bool                       `json:"dataTruncated,omitempty"`
 }
 
 type Event struct {
@@ -76,16 +77,18 @@ type Event struct {
 }
 
 type HumanRequest struct {
-	ID             string          `json:"id"`
-	RunID          string          `json:"runId"`
-	InstanceID     string          `json:"instanceId"`
-	AttemptID      string          `json:"attemptId"`
-	Status         string          `json:"status"`
-	Prompt         string          `json:"prompt"`
-	CreatedAt      time.Time       `json:"createdAt"`
-	Deadline       time.Time       `json:"deadline"`
-	Inputs         any             `json:"inputs"`
-	ResponseSchema json.RawMessage `json:"responseSchema"`
+	ID                 string          `json:"id"`
+	RunID              string          `json:"runId"`
+	InstanceID         string          `json:"instanceId"`
+	AttemptID          string          `json:"attemptId"`
+	Status             string          `json:"status"`
+	Prompt             string          `json:"prompt"`
+	CreatedAt          time.Time       `json:"createdAt"`
+	Deadline           time.Time       `json:"deadline"`
+	Inputs             any             `json:"inputs"`
+	ResponseSchema     json.RawMessage `json:"responseSchema"`
+	ResponseSchemaJSON string          `json:"responseSchemaJSON,omitempty"`
+	DataTruncated      bool            `json:"dataTruncated,omitempty"`
 }
 
 type Page[T any] struct {

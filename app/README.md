@@ -86,8 +86,8 @@ KNOTRA_TEST_DESKTOP=1 \
 
 Only inference uses a fixed HTTP provider; API/SSE, PostgreSQL, Docker, file tools and artifacts
 remain real. This does not replace live-model acceptance. Failed evidence stays under
-`.knotra/integration-work/desktop-*`. The desktop workflow runs this comparison when manually
-triggered. See [verification](../docs/verification.md) for check boundaries.
+`.knotra/integration-work/desktop-*`. The desktop workflow runs this comparison on pull requests,
+pushes to `main` and manual runs. See [verification](../docs/verification.md) for check boundaries.
 
 On macOS, `bun run desktop:build -- --bundles app` creates
 `src-tauri/target/release/bundle/macos/Knotra.app`. Signing/notarization are not configured;

@@ -22,6 +22,81 @@ async function persisted(page: Page) {
   return page.evaluate(() => JSON.parse(localStorage.getItem('knotra.workspace.v1')!));
 }
 
+test('only one tab can write drafts and closing it releases the workspace', async ({
+  page,
+  context,
+}) => {
+  await open(page);
+  const backup = await persisted(page);
+  const other = await context.newPage();
+  await other.goto('/');
+  await expect(
+    other.getByRole('heading', { name: 'Could not open the saved workspace' }),
+  ).toBeVisible();
+  await expect(
+    other.getByText(
+      'This workspace is already open in another browser tab. Close that tab and retry.',
+    ),
+  ).toBeVisible();
+
+  await page
+    .getByRole('textbox', { name: 'Description', exact: true })
+    .fill('Preserve the active tab edits');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.evaluate(() => window.dispatchEvent(new Event('beforeunload')));
+  expect((await activeWorkspace(page)).source).toContain('Preserve the active tab edits');
+
+  // A secondary tab must not bypass ownership through the recovery restore action.
+  await other.getByLabel('Restore from a backup', { exact: true }).setInputFiles({
+    name: 'stale-workspace.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(backup)),
+  });
+  await other.getByRole('button', { name: 'Restore backup', exact: true }).click();
+  await other.evaluate(() => window.dispatchEvent(new Event('beforeunload')));
+  expect((await activeWorkspace(page)).source).toContain('Preserve the active tab edits');
+
+  await page.close();
+  await other.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect(other.locator('.pipelines-page')).toBeVisible();
+  await openActiveEditor(other);
+  await expect(other.getByRole('textbox', { name: 'Description', exact: true })).toHaveValue(
+    'Preserve the active tab edits',
+  );
+});
+
+test('unsupported workspace locking preserves browser data', async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, 'locks', { value: undefined }));
+  await page.goto('/');
+  await expect(
+    page.getByText(
+      'This browser cannot safely lock the workspace. Use a browser with Web Locks support.',
+    ),
+  ).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('knotra.workspace.v1'))).toBeNull();
+});
+
+test('unreadable workspace recovery keeps ownership while restoring a valid backup', async ({
+  page,
+}) => {
+  await open(page);
+  const backup = await persisted(page);
+  await page.addInitScript(() => localStorage.setItem('knotra.workspace.v1', '{broken'));
+  await page.reload();
+  await expect(
+    page.getByRole('heading', { name: 'Could not open the saved workspace' }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('knotra.workspace.v1'))).toBe('{broken');
+  await page.getByLabel('Restore from a backup', { exact: true }).setInputFiles({
+    name: 'workspace.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(backup)),
+  });
+  await page.getByRole('button', { name: 'Restore backup', exact: true }).click();
+  await expect(page.locator('.pipelines-page')).toBeVisible();
+  expect(await persisted(page)).toEqual(backup);
+});
+
 test('authoring stays synchronized and navigation preference survives reload', async ({ page }) => {
   const failures: string[] = [];
   page.on('pageerror', (e) => failures.push(e.message));

@@ -11,6 +11,12 @@ import type { DemoRun, Workspace } from './types';
 export const STARTER_REVISION = 4;
 
 const KEY = 'knotra.workspace.v1';
+const WORKSPACE_BUSY =
+  'This workspace is already open in another browser tab. Close that tab and retry.';
+// Fast Refresh can replace this module while the tab still owns its browser lock.
+const workspaceSession: { browserOpen: boolean; initialLoad?: Promise<State> } = import.meta.hot
+  ?.data.workspaceSession ?? { browserOpen: false };
+if (import.meta.hot) import.meta.hot.data.workspaceSession = workspaceSession;
 const foldPath = (path: string) => path.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
 
 export interface State {
@@ -131,14 +137,35 @@ export async function migrateStarters(state: State): Promise<State> {
 }
 
 let writes: Promise<void> = Promise.resolve();
-let initialLoad: Promise<State> | undefined;
 
 export function loadWorkspace(): Promise<State> {
-  return (initialLoad ??= readWorkspace());
+  return (workspaceSession.initialLoad ??= readWorkspace());
 }
 
 async function readWorkspace(): Promise<State> {
   if (!desktop) {
+    await new Promise<void>((resolve, reject) => {
+      if (!navigator.locks) {
+        reject(
+          new Error(
+            'This browser cannot safely lock the workspace. Use a browser with Web Locks support.',
+          ),
+        );
+        return;
+      }
+      void navigator.locks
+        .request(KEY, { ifAvailable: true }, (lock) => {
+          if (!lock) {
+            reject(new Error(WORKSPACE_BUSY));
+            return;
+          }
+          workspaceSession.browserOpen = true;
+          resolve();
+          // The browser releases this lock when the tab closes; saves remain synchronous.
+          return new Promise<void>(() => {});
+        })
+        .catch(reject);
+    });
     const loaded = loadState();
     const migrated = await migrateStarters(loaded);
     if (migrated !== loaded) await saveState(migrated);
@@ -160,6 +187,7 @@ async function readWorkspace(): Promise<State> {
 export function saveState(state: State): Promise<void> {
   if (!desktop) {
     try {
+      if (!workspaceSession.browserOpen) throw new Error(WORKSPACE_BUSY);
       localStorage.setItem(KEY, JSON.stringify(state));
       return Promise.resolve();
     } catch (e) {
@@ -247,6 +275,7 @@ export function readBackup(text: string): State {
       !Array.isArray(run.files) ||
       !Array.isArray(run.events) ||
       !Array.isArray(run.artifacts) ||
+      (run.requestId !== undefined && typeof run.requestId !== 'string') ||
       !run.nodes ||
       !run.inputs ||
       !run.outputs
@@ -255,7 +284,9 @@ export function readBackup(text: string): State {
     if (
       !run.events.every(
         (event: any) =>
-          event && ['id', 'at', 'message'].every((key) => typeof event[key] === 'string'),
+          event &&
+          ['id', 'at', 'message'].every((key) => typeof event[key] === 'string') &&
+          (event.node === undefined || typeof event.node === 'string'),
       ) ||
       !run.artifacts.every(
         (artifact: any) =>

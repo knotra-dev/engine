@@ -207,7 +207,7 @@ func ReadPlan(ctx context.Context, q Querier, id string) (contract.Plan, error) 
 }
 
 func (s *Store) Runs(ctx context.Context, cursor string) ([]protocol.Run, error) {
-	documents, err := db.New(s.Pool).ListRuns(ctx, cursor)
+	documents, err := db.New(s.Pool).ListRuns(ctx, db.ListRunsParams{Cursor: cursor, MaxBytes: MaxListPageBytes})
 	runs, err := decodeRecords[protocol.Run](documents, err)
 	if err != nil {
 		return nil, err

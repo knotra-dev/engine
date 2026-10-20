@@ -39,6 +39,17 @@ are 256 MiB, allowing encoded packages and values; notation limits still apply s
 desktop client retains its 96 MiB JSON response limit. Lists use cursors and a soft page byte
 budget; a single large item may exceed that budget.
 
+Run reads (`GET /runs`, `GET /runs/{runId}`), admission receipts (`POST /runs`) and human request
+lists (`GET /requests`) accept `?preview=javascript`. Desktop and browser clients use this
+projection: an entire input/output port is omitted when it contains an integer outside JavaScript's
+safe range, and `dataTruncated: true` marks the affected run or request. Safe ports retain their
+original JSON types. If a human response schema contains such a number, the preview returns
+`responseSchema: null` and its exact text in `responseSchemaJSON`; desktop shows that text and
+directs the operator to submit through the CLI. The original schema still governs validation.
+Without this query parameter the API returns exact values, including int64 inputs and outputs.
+Previewing never changes saved execution values or command receipts; retrying the same admission
+command without the parameter retrieves its original complete receipt.
+
 A browser preview uses the same contract with browser fetch. Its engine must explicitly support CORS
 for the preview origin (`http://127.0.0.1:1420` during development), `GET`, `POST`, `OPTIONS` and
 `Authorization`, `Content-Type`, `Idempotency-Key`, `Last-Event-ID` headers. Native requests do not

@@ -114,6 +114,7 @@ function EngineResponse({
   const [jsonError, setJsonError] = useState(false);
   const [busy, setBusy] = useState(false);
   async function submit() {
+    if (request.responseSchema === null) return;
     setError('');
     setLocalError('');
     setJsonError(false);
@@ -158,6 +159,10 @@ function EngineResponse({
       </header>
       <div className="review-content">
         <p className="review-prompt">{request.prompt}</p>
+        {request.dataTruncated && <p role="status">{t('observe.dataTruncated')}</p>}
+        {request.responseSchema === null && (
+          <p role="status">{t('execution.schemaPreviewUnavailable')}</p>
+        )}
         <p className="small muted">
           {t('execution.deadlineTime', { time: time(request.deadline, locale) })}
         </p>
@@ -177,7 +182,9 @@ function EngineResponse({
         </details>
         <details>
           <summary>{t('execution.responseSchema')}</summary>
-          <pre className="json-view">{JSON.stringify(request.responseSchema, null, 2)}</pre>
+          <pre className="json-view">
+            {request.responseSchemaJSON ?? JSON.stringify(request.responseSchema, null, 2)}
+          </pre>
         </details>
       </div>
       <div className="response-form">
@@ -207,6 +214,7 @@ function EngineResponse({
             className="button primary"
             disabled={
               !engine.info ||
+              request.responseSchema === null ||
               busy ||
               engine.pending.some(
                 (item) => item.request.op === 'respond' && item.request.requestId === request.id,

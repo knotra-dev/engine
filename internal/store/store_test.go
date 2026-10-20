@@ -651,6 +651,9 @@ func TestSQLCPageBytesRetainCursorMarker(t *testing.T) {
 			if err := s.SaveRequestTx(ctx, tx, execution.Request{ID: id, RunID: runID, Kind: "human", Status: "open", Prompt: strings.Repeat("large", 256), Deadline: time.Now().Add(time.Minute)}); err != nil {
 				return err
 			}
+			if err := insertRun(ctx, tx, protocol.Run{ID: id, DefinitionID: id, Status: "succeeded", Outputs: map[string]json.RawMessage{"large": json.RawMessage(`"` + strings.Repeat("large", 256) + `"`)}}, contract.Plan{}, contract.Values{}); err != nil {
+				return err
+			}
 		}
 		return nil
 	}); err != nil {
@@ -675,6 +678,21 @@ func TestSQLCPageBytesRetainCursorMarker(t *testing.T) {
 	requests, err := queries.ListHumanRequests(ctx, db.ListHumanRequestsParams{MaxBytes: 512})
 	if err != nil || len(requests) != 2 {
 		t.Fatalf("request page: count=%d error=%v", len(requests), err)
+	}
+	cursor = ""
+	for i := 9; i >= 0; i-- {
+		documents, err := queries.ListRuns(ctx, db.ListRunsParams{Cursor: cursor, MaxBytes: 512})
+		if err != nil || len(documents) != 2 {
+			t.Fatalf("run page %d: count=%d error=%v", i, len(documents), err)
+		}
+		var run protocol.Run
+		if err := json.Unmarshal(documents[0], &run); err != nil {
+			t.Fatal(err)
+		}
+		if run.ID != fmt.Sprintf("sqlc_%02d", i) {
+			t.Fatalf("cursor lost run: %s", run.ID)
+		}
+		cursor = run.ID
 	}
 }
 

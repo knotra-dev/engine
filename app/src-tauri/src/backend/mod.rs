@@ -213,6 +213,9 @@ impl Session {
         if let Some(instance_id) = instance_id {
             request = request.query(&[("instanceId", instance_id)]);
         }
+        if (path.first() == Some(&"runs") && path.len() <= 2) || path == ["requests"] {
+            request = request.query(&[("preview", "javascript")]);
+        }
         let response = request.send().await.map_err(Error::transport)?;
         let status = response.status();
         let bytes = limited(response, 96 * 1024 * 1024).await?;
@@ -649,6 +652,9 @@ async fn execute(store: &store::Store, session: &Session, call: &Call) -> Result
     let (method, path, body, cursor) = call.route();
     session.url(&path)?; // Reject malformed targets before creating a pending network command.
     let command = serde_json::to_value(call).map_err(Error::storage)?;
+    let validate_new = || {
+        check_safe_numbers(&command).map_err(|_| Error::new("precision", "The app cannot send numbers outside JavaScript’s safe range. Use the CLI for exact values."))
+    };
     if let Some(id) = call.operation() {
         if id.is_empty()
             || id.len() > 128
@@ -658,12 +664,14 @@ async fn execute(store: &store::Store, session: &Session, call: &Call) -> Result
         {
             return Err(Error::new("input", "Invalid operation ID."));
         }
-        if let Some(cached) = store.prepare(&session.key, id, &command)? {
+        if let Some(cached) = store.prepare(&session.key, id, &command, validate_new)? {
             if let Some(rejection) = cached.get("clientRejection") {
                 return Err(serde_json::from_value(rejection.clone()).map_err(Error::storage)?);
             }
             return Ok(cached);
         }
+    } else {
+        validate_new()?;
     }
     let instance_id = match call {
         Call::History { instance_id, .. } => instance_id.as_deref(),

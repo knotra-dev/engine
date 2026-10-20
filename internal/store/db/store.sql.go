@@ -199,11 +199,31 @@ func (q *Queries) ListInstances(ctx context.Context, runID string) ([][]byte, er
 }
 
 const listRuns = `-- name: ListRuns :many
-SELECT document FROM knotra_runs WHERE ($1::text='' OR id<$1) ORDER BY id DESC LIMIT 101
+WITH candidates AS (
+    SELECT id,octet_length(document::text) AS bytes
+    FROM knotra_runs
+    WHERE ($2::text='' OR id<$2)
+    ORDER BY id DESC
+    LIMIT 101
+), page AS (
+    SELECT id,row_number() OVER (ORDER BY id DESC) AS position,
+        COALESCE(sum(bytes) OVER (ORDER BY id DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) AS preceding_bytes
+    FROM candidates
+)
+SELECT d.document
+FROM knotra_runs d JOIN page p ON p.id=d.id
+WHERE p.position<=2 OR p.preceding_bytes<=$1::bigint
+ORDER BY d.id DESC
 `
 
-func (q *Queries) ListRuns(ctx context.Context, dollar_1 string) ([][]byte, error) {
-	rows, err := q.db.Query(ctx, listRuns, dollar_1)
+type ListRunsParams struct {
+	MaxBytes int64
+	Cursor   string
+}
+
+// Bound complete root outputs before sqlc materializes them; keep one cursor marker.
+func (q *Queries) ListRuns(ctx context.Context, arg ListRunsParams) ([][]byte, error) {
+	rows, err := q.db.Query(ctx, listRuns, arg.MaxBytes, arg.Cursor)
 	if err != nil {
 		return nil, err
 	}

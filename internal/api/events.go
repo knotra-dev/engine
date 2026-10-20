@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,6 +28,18 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, 500, "UNAVAILABLE", "streaming is unavailable", nil)
 		return
 	}
+	controller := http.NewResponseController(w)
+	deadlineDone := make(chan struct{})
+	stopDeadline := context.AfterFunc(r.Context(), func() {
+		_ = controller.SetWriteDeadline(time.Now())
+		close(deadlineDone)
+	})
+	defer func() {
+		// A cancellation callback must not touch a connection after its handler returns.
+		if !stopDeadline() {
+			<-deadlineDone
+		}
+	}()
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
@@ -38,7 +51,10 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	defer heartbeat.Stop()
 
 	for {
-		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(15 * time.Second))
+		_ = controller.SetWriteDeadline(time.Now().Add(15 * time.Second))
+		if r.Context().Err() != nil {
+			return
+		}
 		for _, ev := range batch {
 			b, e := json.Marshal(ev)
 			if e != nil {
@@ -63,7 +79,10 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case <-heartbeat.C:
-			_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(15 * time.Second))
+			_ = controller.SetWriteDeadline(time.Now().Add(15 * time.Second))
+			if r.Context().Err() != nil {
+				return
+			}
 			if _, e = io.WriteString(w, ": heartbeat\n\n"); e != nil {
 				return
 			}

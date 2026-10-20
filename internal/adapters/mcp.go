@@ -423,10 +423,38 @@ func (r *Runner) session(ctx context.Context, req Request, alias string) (*mcpSe
 	}
 	key := req.RunID + "/" + req.ScopeID + "/" + alias
 	cache := r.cache()
-	cache.mu.Lock()
-	defer cache.mu.Unlock()
-	if s := cache.sessions[key]; s != nil {
-		return s, func() {}, nil
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, nil, err
+		}
+		cache.mu.Lock()
+		if initializing := cache.initializing[key]; initializing != nil {
+			cache.mu.Unlock()
+			select {
+			case <-ctx.Done():
+				return nil, nil, ctx.Err()
+			case <-initializing:
+				continue
+			}
+		}
+		if s := cache.sessions[key]; s != nil {
+			cache.mu.Unlock()
+			return s, func() {}, nil
+		}
+		initializing := make(chan struct{})
+		cache.initializing[key] = initializing
+		cache.save(key, nil)
+		cache.mu.Unlock()
+		defer func() {
+			cache.mu.Lock()
+			delete(cache.initializing, key)
+			if cache.sessions[key] == nil {
+				cache.remove(key)
+			}
+			cache.mu.Unlock()
+			close(initializing)
+		}()
+		break
 	}
 	op := Operation{
 		ID:     operationID(Request{RunID: req.RunID, InstanceID: req.ScopeID}, "session/"+alias, false),
@@ -450,7 +478,9 @@ func (r *Runner) session(ctx context.Context, req Request, alias string) (*mcpSe
 	if err != nil {
 		return nil, nil, err
 	}
+	cache.mu.Lock()
 	cache.save(key, s)
+	cache.mu.Unlock()
 	return s, func() {}, nil
 }
 

@@ -106,16 +106,16 @@ for the Python sources. The structural fixture script has reproducible
 [setup instructions](contracts/v1/fixtures/README.md).
 
 On push and pull requests, CI runs Go lint, sqlc generation checks, unit tests and builds, plus
-frontend and contract-script checks. Windows runs its unit tests and CLI build.
+frontend, Playwright browser, native macOS and contract-script checks. Desktop engine acceptance
+also compares both backends against disposable services. Windows runs its unit tests and CLI build.
 
-Full checks run manually from **Actions → Go → Run workflow** and **Actions → Desktop and
-documentation → Run workflow** before a release. These include Docker/PostgreSQL/Temporal
-integration, process recovery, backup/restore, Playwright browser tests, native macOS tests and
-desktop engine acceptance. Browser screenshots and failure traces are written to per-test
-directories in `app/test-results/`; tests must use Playwright output paths rather than OS-specific
-temporary paths. Browser acceptance against a real engine is opt-in. Start an engine with
-`examples/local/profile.yaml` and the exact browser origin as described in
-[app/README](app/README.md), then run from `app/`:
+The broader service checks run manually from **Actions → Go → Run workflow** before a release. These
+include Docker/PostgreSQL/Temporal integration, process recovery and backup/restore. The desktop
+checks can also be rerun from **Actions → Desktop and documentation → Run workflow**. Browser
+screenshots and failure traces are written to per-test directories in `app/test-results/`; tests
+must use Playwright output paths rather than OS-specific temporary paths. Browser acceptance against
+a real engine is opt-in. Start an engine with `examples/local/profile.yaml` and the exact browser
+origin as described in [app/README](app/README.md), then run from `app/`:
 
 ```sh
 KNOTRA_E2E_ENDPOINT=http://127.0.0.1:8787 bun run test:e2e

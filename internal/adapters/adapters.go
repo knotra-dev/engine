@@ -78,13 +78,14 @@ type Runner struct {
 }
 
 type sessionCache struct {
-	mu       sync.Mutex
-	sessions map[string]*mcpSession
+	mu           sync.Mutex
+	sessions     map[string]*mcpSession
+	initializing map[string]chan struct{}
 	// ponytail: sorted active keys bound cleanup scans; use an ordered index if insertion cost matters.
 	keys []string
 }
 
-// Caller holds the cache lock while publishing a newly connected session.
+// Caller holds the cache lock while indexing pending or connected sessions.
 func (c *sessionCache) save(key string, session *mcpSession) {
 	c.sessions[key] = session
 	position, found := slices.BinarySearch(c.keys, key)
@@ -93,11 +94,18 @@ func (c *sessionCache) save(key string, session *mcpSession) {
 	}
 }
 
+func (c *sessionCache) remove(key string) {
+	delete(c.sessions, key)
+	if position, found := slices.BinarySearch(c.keys, key); found {
+		c.keys = slices.Delete(c.keys, position, position+1)
+	}
+}
+
 func (r *Runner) cache() *sessionCache {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.shared == nil {
-		r.shared = &sessionCache{sessions: map[string]*mcpSession{}}
+		r.shared = &sessionCache{sessions: map[string]*mcpSession{}, initializing: map[string]chan struct{}{}}
 	}
 	return r.shared
 }
@@ -280,7 +288,7 @@ func (r *Runner) Close() error {
 	cache.mu.Unlock()
 	var failures error
 	for _, key := range keys {
-		failures = errors.Join(failures, r.ReleaseSession(key))
+		failures = errors.Join(failures, r.releaseSession(key, true))
 	}
 	return failures
 }
@@ -294,7 +302,7 @@ func (r *Runner) ReleaseRun(runID string) error {
 	var failures error
 	for _, key := range keys {
 		if strings.HasPrefix(key, runID+"/") {
-			failures = errors.Join(failures, r.ReleaseSession(key))
+			failures = errors.Join(failures, r.releaseSession(key, true))
 		}
 	}
 	return failures
@@ -316,12 +324,26 @@ func (r *Runner) SessionPage(cursor string) ([]string, error) {
 // or the server reports 404/405. It never
 // waits on a different session's initialization or an active call.
 func (r *Runner) ReleaseSession(key string) error {
+	return r.releaseSession(key, false)
+}
+
+func (r *Runner) releaseSession(key string, wait bool) error {
 	cache := r.cache()
-	if !cache.mu.TryLock() {
+	if wait {
+		cache.mu.Lock()
+	} else if !cache.mu.TryLock() {
 		return errors.New("shared MCP session initialization is busy")
 	}
 	s := cache.sessions[key]
+	initializing := cache.initializing[key]
 	cache.mu.Unlock()
+	if initializing != nil {
+		if !wait {
+			return errors.New("shared MCP session initialization is busy")
+		}
+		<-initializing
+		return r.releaseSession(key, true)
+	}
 	if s == nil {
 		return nil
 	}
@@ -337,10 +359,7 @@ func (r *Runner) ReleaseSession(key string) error {
 	}
 	defer cache.mu.Unlock()
 	if cache.sessions[key] == s {
-		delete(cache.sessions, key)
-		if position, found := slices.BinarySearch(cache.keys, key); found {
-			cache.keys = slices.Delete(cache.keys, position, position+1)
-		}
+		cache.remove(key)
 	}
 	return nil
 }

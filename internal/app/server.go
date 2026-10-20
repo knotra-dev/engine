@@ -271,9 +271,12 @@ func Serve(ctx context.Context, o Options, log *slog.Logger) (serveErr error) {
 		defer w.Stop()
 		srv.WorkerBackends = append(srv.WorkerBackends, execution.BackendTemporal)
 	}
+	requestCtx, stopRequests := context.WithCancel(ctx)
+	defer stopRequests()
 	server := &http.Server{
 		Addr:              o.Listen,
 		Handler:           telemetry.HTTP(srv.Handler()),
+		BaseContext:       func(net.Listener) context.Context { return requestCtx },
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       2 * time.Minute,
 		IdleTimeout:       2 * time.Minute,
@@ -351,6 +354,8 @@ serveLoop:
 		}
 	}
 
+	// Long-lived event streams must finish before Shutdown can drain connections.
+	stopRequests()
 	shutdownCtx, stop := context.WithTimeout(context.Background(), 10*time.Second)
 	defer stop()
 	shutdownErr := server.Shutdown(shutdownCtx)

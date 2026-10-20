@@ -375,6 +375,16 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "preview",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["javascript"]
+            },
+            "description": "Omit entire preview ports containing integers outside the JavaScript safe range. Authoritative values and command receipts remain exact. Truncation is explicit; an unsafe human response schema is returned as exact text with responseSchema:null."
           }
         ]
       },
@@ -418,6 +428,16 @@
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,128}$"
             }
+          },
+          {
+            "name": "preview",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["javascript"]
+            },
+            "description": "Omit entire preview ports containing integers outside the JavaScript safe range. Authoritative values and command receipts remain exact. Truncation is explicit; an unsafe human response schema is returned as exact text with responseSchema:null."
           }
         ],
         "requestBody": {
@@ -492,6 +512,16 @@
               "minLength": 1,
               "maxLength": 256
             }
+          },
+          {
+            "name": "preview",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["javascript"]
+            },
+            "description": "Omit entire preview ports containing integers outside the JavaScript safe range. Authoritative values and command receipts remain exact. Truncation is explicit; an unsafe human response schema is returned as exact text with responseSchema:null."
           }
         ]
       }
@@ -721,6 +751,16 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "preview",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["javascript"]
+            },
+            "description": "Omit entire preview ports containing integers outside the JavaScript safe range. Authoritative values and command receipts remain exact. Truncation is explicit; an unsafe human response schema is returned as exact text with responseSchema:null."
           }
         ]
       }
@@ -1538,8 +1578,19 @@
               },
               {
                 "type": "boolean"
+              },
+              {
+                "type": "null"
               }
             ]
+          },
+          "dataTruncated": {
+            "type": "boolean",
+            "description": "True when a JavaScript preview omits input ports or cannot present the response schema safely."
+          },
+          "responseSchemaJSON": {
+            "type": "string",
+            "description": "Exact authored response schema text when responseSchema is null in a JavaScript preview; submit the response through an exact JSON client."
           }
         },
         "required": [
@@ -1667,6 +1718,10 @@
             "items": {
               "enum": ["cancel", "resume", "resolve"]
             }
+          },
+          "dataTruncated": {
+            "type": "boolean",
+            "description": "True when a JavaScript preview omits input or output ports that cannot be represented safely."
           }
         },
         "required": [

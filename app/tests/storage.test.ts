@@ -138,3 +138,21 @@ it('does not confuse a custom review.yaml package with the new starter', async (
   expect(migrated.workspaces).toHaveLength(2);
   expect(migrated.workspaces[0]).toBe(custom);
 });
+
+it.each([{}, [], null, 12])('rejects malformed optional demo IDs and event nodes: %j', (value) => {
+  const state = freshState();
+  const workspace = fromExample(examples.find((example) => example.id === 'research')!);
+  state.runs = [createDemoRun(workspace, 'Backup validation')];
+  state.runs[0].status = 'waiting_human';
+  const backup = JSON.parse(JSON.stringify(state));
+  backup.runs[0].requestId = value;
+  expect(() => readBackup(JSON.stringify(backup))).toThrow('Invalid demo history in backup.');
+  delete backup.runs[0].requestId;
+  backup.runs[0].events[0].node = value;
+  expect(() => readBackup(JSON.stringify(backup))).toThrow(
+    'Invalid demo outputs or events in backup.',
+  );
+  backup.runs[0].requestId = 'saved-request';
+  backup.runs[0].events[0].node = 'research';
+  expect(readBackup(JSON.stringify(backup))).toEqual(backup);
+});

@@ -73,7 +73,8 @@ async function startStarter(page: Page, starterTitle: string) {
   await expect(page.getByRole('dialog')).toContainText('Engine admission checks passed');
   const started = page.waitForResponse(
     (response) =>
-      response.url() === `${endpoint}/v1/runs` && response.request().method() === 'POST',
+      response.url().split('?')[0] === `${endpoint}/v1/runs` &&
+      response.request().method() === 'POST',
   );
   await page.getByRole('button', { name: 'Start run', exact: true }).click();
   const response = await started;
