@@ -1162,14 +1162,6 @@ svg {
   color: var(--muted);
   margin-top: 10px;
 }
-.scope-note {
-  border-top: 1px solid var(--border);
-  padding-top: 14px;
-  font-size: 19px;
-  line-height: 1.65;
-  color: var(--muted);
-  margin-top: 24px;
-}
 
 .community-copy {
   width: 820px;
