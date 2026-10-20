@@ -1,6 +1,6 @@
 # Contributing
 
-[Development and checks](https://github.com/knotra-dev/engine/wiki/Development) · [Contract references](https://github.com/knotra-dev/engine/wiki/Pipelines) · [Verification](https://github.com/knotra-dev/engine/wiki/Verification)
+[Development and checks](https://github.com/knotra-dev/engine/wiki/Development) · [Writing pipelines](https://github.com/knotra-dev/engine/wiki/Pipelines)
 
 Run `make check` before submitting changes. Contract changes update schema, diagnostics, fixtures, runtime and Wiki together; preserve persisted execution decisions and explicit handling of uncertain effects.
 

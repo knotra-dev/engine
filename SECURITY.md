@@ -19,4 +19,4 @@ The current engine is intended for a trusted operator managing its hosts. Remote
 TLS and a bearer token. Docker sandbox permissions, image selection, network allowlists and secret
 grants are engine configuration. A shared public service for independent users requires additional
 isolation and access controls. See [running](https://github.com/knotra-dev/engine/wiki/Deployment) and
-[adapter guarantees](https://github.com/knotra-dev/engine/wiki/Reference-Adapters) for the supported boundaries.
+[execution and isolation](https://github.com/knotra-dev/engine/wiki/Architecture) for the supported boundaries.

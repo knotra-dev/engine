@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:knotra:schema:v1",
   "title": "Knotra v1 contract — review candidate",
-  "description": "Structural contract for Pipeline and trusted EngineProfile documents. Normative semantics: https://github.com/knotra-dev/engine/wiki/Reference-Notation and https://github.com/knotra-dev/engine/wiki/Reference-Validation.",
+  "description": "Structural contract for Pipeline and trusted EngineProfile documents. Pipeline guide: https://github.com/knotra-dev/engine/wiki/Pipelines.",
   "oneOf": [
     {
       "$ref": "#/$defs/Pipeline"
