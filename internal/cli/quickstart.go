@@ -89,7 +89,7 @@ func (s *commandState) quickstart(ctx context.Context, setup *bootstrap.Setup, l
 	go func() {
 		done <- app.Serve(serviceCtx, app.Options{
 			Listen: listen, DatabaseURL: dsn,
-			Namespace: "default", TaskQueue: "knotra", DataDir: filepath.Join(config.Dir, "engine"),
+			DataDir:    filepath.Join(config.Dir, "engine"),
 			HelperPath: config.HelperPath, Profiles: []string{filepath.Join(config.Dir, "profile.json")},
 			Version: s.options.Version, CORSOrigin: cors,
 		}, slog.New(slog.NewJSONHandler(logfile, nil)))

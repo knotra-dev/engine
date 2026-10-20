@@ -28,7 +28,6 @@ func (s *commandState) serveCommand() *cobra.Command {
 		return app.Serve(cmd.Context(), o, log)
 	}}
 	f := cmd.Flags()
-	f.StringVar(&o.Backend, "backend", s.env("KNOTRA_BACKEND", "river"), "Execution backend: river or temporal (legacy)")
 	f.StringVar(&o.HostID, "host-id", s.env("KNOTRA_HOST_ID", "local"), "Stable execution host identity (retain across restarts)")
 	f.StringVar(&o.SharedDataDir, "shared-data-dir", s.env("KNOTRA_SHARED_DATA_DIR", ""), "Shared artifact/outcome directory; defaults to --data-dir")
 	f.IntVar(&o.ExecutionWorkers, "execution-workers", 16, "Maximum simultaneous River leaf deliveries")
@@ -40,18 +39,10 @@ func (s *commandState) serveCommand() *cobra.Command {
 		"PostgreSQL URL (prefer KNOTRA_DATABASE_URL for credentials)",
 	)
 	f.StringVar(
-		&o.TemporalAddress,
-		"temporal-address",
-		s.env("KNOTRA_TEMPORAL_ADDRESS", "127.0.0.1:7233"),
-		"Temporal frontend address",
-	)
-	f.StringVar(&o.Namespace, "namespace", s.env("KNOTRA_TEMPORAL_NAMESPACE", "default"), "Temporal namespace")
-	f.StringVar(&o.TaskQueue, "task-queue", s.env("KNOTRA_TASK_QUEUE", "knotra"), "Temporal task queue")
-	f.StringVar(
 		&o.DataDir,
 		"data-dir",
 		s.env("KNOTRA_DATA_DIR", ".knotra"),
-		"Engine payload, artifact and sandbox directory",
+		"Engine artifact, outcome and sandbox directory",
 	)
 	f.StringArrayVar(&o.Profiles, "profile", nil, "Trusted EngineProfile YAML file (repeatable)")
 	f.StringVar(

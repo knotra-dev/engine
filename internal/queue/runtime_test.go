@@ -157,19 +157,18 @@ func TestRuntimePublishesFullDAGAndRedispatchesCapacityMiss(t *testing.T) {
 	if err := json.Unmarshal(run.Outputs["result"], &result); err != nil || result != answer {
 		t.Fatalf("full export changed: bytes=%d error=%v", len(result), err)
 	}
-	var used, slots, outcomes, succeeded, outbox, redispatched int
+	var used, slots, outcomes, succeeded, redispatched int
 	if err := r.Store.Pool.QueryRow(ctx, `SELECT
 		(SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='model'),
 		(SELECT active_attempts FROM knotra_execution_scopes WHERE run_id=$1 AND id=$1),
 		(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1 AND state='completed' AND outcome IS NOT NULL AND number=1),
 		(SELECT count(*) FROM knotra_events WHERE run_id=$1 AND document->>'type'='node' AND document->>'message'='succeeded'),
-		(SELECT count(*) FROM knotra_outbox WHERE run_id=$1),
 		(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1 AND dispatch_generation>1)`, id).
-		Scan(&used, &slots, &outcomes, &succeeded, &outbox, &redispatched); err != nil {
+		Scan(&used, &slots, &outcomes, &succeeded, &redispatched); err != nil {
 		t.Fatal(err)
 	}
-	if calls.Load() != 3 || used != 3 || slots != 0 || outcomes != 3 || succeeded != 3 || outbox != 0 || redispatched < 1 {
-		t.Fatalf("calls=%d budget=%d slots=%d outcomes=%d successes=%d temporalCommands=%d redispatched=%d", calls.Load(), used, slots, outcomes, succeeded, outbox, redispatched)
+	if calls.Load() != 3 || used != 3 || slots != 0 || outcomes != 3 || succeeded != 3 || redispatched < 1 {
+		t.Fatalf("calls=%d budget=%d slots=%d outcomes=%d successes=%d redispatched=%d", calls.Load(), used, slots, outcomes, succeeded, redispatched)
 	}
 	var previous string
 	var truncated bool

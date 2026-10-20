@@ -1,14 +1,13 @@
 # Persistence
 
-`Store` owns PostgreSQL transactions, durable command receipts, outbox delivery, external operation
-journals, budgets, requests and read projections. `Artifacts` keeps immutable bytes in the engine
-data directory and metadata in PostgreSQL. A runtime artifact becomes visible when its producing
-node commits validated outputs; uploaded inputs are visible immediately.
+`Store` owns PostgreSQL transactions, durable command receipts, external operation journals,
+budgets, requests and read projections. `Artifacts` keeps immutable bytes in the engine data
+directory and metadata in PostgreSQL. A runtime artifact becomes visible when its producing node
+commits validated outputs; uploaded inputs are visible immediately.
 
-For the default River backend, PostgreSQL owns authoritative execution records and queue delivery.
-Execution transitions and their client projections commit together; bounded projections never
-replace complete execution values. Clients do not schedule from these projections. Legacy Temporal
-runs retain their workflow history in Temporal, and their PostgreSQL projections may lag execution.
+PostgreSQL owns authoritative execution records and River queue delivery. Execution transitions and
+their client projections commit together; bounded projections never replace complete execution
+values. Clients do not schedule from these projections.
 
 ## Initial schema
 
@@ -67,7 +66,6 @@ KNOTRA_TEST_DATABASE_URL='postgres://localhost/knotra_dev?sslmode=disable' \
 ```
 
 River recovery requires PostgreSQL plus complete immutable artifact/outcome storage, including
-uncommitted envelopes and MCP evidence. Temporal runs additionally require their Temporal history
-and offloaded payload directory. SQLite in the desktop app is an independent client store. See the
-[River backup procedure](../../docs/running.md#river-backup-and-restore) and
+uncommitted envelopes and MCP evidence. SQLite in the desktop app is an independent client store.
+See the [River backup procedure](../../docs/running.md#river-backup-and-restore) and
 [verification](../../docs/verification.md) for live recovery checks.

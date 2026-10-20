@@ -1,10 +1,10 @@
 # Execution adapters
 
 `Runner` executes one compiled leaf node. Graph scheduling belongs to `internal/scheduler` and
-`internal/queue` for River, or `internal/engine` for legacy Temporal execution; transactional
-budgets, artifacts and operation journals are supplied through `Hooks`. Use `WithHooks` for a
-request-scoped journal/budget binding while retaining run-scoped MCP sessions. Call `ReleaseRun`
-after a run becomes terminal and `Close` on server shutdown.
+`internal/queue`; transactional budgets, artifacts and operation journals are supplied through
+`Hooks`. Use `WithHooks` for a request-scoped journal/budget binding while retaining run-scoped MCP
+sessions. Queue maintenance uses `SessionPage` and `ReleaseSession` to release completed run
+sessions; call `Close` on server shutdown.
 
 Model providers are Ollama native `/api/chat`, OpenAI `/responses` and Anthropic `/messages`. Ollama
 Admission checks installed models and capabilities, and stores model digests. A changed model digest
@@ -96,13 +96,12 @@ feedback while steps remain; a plain text answer is prompted to finish explicitl
 model turns, including completion, while the node deadline and enclosing model/tool budgets also
 apply.
 
-The full attempt is one River execution delivery, or one activity in the legacy Temporal backend.
-Individual external calls and the final validated result use durable operation journals. River also
-captures the completed result in a durable outcome file before database publication. A completed
-attempt can return its recorded outputs; an interrupted attempt with a lost workspace cannot resume
-the in-memory conversation or automatically repeat its effects. See recovery below. The real
-integration scenario exercises file reads, MCP, file writes, Python execution and completion with
-three concurrent agents and independent artifacts.
+The full attempt is one River execution delivery. Individual external calls and the final validated
+result use durable operation journals. River also captures the completed result in a durable outcome
+file before database publication. A completed attempt can return its recorded outputs; an
+interrupted attempt with a lost workspace cannot resume the in-memory conversation or automatically
+repeat its effects. See recovery below. The real integration scenario exercises file reads, MCP,
+file writes, Python execution and completion with three concurrent agents and independent artifacts.
 
 ## Docker backend
 
@@ -127,14 +126,15 @@ process limits are enforced by Docker. Writable tmpfs allocations sum to the pro
 approximately 90% workspace, 5% ABI output, 5% temporary files, and a 4 KiB shared memory directory.
 Tmpfs also counts toward the memory limit.
 
-Each container carries the durable engine identity. `CleanupOwned` removes orphaned containers and
-temporary package directories. Cleanup never selects another engine's containers. The host renews a
-read-only lease every 5 seconds; PID 1 exits when that lease is 45 seconds old, even if the engine
-was killed without running cleanup. All remaining processes stop; a stopped container retains at
-most 16 KiB of supervisor diagnostics until normal cleanup or the next engine startup removes it.
-Code and agent containers also enforce their activity deadline independently of lease renewal.
-Run-scoped MCP services retain the host lease until the run closes. The supervisor disables same-UID
-process tracing so workloads cannot alter its watchdog.
+Each container carries its engine, host and attempt ownership. `ResourcePage` inventories
+containers; `CleanupResource` removes them and their temporary package directories only after a
+durable cleanup claim and matching ownership labels. The host renews a read-only lease every 5
+seconds; PID 1 exits when that lease is 45 seconds old, even if the engine was killed without
+running cleanup. All remaining processes stop; a stopped container retains at most 16 KiB of
+supervisor diagnostics until resource cleanup removes it. Code and agent containers also enforce
+their activity deadline independently of lease renewal. Run-scoped MCP services retain the host
+lease until the run closes. The supervisor disables same-UID process tracing so workloads cannot
+alter its watchdog.
 
 A transient failed read or stale shared-filesystem inode cannot revoke an already verified lease.
 The supervisor retains its last valid expiry and the immutable hard deadline while the host retries
@@ -196,5 +196,5 @@ go test -mod=readonly ./internal/adapters -run '^TestCloudRealStructuredAndAgent
 
 Set `OPENAI_API_KEY` in the environment first. Anthropic uses `ANTHROPIC_API_KEY` and
 `KNOTRA_TEST_ANTHROPIC_MODEL`. Each provider without both values is skipped. Docker/helper settings
-above enable the agent subtest. Agent tools and PostgreSQL recovery on River and the legacy Temporal
-backend are checked in `internal/integration`.
+above enable the agent subtest. Agent tools and PostgreSQL recovery on River are checked in
+`internal/integration`.

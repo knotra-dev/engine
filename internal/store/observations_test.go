@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/engine"
+	"github.com/michael-bill/knotra/internal/execution"
 	"github.com/michael-bill/knotra/internal/protocol"
 )
 
@@ -53,8 +53,8 @@ func TestObservationsPreserveProjectionSequenceAndPagedHistory(t *testing.T) {
 	s := testStore(t)
 	runID, _ := setupRun(t, s)
 	ctx := context.Background()
-	projection := engine.Projection{RunID: runID, Sequence: 1, Kind: "node", InstanceID: "node", NodeID: "work", Pipeline: "pipeline.yaml", Status: "running", Time: time.Now()}
-	if err := s.Project(ctx, projection); err != nil {
+	projection := execution.Projection{RunID: runID, Sequence: 1, Kind: "node", InstanceID: "node", NodeID: "work", Pipeline: "pipeline.yaml", Status: "running", Time: time.Now()}
+	if err := s.project(ctx, projection); err != nil {
 		t.Fatal(err)
 	}
 	for index := range 105 {
@@ -67,13 +67,13 @@ func TestObservationsPreserveProjectionSequenceAndPagedHistory(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := s.Project(ctx, projection); err != nil {
+	if err := s.project(ctx, projection); err != nil {
 		t.Fatal(err)
 	}
 	projection.Sequence, projection.Status = 2, "succeeded"
 	projection.Inputs = contract.Values{"input": {JSON: json.RawMessage(`"hello"`)}}
 	projection.Outputs = contract.Values{"value": {JSON: json.RawMessage(`"done"`)}}
-	if err := s.Project(ctx, projection); err != nil {
+	if err := s.project(ctx, projection); err != nil {
 		t.Fatal(err)
 	}
 	page, err := s.History(ctx, runID, "", "node")

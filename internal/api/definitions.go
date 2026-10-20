@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/execution"
 	"github.com/michael-bill/knotra/internal/protocol"
 	"github.com/michael-bill/knotra/internal/store"
 )
@@ -203,14 +202,7 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		switch s.Backend {
-		case "", execution.BackendTemporal:
-			e = store.PutRun(r.Context(), tx, run, *plan, values)
-		case execution.BackendRiver:
-			run, e = store.PutRiverRun(r.Context(), tx, run, *plan, values, s.Wake)
-		default:
-			e = store.ErrExecutionVersion
-		}
+		run, e = store.PutRiverRun(r.Context(), tx, run, *plan, values, s.Wake)
 		return 201, map[string]any{"run": run}, e
 	})
 }

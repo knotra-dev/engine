@@ -249,7 +249,7 @@ func TestRuntimeRequestCommandsArbitrateUnderContention(t *testing.T) {
 					t.Fatal(err)
 				}
 				var node, request, run, output, responseID, stopCode string
-				var attempts, budget, slots, open, receipts, events, outbox int
+				var attempts, budget, slots, open, receipts, events int
 				var finalDeadline, finalRootDeadline, finalRequestDeadline time.Time
 				var acceptedBefore bool
 				if err := r.Store.Pool.QueryRow(ctx, `SELECT n.state,q.status,r.document->>'status',COALESCE(n.outputs->'approved'->>'json',''),COALESCE(q.response_id,''),COALESCE(r.stop_cause->>'code',''),
@@ -259,10 +259,10 @@ func TestRuntimeRequestCommandsArbitrateUnderContention(t *testing.T) {
 					(SELECT count(*) FROM knotra_requests WHERE run_id=$1 AND status='open'),
 					(SELECT count(*) FROM knotra_commands WHERE id IN ('answer-first','answer-second')),
 					(SELECT count(*) FROM knotra_events WHERE run_id=$1 AND document->>'type'='node' AND document->'data'->>'nodeId'='review' AND document->'data'->>'status'='succeeded'),
-					(SELECT count(*) FROM knotra_outbox WHERE run_id=$1),n.deadline,r.execution_deadline,(q.document->>'deadline')::timestamptz,
+					n.deadline,r.execution_deadline,(q.document->>'deadline')::timestamptz,
 					COALESCE(q.accepted_at < n.deadline,false)
 					FROM knotra_runs r JOIN knotra_execution_nodes n ON n.run_id=r.id AND n.id=$2 JOIN knotra_requests q ON q.id=$3 WHERE r.id=$1`, id, instance, requestID).
-					Scan(&node, &request, &run, &output, &responseID, &stopCode, &attempts, &budget, &slots, &open, &receipts, &events, &outbox, &finalDeadline, &finalRootDeadline, &finalRequestDeadline, &acceptedBefore); err != nil {
+					Scan(&node, &request, &run, &output, &responseID, &stopCode, &attempts, &budget, &slots, &open, &receipts, &events, &finalDeadline, &finalRootDeadline, &finalRequestDeadline, &acceptedBefore); err != nil {
 					t.Fatal(err)
 				}
 				wantAttempts, wantOpen, wantReceipts, wantEvents := 0, 1, 2, 1
@@ -289,8 +289,8 @@ func TestRuntimeRequestCommandsArbitrateUnderContention(t *testing.T) {
 				if mode == "failed_then_answer" {
 					wantStop = "EXTERNAL_FAILED"
 				}
-				if node != wantState || request != wantRequest || run != wantRun || output != wantOutput || responseID != wantResponse || stopCode != wantStop || attempts != wantAttempts || budget != wantAttempts || calls.Load() != int32(wantAttempts) || slots != 0 || open != wantOpen || receipts != wantReceipts || events != wantEvents || outbox != 0 || acceptedBefore != wantAccepted || !deadline.Equal(finalDeadline) || !deadline.Equal(finalRequestDeadline) || !rootDeadline.Equal(finalRootDeadline) {
-					t.Fatalf("node/request/run=%s/%s/%s output=%s response=%s cause=%s attempts/budget/calls=%d/%d/%d slots=%d open=%d receipts=%d events=%d outbox=%d acceptedBefore=%v deadlines=%v/%v/%v", node, request, run, output, responseID, stopCode, attempts, budget, calls.Load(), slots, open, receipts, events, outbox, acceptedBefore, deadline.Equal(finalDeadline), deadline.Equal(finalRequestDeadline), rootDeadline.Equal(finalRootDeadline))
+				if node != wantState || request != wantRequest || run != wantRun || output != wantOutput || responseID != wantResponse || stopCode != wantStop || attempts != wantAttempts || budget != wantAttempts || calls.Load() != int32(wantAttempts) || slots != 0 || open != wantOpen || receipts != wantReceipts || events != wantEvents || acceptedBefore != wantAccepted || !deadline.Equal(finalDeadline) || !deadline.Equal(finalRequestDeadline) || !rootDeadline.Equal(finalRootDeadline) {
+					t.Fatalf("node/request/run=%s/%s/%s output=%s response=%s cause=%s attempts/budget/calls=%d/%d/%d slots=%d open=%d receipts=%d events=%d acceptedBefore=%v deadlines=%v/%v/%v", node, request, run, output, responseID, stopCode, attempts, budget, calls.Load(), slots, open, receipts, events, acceptedBefore, deadline.Equal(finalDeadline), deadline.Equal(finalRequestDeadline), rootDeadline.Equal(finalRootDeadline))
 				}
 			})
 		}

@@ -27,7 +27,6 @@ import (
 	"github.com/michael-bill/knotra/internal/app"
 	"github.com/michael-bill/knotra/internal/client"
 	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/execution"
 	"github.com/michael-bill/knotra/internal/protocol"
 	"github.com/michael-bill/knotra/internal/queue"
 	"github.com/michael-bill/knotra/internal/store"
@@ -54,7 +53,7 @@ func TestRiverStartupProcessCrashBoundaries(t *testing.T) {
 			parameters := dsn.Query()
 			parameters.Set("pool_max_conns", "1")
 			dsn.RawQuery = parameters.Encode()
-			options := app.Options{Backend: execution.BackendRiver, Listen: unusedAddress(t), DatabaseURL: dsn.String(), TemporalAddress: "127.0.0.1:1", DataDir: filepath.Join(work, "engine"), Profiles: []string{profilePath}}
+			options := app.Options{Listen: unusedAddress(t), DatabaseURL: dsn.String(), DataDir: filepath.Join(work, "engine"), Profiles: []string{profilePath}}
 			optionsPath := filepath.Join(work, "server.json")
 			writeJSON(t, optionsPath, options)
 			api := &client.Client{BaseURL: "http://" + options.Listen, StateDir: filepath.Join(work, "client")}
@@ -269,7 +268,7 @@ func TestRiverShutdownProcessBoundaries(t *testing.T) {
 			profile.Spec.Models = map[string]contract.ModelConnection{"cloud": {Provider: "openai", Model: "fixture-model", BaseURL: provider.URL, Auth: map[string]contract.Credential{"key": {SecretRef: "fixture"}}}}
 			profilePath := filepath.Join(work, "profile.json")
 			writeJSON(t, profilePath, profile)
-			options := app.Options{Backend: execution.BackendRiver, Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), TemporalAddress: "127.0.0.1:1", DataDir: filepath.Join(work, "engine"), Profiles: []string{profilePath}}
+			options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), DataDir: filepath.Join(work, "engine"), Profiles: []string{profilePath}}
 			optionsPath := filepath.Join(work, "server.json")
 			writeJSON(t, optionsPath, options)
 			api := &client.Client{BaseURL: "http://" + options.Listen, StateDir: filepath.Join(work, "client")}

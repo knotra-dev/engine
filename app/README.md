@@ -71,17 +71,16 @@ KNOTRA_E2E_ENDPOINT=http://127.0.0.1:8787 \
   cargo test --locked --manifest-path src-tauri/Cargo.toml real_engine -- --ignored
 ```
 
-For literal client compatibility against River and Temporal, prepare Bun/Cargo, PostgreSQL,
-Docker/helper, optional Temporal and Playwright Chromium. `KNOTRA_CHROMIUM` can select an existing
-Chrome executable. From the repository root:
+For literal client acceptance against River, prepare Bun/Cargo, PostgreSQL, Docker/helper and
+Playwright Chromium. `KNOTRA_CHROMIUM` can select an existing Chrome executable. From the repository
+root:
 
 ```sh
 KNOTRA_TEST_DESKTOP=1 \
   KNOTRA_TEST_DATABASE_URL='postgres://knotra:knotra-development@127.0.0.1:25432/knotra?sslmode=disable' \
-  KNOTRA_TEST_TEMPORAL=127.0.0.1:27233 \
   KNOTRA_TEST_HELPER="$PWD/.knotra/bin/sandbox-helper" \
   go test -mod=readonly -race -count=1 -timeout=15m ./internal/integration \
-  -run '^TestDesktopLiteralBackendCompatibility$' -v
+  -run '^TestDesktopLiteralClients$' -v
 ```
 
 Only inference uses a fixed HTTP provider; API/SSE, PostgreSQL, Docker, file tools and artifacts

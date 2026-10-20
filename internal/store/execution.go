@@ -24,7 +24,6 @@ type EnqueueWake func(context.Context, pgx.Tx, string, int64) error
 // PutRiverRun admits a new run and its first delivery in the caller's command
 // transaction. A savepoint also prevents a failed queue insertion leaving a
 // partial admission if a caller subsequently commits its outer transaction.
-// Existing runs are never converted, and no Temporal outbox start is created.
 func PutRiverRun(ctx context.Context, tx pgx.Tx, run protocol.Run, plan contract.Plan, inputs contract.Values, enqueue EnqueueWake) (protocol.Run, error) {
 	if enqueue == nil {
 		return run, errors.New("river admission requires transactional enqueue")
@@ -63,17 +62,8 @@ func PutRiverRun(ctx context.Context, tx pgx.Tx, run protocol.Run, plan contract
 
 	run.CreatedAt = admitted.UTC()
 	run.UpdatedAt = run.CreatedAt
-	if err := insertRun(ctx, inner, run, plan, inputs); err != nil {
-		return run, err
-	}
 	deadline := admitted.Add(duration)
-	if _, err := db.New(inner).SetRiverAdmission(ctx, db.SetRiverAdmissionParams{
-		ID:                 run.ID,
-		SchedulerVersion:   execution.SchedulerVersion,
-		StateFormatVersion: execution.StateFormatVersion,
-		AdmittedAt:         admitted,
-		ExecutionDeadline:  new(deadline),
-	}); err != nil {
+	if err := insertRun(ctx, inner, run, plan, inputs, admitted, deadline); err != nil {
 		return run, err
 	}
 	b, err := json.Marshal(limits)
@@ -124,9 +114,7 @@ func LockExecutionRun(ctx context.Context, tx pgx.Tx, id string) (execution.RunS
 	if err != nil {
 		return r, classify(err)
 	}
-	if storedExecutionRun.ExecutionDeadline != nil {
-		r.Deadline = *storedExecutionRun.ExecutionDeadline
-	}
+	r.Deadline = storedExecutionRun.ExecutionDeadline
 	if len(storedExecutionRun.StopCause) > 0 {
 		if err := json.Unmarshal(storedExecutionRun.StopCause, &r.StopCause); err != nil {
 			return r, err

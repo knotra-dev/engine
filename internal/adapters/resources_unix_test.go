@@ -3,7 +3,6 @@
 package adapters
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,85 +17,12 @@ import (
 	"github.com/michael-bill/knotra/internal/execution"
 )
 
-func TestLegacyCleanupPreservesRiverContainersAndInterruptedDirectories(t *testing.T) {
-	for _, databaseFailure := range []bool{false, true} {
-		t.Run(fmt.Sprint(databaseFailure), func(t *testing.T) {
-			runner := &Runner{EngineID: uuid.NewString(), WorkDir: t.TempDir()}
-			legacy, native, orphan := uuid.NewString(), uuid.NewString(), uuid.NewString()
-			for _, id := range []string{legacy, native, orphan} {
-				if err := os.MkdirAll(filepath.Join(runner.workRoot(), "sandbox-"+id), 0700); err != nil {
-					t.Fatal(err)
-				}
-			}
-			socketDir, err := os.MkdirTemp("/tmp", "knotra-legacy-cleanup-")
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(func() { _ = os.RemoveAll(socketDir) })
-			socket := filepath.Join(socketDir, "docker.sock")
-			listener, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", socket)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var deletes atomic.Int32
-			server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-				if request.Method == http.MethodGet {
-					containers := []map[string]any{
-						{"Id": "native", "Labels": map[string]string{"io.knotra.engine": runner.EngineID, "io.knotra.resource": native, "io.knotra.worker": "owner"}},
-						{"Id": "missing-worker-label", "Labels": map[string]string{"io.knotra.engine": runner.EngineID, "io.knotra.resource": native}},
-						{"Id": "legacy", "Labels": map[string]string{"io.knotra.engine": runner.EngineID, "io.knotra.resource": legacy}},
-					}
-					if err := json.NewEncoder(w).Encode(containers); err != nil {
-						t.Error(err)
-					}
-					return
-				}
-				if request.Method != http.MethodDelete || request.URL.Path != "/containers/legacy" {
-					t.Errorf("deleted a River container: %s %s", request.Method, request.URL.Path)
-				}
-				deletes.Add(1)
-				w.WriteHeader(http.StatusNoContent)
-			})}
-			go func() {
-				if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-					t.Error(err)
-				}
-			}()
-			t.Cleanup(func() { _ = server.Close() })
-			runner.DockerHost = "unix://" + socket
-			unavailable := errors.New("resource database unavailable")
-			err = runner.CleanupOwned(t.Context(), func(_ context.Context, id string) (bool, error) {
-				if databaseFailure {
-					return false, unavailable
-				}
-				return id == native || id == orphan, nil
-			})
-			wantDeletes := int32(1)
-			if databaseFailure {
-				wantDeletes = 0
-			}
-			if deletes.Load() != wantDeletes || (databaseFailure && !errors.Is(err, unavailable)) || (!databaseFailure && err != nil) {
-				t.Fatalf("cleanup deletes=%d want=%d error=%v", deletes.Load(), wantDeletes, err)
-			}
-			for _, id := range []string{native, orphan} {
-				if _, err := os.Stat(filepath.Join(runner.workRoot(), "sandbox-"+id)); err != nil {
-					t.Fatal("legacy cleanup removed River evidence", err)
-				}
-			}
-			_, err = os.Stat(filepath.Join(runner.workRoot(), "sandbox-"+legacy))
-			if (databaseFailure && err != nil) || (!databaseFailure && !os.IsNotExist(err)) {
-				t.Fatalf("legacy directory after cleanup: %v", err)
-			}
-		})
-	}
-}
-
 func TestWorkDirectoriesStaySeparateForExecutionHosts(t *testing.T) {
 	first := &Runner{EngineID: "engine", HostID: "host-a", WorkDir: t.TempDir()}
 	second := &Runner{EngineID: first.EngineID, HostID: "host-b", WorkDir: first.WorkDir}
 	local := &Runner{EngineID: first.EngineID, HostID: "local", WorkDir: first.WorkDir}
-	legacy := &Runner{EngineID: first.EngineID, WorkDir: first.WorkDir}
-	if first.workRoot() == second.workRoot() || first.workRoot() == local.workRoot() || local.workRoot() != legacy.workRoot() {
+	defaultHost := &Runner{EngineID: first.EngineID, WorkDir: first.WorkDir}
+	if first.workRoot() == second.workRoot() || first.workRoot() == local.workRoot() || local.workRoot() != defaultHost.workRoot() {
 		t.Fatal("host staging namespaces overlap or changed the default layout")
 	}
 	for _, runner := range []*Runner{first, second} {

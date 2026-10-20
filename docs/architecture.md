@@ -42,7 +42,7 @@ See [notation](notation.md) for the authoritative execution and permission contr
 | Immutable definitions/plans, execution state, budgets, requests and command receipts | PostgreSQL                                   |
 | River jobs, projections and event history                                            | The same PostgreSQL database                 |
 | Artifact bytes, outcome envelopes and MCP recovery evidence                          | Shared `artifacts/` and `outcomes/`          |
-| Sandbox staging and legacy Temporal payloads                                         | Host-local data directory                    |
+| Sandbox staging                                                                      | Host-local data directory                    |
 | Desktop drafts, receipts and cursors                                                 | SQLite; browser preview uses browser storage |
 
 Client caches and bounded previews never replace authoritative execution records. Artifact bytes are
@@ -63,9 +63,9 @@ as a continuation. Cancellation stops admission and interrupts supported active 
 confirmed results. Deadlines and spent budgets survive recovery.
 
 Saved execution formats must remain compatible across updates; automatic conversion between
-incompatible versions or backends is not promised. [Execution semantics](notation/execution.md)
-define retries, unknown outcomes and cancellation; [the API](api/desktop-v1.md) defines command
-receipts and reconciliation.
+incompatible versions is not promised. [Execution semantics](notation/execution.md) define retries,
+unknown outcomes and cancellation; [the API](api/desktop-v1.md) defines command receipts and
+reconciliation.
 
 ## Isolation and access
 
@@ -80,13 +80,9 @@ principal; independent-user RBAC is not available. Docker host filtering uses pi
 without HTTP Host/SNI checks. See [adapter guarantees](../internal/adapters/README.md) and
 [SECURITY](../SECURITY.md).
 
-## Observation and legacy execution
+## Observation
 
 SSE and paginated history expose state and bounded model/tool diagnostics. Detailed observations can
 have explicitly marked gaps; operation journals retain authoritative outcomes. Provider-hidden
 reasoning is excluded. JSON logs and optional OTLP traces/metrics are described in
 [running](running.md#observability-and-operational-limits). Monetary estimates are not implemented.
-
-River is the default backend. Retained live Temporal runs or unsent legacy commands still start the
-legacy worker; completed legacy projections alone do not require it. Existing runs keep their
-admitted backend. [Temporal](temporal.md) documents its additional history and payload requirements.

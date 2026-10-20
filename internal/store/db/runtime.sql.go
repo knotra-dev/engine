@@ -183,36 +183,6 @@ func (q *Queries) PauseRunAdmission(ctx context.Context, id string) (pgconn.Comm
 	return q.db.Exec(ctx, pauseRunAdmission, id)
 }
 
-const requiredExecutionBackends = `-- name: RequiredExecutionBackends :many
-SELECT DISTINCT backend FROM knotra_runs
-WHERE backend='river' OR document->>'status' NOT IN ('succeeded','failed','cancelled','skipped')
-UNION
-SELECT 'temporal'::text WHERE EXISTS(SELECT 1 FROM knotra_outbox WHERE sent_at IS NULL)
-ORDER BY backend
-`
-
-// Retained River state may still require outcome/resource cleanup after a run
-// terminates. Temporal is needed only for live runs or undelivered commands.
-func (q *Queries) RequiredExecutionBackends(ctx context.Context) ([]string, error) {
-	rows, err := q.db.Query(ctx, requiredExecutionBackends)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []string{}
-	for rows.Next() {
-		var backend string
-		if err := rows.Scan(&backend); err != nil {
-			return nil, err
-		}
-		items = append(items, backend)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const reserveNodeInstances = `-- name: ReserveNodeInstances :execresult
 UPDATE knotra_execution_scopes SET materialized_instances=materialized_instances+$3
 				WHERE run_id=$1 AND id=$2 AND materialized_instances+$3<=(limits->>'maxNodeInstances')::integer

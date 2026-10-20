@@ -16,7 +16,6 @@ type RequestRecord struct {
 }
 
 const (
-	BackendTemporal  = "temporal"
 	BackendRiver     = "river"
 	SchedulerVersion = 1
 	WorkerHeartbeat  = 5 * time.Second
@@ -108,7 +107,7 @@ type AttemptRecord struct {
 	Outcome            *Outcome
 }
 
-// RootGraph uses the same node address seed as the retained v1 engine.
+// RootGraph derives stable identities from the run and root address.
 func RootGraph(runID, pipeline string, inputs contract.Values, limits contract.Limits, deadline time.Time) GraphRecord {
 	address := runID + "/root"
 	return GraphRecord{RunID: runID, ID: StableID("g", address), Address: address, Pipeline: pipeline,

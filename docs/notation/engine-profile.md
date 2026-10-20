@@ -1,9 +1,9 @@
 # Knotra v1: connections, environments and permissions
 
-Implementation is located in `internal/contract`, `internal/execution`, `internal/scheduler` and
-`internal/adapters`; `internal/engine` retains legacy Temporal execution. Configuration is described
-in [startup guide](../running.md), verified scenarios and support boundaries — in
-[report](../verification.md).
+The compiler lives in `internal/contract`; execution lives in `internal/scheduler`,
+`internal/queue`, `internal/executor` and `internal/adapters`, with shared types in
+`internal/execution`. Configuration is described in the [startup guide](../running.md), verified
+scenarios and support boundaries in the [report](../verification.md).
 
 Status: normative contract v1, verified against implementation on October 5, 2026. Structural JSON
 Schema and textual semantics are applied jointly. Requirements for external systems are checked
@@ -21,10 +21,9 @@ installed by its operator. The pipeline package cannot load or modify the profil
 contains YAML with `kind: EngineProfile`.
 
 The engine selects one profile for startup before plan preparation. Profile installation method,
-profile selection via API, PostgreSQL address, execution backend, Docker access and server settings
-themselves belong to deployment configuration and are not fields of this format. `metadata.name`
-identifies the profile; `metadata.version` serves as a user label, not a trust or immutability
-mechanism.
+profile selection via API, PostgreSQL address, Docker access and server settings themselves belong
+to deployment configuration and are not fields of this format. `metadata.name` identifies the
+profile; `metadata.version` serves as a user label, not a trust or immutability mechanism.
 
 | Portable `Pipeline.spec`                                | Trusted `EngineProfile.spec`                                      |
 | ------------------------------------------------------- | ----------------------------------------------------------------- |

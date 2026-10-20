@@ -10,8 +10,8 @@ import (
 	"cel.dev/cel-go/interpreter"
 )
 
-// Go map iteration must never select a different macro result during Temporal
-// replay. Map literals bypass type adaptation, so their constructors need
+// Go map iteration must never select a different macro result during execution
+// recovery. Map literals bypass type adaptation, so their constructors need
 // wrappers. Attributes instead use the adapter below: wrapping a qualified attribute
 // would hide cel-go's existing observation wrapper and count its lookup twice.
 func orderedMapConstructors(step interpreter.InterpretableV2) (interpreter.InterpretableV2, error) {

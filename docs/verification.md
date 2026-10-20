@@ -28,26 +28,12 @@ client checks. Contract fixtures are documented [separately](../contracts/v1/fix
 | Client fixtures        | HTTP/SSE, mutation reconciliation, review and binary integrity; fixture providers return fixed responses |
 | Live-model acceptance  | Selected Ollama or explicitly enabled paid-provider scenarios                                            |
 
-River is the default backend. Legacy compatibility and comparison tests additionally require
-`docker compose --profile temporal up -d --wait` and `KNOTRA_TEST_TEMPORAL=127.0.0.1:27233`. Tests
+River uses PostgreSQL; start the development database with `docker compose up -d --wait`. Tests
 create their own runs/artifacts; use a development engine. To inspect scheduler resource costs, use
 `python3 scripts/benchmark_scheduler.py --help`; record the binary and environment with new
 measurements.
 
 ## Recorded examples
-
-On 5 October 2026, actual local `qwen3.5:9b`, Docker/Node, Temporal and PostgreSQL completed the
-[game repair](../examples/showcase/game-repair/README.md) in two iterations. The first candidate
-failed an executed test; the correction passed 3159 checks across 929 positions and 236 completed
-games. An independent sandbox verified and packaged the source; the downloaded game worked offline
-in a browser. Generation from scratch also passed. An earlier repair exhausted four attempts after
-syntax errors and published no game.
-
-The [release gate](../examples/showcase/release-gate/README.md) completed 30 nodes, 36 regression
-tests and 18 gates for six sample services. Code verified agent citations, a human approved the
-dossier, and exported bytes matched the reviewed snapshot. An incompatible API change failed before
-agent review or authorization. These original Temporal executions were not repeated on River by
-virtue of changing the default backend.
 
 On 20 October 2026, `TestThreeExecutorProcessesShareWorkAndSurviveDrain` passed with the race
 detector, real PostgreSQL 18.6 and River 0.48.0. Three executor OS processes shared local storage:
@@ -68,4 +54,4 @@ completion in Docker. These adapter checks do not exercise River/PostgreSQL rest
 - Unknown external effects require explicit resolution under
   [execution semantics](notation/execution.md).
 - The recorded backup check covers a stopped engine; online snapshots, network filesystem faults,
-  multi-host recovery and mixed-backend backups need separate acceptance.
+  and multi-host recovery need separate acceptance.

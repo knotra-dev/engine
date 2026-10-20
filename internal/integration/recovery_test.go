@@ -20,21 +20,13 @@ import (
 	"github.com/michael-bill/knotra/internal/cli"
 	"github.com/michael-bill/knotra/internal/client"
 	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/execution"
 	"github.com/michael-bill/knotra/internal/protocol"
 )
 
 func TestRealProcessRecovery(t *testing.T) {
 	if os.Getenv("KNOTRA_TEST_REAL") != "1" && os.Getenv("KNOTRA_TEST_RECOVERY") != "1" {
-		t.Skip("set KNOTRA_TEST_RECOVERY=1 for Docker/PostgreSQL process recovery on both backends")
+		t.Skip("set KNOTRA_TEST_RECOVERY=1 for Docker/PostgreSQL process recovery")
 	}
-	for _, backend := range []string{execution.BackendTemporal, execution.BackendRiver} {
-		t.Run(backend, func(t *testing.T) { testRealProcessRecovery(t, backend) })
-	}
-}
-
-func testRealProcessRecovery(t *testing.T, backend string) {
-	t.Helper()
 	root, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)
@@ -60,38 +52,24 @@ func testRealProcessRecovery(t *testing.T, backend string) {
 	profilePath := filepath.Join(work, "profile.json")
 	writeJSON(t, profilePath, profile)
 	options := app.Options{
-		Backend:         backend,
-		Listen:          unusedAddress(t),
-		DatabaseURL:     databaseSchema(t, ctx),
-		TemporalAddress: env("KNOTRA_TEST_TEMPORAL", "127.0.0.1:7233"),
-		Namespace:       env("KNOTRA_TEST_NAMESPACE", "default"),
-		TaskQueue:       "knotra-recovery-" + uuid.NewString(),
-		DataDir:         filepath.Join(work, "engine"),
-		DockerHost:      os.Getenv("DOCKER_HOST"),
-		HelperPath:      snapshotHelper(t, root, work),
-		FirewallImage:   env("KNOTRA_TEST_FIREWALL_IMAGE", "knotra-firewall:dev"),
-		Profiles:        []string{profilePath},
-		Version:         "recovery-test",
-	}
-	if backend == execution.BackendRiver {
-		options.TemporalAddress = "127.0.0.1:1"
-		options.HostID = "recovery-host"
-		options.SharedDataDir = filepath.Join(work, "shared")
+		Listen:        unusedAddress(t),
+		DatabaseURL:   databaseSchema(t, ctx),
+		DataDir:       filepath.Join(work, "engine"),
+		DockerHost:    os.Getenv("DOCKER_HOST"),
+		HelperPath:    snapshotHelper(t, root, work),
+		FirewallImage: env("KNOTRA_TEST_FIREWALL_IMAGE", "knotra-firewall:dev"),
+		Profiles:      []string{profilePath},
+		Version:       "recovery-test",
+		HostID:        "recovery-host",
+		SharedDataDir: filepath.Join(work, "shared"),
 	}
 	optionsPath := filepath.Join(work, "server.json")
 	writeJSON(t, optionsPath, options)
 	api := &client.Client{BaseURL: "http://" + options.Listen, StateDir: filepath.Join(work, "client")}
-	var owned []string
-	t.Cleanup(func() {
-		if t.Failed() && backend == execution.BackendTemporal {
-			cleanupWorkflows(t, options, owned)
-		}
-	})
 	first := startEngineProcess(t, ctx, optionsPath, filepath.Join(work, "before.log"), api)
 	identity := engineIdentity(t, ctx, api)
 	marker := "restart-" + uuid.NewString()
 	run := startCLIRun(t, ctx, api, filepath.Join(root, "examples/integration/recovery.yaml"), marker)
-	owned = append(owned, run.ID)
 	request := awaitHuman(t, ctx, api, run.ID)
 	var envelope struct {
 		Artifacts map[string]contract.Artifact `json:"artifacts"`
@@ -122,30 +100,26 @@ func testRealProcessRecovery(t *testing.T, backend string) {
 	)
 	cursor := prefix[len(prefix)-1].ID
 	// Kill the process without graceful shutdown. Neither its Go heap nor worker
-	// cache survives; recovery must use the admitted backend's durable state.
+	// cache survives; recovery must use the scheduler's durable state.
 	first.kill(t)
 	t.Logf("killed engine at human request %s after artifact %s was published", request.ID, artifact.ID)
-	if backend == execution.BackendRiver {
-		// A replacement uses new local staging and host identity. Only the shared
-		// outcome/artifact directory and PostgreSQL survive; completed code stays
-		// completed. This is sequential replacement, not concurrent host acceptance.
-		options.DataDir = filepath.Join(work, "replacement")
-		options.HostID = "replacement-host"
-		writeJSON(t, optionsPath, options)
-		if _, err := os.Stat(filepath.Join(options.SharedDataDir, "artifacts", artifact.SHA256)); err != nil {
-			t.Fatal("artifact was not written to shared storage", err)
-		}
-		entries, err := os.ReadDir(filepath.Join(options.SharedDataDir, "outcomes"))
-		if err != nil || len(entries) == 0 {
-			t.Fatalf("outcome evidence was not written to shared storage: files=%d error=%v", len(entries), err)
-		}
+	// A replacement uses new local staging and host identity. Only the shared
+	// outcome/artifact directory and PostgreSQL survive; completed code stays
+	// completed. This is sequential replacement, not concurrent host acceptance.
+	options.DataDir = filepath.Join(work, "replacement")
+	options.HostID = "replacement-host"
+	writeJSON(t, optionsPath, options)
+	if _, err := os.Stat(filepath.Join(options.SharedDataDir, "artifacts", artifact.SHA256)); err != nil {
+		t.Fatal("artifact was not written to shared storage", err)
+	}
+	entries, err := os.ReadDir(filepath.Join(options.SharedDataDir, "outcomes"))
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("outcome evidence was not written to shared storage: files=%d error=%v", len(entries), err)
 	}
 	startEngineProcess(t, ctx, optionsPath, filepath.Join(work, "after.log"), api)
-	if backend == execution.BackendRiver {
-		var info struct{ HostID string }
-		if err := api.Get(ctx, "/info", &info); err != nil || info.HostID != options.HostID {
-			t.Fatalf("replacement host diagnostics=%+v error=%v", info, err)
-		}
+	var info struct{ HostID string }
+	if err := api.Get(ctx, "/info", &info); err != nil || info.HostID != options.HostID {
+		t.Fatalf("replacement host diagnostics=%+v error=%v", info, err)
 	}
 	if engineIdentity(t, ctx, api) != identity {
 		t.Fatal("engine identity changed across restart")
@@ -195,7 +169,6 @@ func testRealProcessRecovery(t *testing.T, backend string) {
 	// A second real run is cancelled while waiting. The cancellation is durable
 	// before its HTTP response, so a later answer must not resurrect execution.
 	cancelled := startCLIRun(t, ctx, api, filepath.Join(root, "examples/integration/recovery.yaml"), "cancel-"+uuid.NewString())
-	owned = append(owned, cancelled.ID)
 	open := awaitHuman(t, ctx, api, cancelled.ID)
 	if _, err := executeCLI(ctx, api, "runs", "cancel", cancelled.ID); err != nil {
 		t.Fatal(err)

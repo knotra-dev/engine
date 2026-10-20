@@ -17,7 +17,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/engine"
+	"github.com/michael-bill/knotra/internal/execution"
 	"github.com/michael-bill/knotra/internal/protocol"
 	"github.com/michael-bill/knotra/internal/store"
 )
@@ -107,6 +107,7 @@ spec:
 		Store:     db,
 		Artifacts: store.Artifacts{Root: t.TempDir(), Store: db},
 		Profiles:  map[string]contract.Profile{"test": profile},
+		Wake:      func(context.Context, pgx.Tx, string, int64) error { return nil },
 	}
 	handler := srv.Handler()
 	call := func(route, key string, payload any) (int, []byte) {
@@ -177,7 +178,7 @@ spec:
 	}
 	id := result.Run.ID
 	values := map[string]contract.Port{"ok": {Schema: json.RawMessage(`{"type":"boolean"}`)}}
-	req := engine.Request{
+	req := execution.Request{
 		RunID:      id,
 		ID:         "human1",
 		InstanceID: "n1",
@@ -186,7 +187,9 @@ spec:
 		Outputs:    values,
 		Deadline:   time.Now().Add(time.Minute),
 	}
-	if err := db.SaveRequest(context.Background(), req); err != nil {
+	if err := pgx.BeginFunc(t.Context(), db.Pool, func(tx pgx.Tx) error {
+		return db.SaveRequestTx(t.Context(), tx, req)
+	}); err != nil {
 		t.Fatal(err)
 	}
 	code, b = call("/requests/human1/response", "bad-answer", map[string]any{"outputs": map[string]any{"ok": "bad"}})
@@ -202,7 +205,9 @@ spec:
 		t.Fatal("answer receipt changed")
 	}
 	req.ID = "human2"
-	if err := db.SaveRequest(context.Background(), req); err != nil {
+	if err := pgx.BeginFunc(t.Context(), db.Pool, func(tx pgx.Tx) error {
+		return db.SaveRequestTx(t.Context(), tx, req)
+	}); err != nil {
 		t.Fatal(err)
 	}
 	code, b = call("/runs/"+id+"/cancel", "cancel", map[string]any{})
@@ -213,9 +218,11 @@ spec:
 	if code != 409 {
 		t.Fatalf("postcancel answer %d %s", code, b)
 	}
-	signal, err := db.Answer(context.Background(), engine.AnswerRequest{RunID: id, RequestID: "human1", CloseIfAbsent: "cancelled"})
-	if err != nil || signal == nil {
-		t.Fatalf("accepted answer lost on cancel: %v %v", signal, err)
+	var status, responseID string
+	var response contract.Values
+	err := db.Pool.QueryRow(t.Context(), "SELECT status,response_id,response FROM knotra_requests WHERE id='human1' AND run_id=$1", id).Scan(&status, &responseID, &response)
+	if err != nil || status != "answered" || responseID != "answer" || string(response["ok"].JSON) != "true" {
+		t.Fatalf("accepted answer lost on cancel: status=%s responseId=%s response=%+v error=%v", status, responseID, response, err)
 	}
 	code, b = call(
 		"/artifacts",
@@ -238,10 +245,9 @@ spec:
 		t.Fatal(w.Code, w.Body.String())
 	}
 	// A cursor from another run must never silently skip this run's events.
-	if err = db.Project(
-		context.Background(),
-		engine.Projection{RunID: id, Sequence: 1, Time: time.Now(), Kind: "run", Status: "running"},
-	); err != nil {
+	if err = pgx.BeginFunc(t.Context(), db.Pool, func(tx pgx.Tx) error {
+		return db.ProjectTx(t.Context(), tx, execution.Projection{RunID: id, Sequence: 1, Time: time.Now(), Kind: "run", Status: "running"})
+	}); err != nil {
 		t.Fatal(err)
 	}
 	events, err := db.Events(context.Background(), id, "")

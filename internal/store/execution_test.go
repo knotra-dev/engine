@@ -30,16 +30,7 @@ func (executionWakeFixture) InsertOpts() river.InsertOpts {
 func executionAdmissionFixture(t *testing.T, s *Store) (protocol.Run, contract.Plan, EnqueueWake) {
 	t.Helper()
 	ctx := context.Background()
-	legacy, plan := setupRun(t, s)
-	var backend, definition string
-	if err := s.Pool.QueryRow(ctx, "SELECT backend,definition_id FROM knotra_runs WHERE id=$1", legacy).Scan(&backend, &definition); err != nil {
-		t.Fatal(err)
-	}
-	if backend != execution.BackendTemporal {
-		t.Fatal("existing admissions did not remain Temporal")
-	}
-	plan.Digest = "frozen-plan"
-	plan.Profile.Spec.Limits = contract.Limits{Timeout: "1h", MaxConcurrentNodes: 2, MaxNodeInstances: 100, MaxModelCalls: 10, MaxToolCalls: 10}
+	definition, plan := setupDefinition(t, s)
 	m, err := rivermigrate.New(riverpgxv5.New(s.Pool), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -186,14 +177,14 @@ func TestRiverAdmissionProjectionAndGenerationTransactions(t *testing.T) {
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
-	var applied, outbox int
+	var applied int
 	if err := s.Pool.QueryRow(ctx, `SELECT wake_generation,applied_generation,(SELECT count(*) FROM river_job),
-		(SELECT count(*) FROM knotra_events WHERE run_id=$1),(SELECT count(*) FROM knotra_outbox WHERE run_id=$1)
-		FROM knotra_runs WHERE id=$1`, run.ID).Scan(&wake, &applied, &jobs, &events, &outbox); err != nil {
+		(SELECT count(*) FROM knotra_events WHERE run_id=$1)
+		FROM knotra_runs WHERE id=$1`, run.ID).Scan(&wake, &applied, &jobs, &events); err != nil {
 		t.Fatal(err)
 	}
-	if wake != 2 || applied != 2 || jobs != 2 || events != 1 || outbox != 0 {
-		t.Fatalf("state wake=%d applied=%d jobs=%d events=%d legacyOutbox=%d", wake, applied, jobs, events, outbox)
+	if wake != 2 || applied != 2 || jobs != 2 || events != 1 {
+		t.Fatalf("state wake=%d applied=%d jobs=%d events=%d", wake, applied, jobs, events)
 	}
 }
 

@@ -53,23 +53,3 @@ SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$2 AND kind=$3;
 
 -- name: IncrementBudget :execresult
 INSERT INTO knotra_budgets(run_id,scope,kind,used) VALUES($1,$2,$3,1) ON CONFLICT(run_id,scope,kind) DO UPDATE SET used=knotra_budgets.used+1;
-
--- name: InsertLegacyOperation :execresult
-INSERT INTO knotra_operations(id,run_id,kind,effect)
-		 SELECT sqlc.arg(id),r.id,sqlc.arg(kind),sqlc.arg(effect) FROM knotra_runs r WHERE r.id=sqlc.arg(run_id) AND backend='temporal' ON CONFLICT DO NOTHING;
-
--- name: ReadLegacyOperation :one
-SELECT o.completed,o.response FROM knotra_operations o JOIN knotra_runs r ON r.id=o.run_id
-		WHERE o.id=$1 AND o.run_id=$2 AND r.backend='temporal';
-
--- name: CompleteLegacyOperation :execresult
-UPDATE knotra_operations SET completed=true,response=$2 WHERE id=$1 AND NOT completed AND worker_id IS NULL;
-
--- name: ReadLegacyOperationResponse :one
-SELECT response FROM knotra_operations WHERE id=$1 AND completed AND worker_id IS NULL;
-
--- name: LockHumanAnswer :one
-SELECT status,response_id,response,accepted_at FROM knotra_requests WHERE id=$1 AND run_id=$2 FOR UPDATE;
-
--- name: CloseRequest :execresult
-UPDATE knotra_requests SET status=$2 WHERE id=$1 AND status IN ('open','pending');

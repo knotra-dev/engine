@@ -7,7 +7,7 @@ Anthropic in a cloud profile; the pipeline package stays unchanged. Python steps
 the game uses `node_box`. No MCP servers, secrets, external search, or package installations are
 required by these pipelines. Prepare PostgreSQL, Docker/helper and Ollama with the
 [running guide](../../docs/running.md), including both `python:3.13-alpine` and `node:22-alpine`
-images. The engine uses River by default and needs no Temporal service for these examples.
+images. The engine uses River with PostgreSQL.
 
 | Package                                            | What happens                                                                                                                                                               | Deliverables                                                                       |
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |

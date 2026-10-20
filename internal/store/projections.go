@@ -15,18 +15,6 @@ import (
 	"github.com/michael-bill/knotra/internal/store/db"
 )
 
-func (s *Store) Project(ctx context.Context, p execution.Projection) error {
-	tx, e := s.Pool.Begin(ctx)
-	if e != nil {
-		return e
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if e = s.ProjectTx(ctx, tx, p); e != nil {
-		return e
-	}
-	return tx.Commit(ctx)
-}
-
 // ProjectTx writes an idempotent observation inside an existing transaction.
 // It acquires the run lock before touching instances, artifacts or requests.
 func (s *Store) ProjectTx(ctx context.Context, tx pgx.Tx, p execution.Projection) error {
@@ -202,18 +190,6 @@ func sortedKeys[V any](m map[string]V) []string {
 	return k
 }
 
-func (s *Store) SaveRequest(ctx context.Context, r execution.Request) error {
-	tx, err := s.Pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if err := s.SaveRequestTx(ctx, tx, r); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
-}
-
 func (s *Store) SaveRequestTx(ctx context.Context, tx pgx.Tx, r execution.Request) error {
 	run, cancelling, err := lockRun(ctx, tx, r.RunID)
 	if err != nil {
@@ -290,33 +266,6 @@ func (s *Store) Requests(ctx context.Context, cursor string) ([]protocol.HumanRe
 	return out, nil
 }
 
-func (s *Store) Reserve(ctx context.Context, runID, kind string, scopes []execution.BudgetScope) error {
-	if kind != "model" && kind != "tool" {
-		return fmt.Errorf("unknown budget kind %q", kind)
-	}
-	tx, e := s.Pool.Begin(ctx)
-	if e != nil {
-		return e
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	backend, e := ReadRunBackend(ctx, tx, runID)
-	if e != nil {
-		return e
-	}
-	if backend != execution.BackendTemporal {
-		return ErrExecutionOwnership
-	}
-	_, e = db.New(tx).LockTransactionKey(ctx, "budget:"+runID)
-	if e != nil {
-		return e
-	}
-
-	if err := reserveCalls(ctx, tx, runID, kind, scopes); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
-}
-
 func reserveCalls(ctx context.Context, tx pgx.Tx, runID, kind string, scopes []execution.BudgetScope) error {
 	for _, scope := range scopes {
 		limit := scope.Limits.MaxModelCalls
@@ -337,94 +286,6 @@ func reserveCalls(ctx context.Context, tx pgx.Tx, runID, kind string, scopes []e
 		}
 	}
 	return nil
-}
-
-type OperationState struct {
-	Started   bool
-	Completed bool
-	Response  json.RawMessage
-}
-
-func (s *Store) BeginOperation(ctx context.Context, id, runID, kind, effect string) (OperationState, error) {
-	tag, e := db.New(s.Pool).InsertLegacyOperation(ctx, db.InsertLegacyOperationParams{ID: id, RunID: runID, Kind: kind, Effect: effect})
-	if e != nil {
-		return OperationState{}, e
-	}
-	if tag.RowsAffected() == 1 {
-		return OperationState{}, nil
-	}
-	var state OperationState
-	state.Started = true
-	storedLegacyOperation, queryErr5 := db.New(s.Pool).ReadLegacyOperation(ctx, db.ReadLegacyOperationParams{ID: id, RunID: runID})
-	e = queryErr5
-	if e == nil {
-		state.Completed = storedLegacyOperation.Completed
-		state.Response = storedLegacyOperation.Response
-	}
-	if errors.Is(e, pgx.ErrNoRows) {
-		return OperationState{}, ErrExecutionOwnership
-	}
-	return state, e
-}
-
-func (s *Store) CompleteOperation(ctx context.Context, id string, response json.RawMessage) error {
-	tag, e := db.New(s.Pool).CompleteLegacyOperation(ctx, db.CompleteLegacyOperationParams{ID: id, Response: []byte(response)})
-	if e != nil {
-		return e
-	}
-	if tag.RowsAffected() == 0 {
-		var b []byte
-		b, e = db.New(s.Pool).ReadLegacyOperationResponse(ctx, id)
-		if e != nil {
-			return e
-		}
-		if string(b) != string(response) {
-			return ErrConflict
-		}
-	}
-	return nil
-}
-
-// Answer shares the same row lock as Respond. A timer cannot discard an answer
-// already committed before its deadline, even if outbox delivery was delayed.
-func (s *Store) Answer(ctx context.Context, q execution.AnswerRequest) (*execution.HumanSignal, error) {
-	tx, e := s.Pool.Begin(ctx)
-	if e != nil {
-		return nil, e
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if _, _, e = lockRun(ctx, tx, q.RunID); e != nil {
-		return nil, e
-	}
-
-	storedHumanAnswer, queryErr7 := db.New(tx).LockHumanAnswer(ctx, db.LockHumanAnswerParams{ID: q.RequestID, RunID: q.RunID})
-	e = queryErr7
-
-	if e != nil {
-		return nil, classify(e)
-	}
-	if storedHumanAnswer.Status == "answered" && storedHumanAnswer.ResponseID != nil && storedHumanAnswer.AcceptedAt != nil {
-		var values contract.Values
-		if e = json.Unmarshal(storedHumanAnswer.Response, &values); e != nil {
-			return nil, e
-		}
-		return &execution.HumanSignal{
-			RequestID:  q.RequestID,
-			ResponseID: *storedHumanAnswer.ResponseID,
-			Values:     values,
-			AcceptedAt: *storedHumanAnswer.AcceptedAt,
-		}, tx.Commit(ctx)
-	}
-	if q.CloseIfAbsent != "" {
-		if q.CloseIfAbsent != "cancelled" && q.CloseIfAbsent != "expired" {
-			return nil, ErrConflict
-		}
-		_, e = db.New(tx).CloseRequest(ctx, db.CloseRequestParams{ID: q.RequestID, Status: q.CloseIfAbsent})
-		if e != nil {
-			return nil, e
-		}
-	}
-	return nil, tx.Commit(ctx)
 }
 
 func shortEventText(s string) string {

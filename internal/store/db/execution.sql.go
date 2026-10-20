@@ -60,7 +60,7 @@ type LockExecutionRunRow struct {
 	SchedulerVersion   int
 	StateFormatVersion int
 	AdmittedAt         time.Time
-	ExecutionDeadline  *time.Time
+	ExecutionDeadline  time.Time
 	StateRevision      int64
 	WakeGeneration     int64
 	AppliedGeneration  int64
@@ -110,29 +110,6 @@ func (q *Queries) NextExecutionEventSequence(ctx context.Context, id string) (in
 	var execution_event_sequence int64
 	err := row.Scan(&execution_event_sequence)
 	return execution_event_sequence, err
-}
-
-const setRiverAdmission = `-- name: SetRiverAdmission :execresult
-UPDATE knotra_runs SET backend='river',scheduler_version=$2,state_format_version=$3,
-		admitted_at=$4,execution_deadline=$5,wake_generation=1,dirty_since=$4 WHERE id=$1
-`
-
-type SetRiverAdmissionParams struct {
-	ID                 string
-	SchedulerVersion   int
-	StateFormatVersion int
-	AdmittedAt         time.Time
-	ExecutionDeadline  *time.Time
-}
-
-func (q *Queries) SetRiverAdmission(ctx context.Context, arg SetRiverAdmissionParams) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, setRiverAdmission,
-		arg.ID,
-		arg.SchedulerVersion,
-		arg.StateFormatVersion,
-		arg.AdmittedAt,
-		arg.ExecutionDeadline,
-	)
 }
 
 const wakeExecution = `-- name: WakeExecution :one

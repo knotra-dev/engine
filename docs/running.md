@@ -62,12 +62,6 @@ Compose starts PostgreSQL 18.6 on loopback port `25432`. `KNOTRA_PG_PORT` overri
 `KNOTRA_DEV_DB_PASSWORD` changes the initial password. `docker compose stop` and `start` preserve
 data; `down` keeps named volumes, while `down --volumes` deletes the database.
 
-River is the default backend. For legacy runs/tests, start
-`docker compose --profile temporal up -d --wait` and use
-`--backend temporal --temporal-address 127.0.0.1:27233`. Startup also connects to Temporal when live
-legacy runs or unsent commands remain. Completed legacy projections alone do not require it.
-Existing runs retain their admitted backend; see [Temporal](temporal.md).
-
 ## OpenAI and Anthropic connections
 
 Replace the `model_main` connection inside `EngineProfile.spec`, keeping sandboxes and limits:
@@ -138,10 +132,9 @@ durable file/directory sync and consistent reads. Workers need compatible profil
 images. [EngineProfile](notation/engine-profile.md) defines resources and limits.
 
 Preserve PostgreSQL with the complete artifact/outcome directories, including unpublished envelopes
-and MCP recovery evidence. A database dump alone is insufficient. Legacy runs additionally need
-Temporal history and local `payloads/`. Storage files and Knotra history have no automatic cleanup;
-operators manage free space and backups. River job retention does not authorize deleting history or
-durable files. Individual artifacts are limited to 64 MiB.
+and MCP recovery evidence. A database dump alone is insufficient. Storage files and Knotra history
+have no automatic cleanup; operators manage free space and backups. River job retention does not
+authorize deleting history or durable files. Individual artifacts are limited to 64 MiB.
 
 On Windows, directory flushing is unavailable; directory-entry persistence after sudden power loss
 depends on NTFS. File contents are flushed before publication on every OS.
@@ -160,9 +153,9 @@ stopped. This procedure preserves pending evidence without needing a distributed
 
 Record the exact Knotra release/binary, PostgreSQL major version, engine ID (`GET /v1/info` before
 stopping), host ID, data paths, profile/credential references, helper and image versions with the
-backup. Restore with that Knotra release and execution format; an older binary or another backend is
-not a rollback procedure. Preserve credentials/TLS/configuration through the deployment's existing
-secure backup mechanism. Use PostgreSQL client tools matching the server major version.
+backup. Restore with that Knotra release and execution format; an older binary is not a rollback
+procedure. Preserve credentials/TLS/configuration through the deployment's existing secure backup
+mechanism. Use PostgreSQL client tools matching the server major version.
 
 With writers stopped, set these paths and libpq connection settings for the existing database:
 
@@ -218,7 +211,7 @@ The PostgreSQL commands follow its documented
 integration check `TestRiverBackupRestoresHumanAndUncommittedOutcome` exercises actual `pg_dump`,
 `tar`, schema/data loss, `pg_restore`, restored publication, CLI human responses, exact SSE history
 and a second engine restart. It covers a stopped single-host River engine; online snapshots, network
-filesystem faults, multi-host recovery and mixed-backend backups need separate acceptance.
+filesystem faults and multi-host recovery need separate acceptance.
 
 ## Observability and operational limits
 

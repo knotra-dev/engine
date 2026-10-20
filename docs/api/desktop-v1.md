@@ -21,14 +21,12 @@ principal per deployment. Desktop tokens are session-only and discarded on disco
 reads its token from the environment. Neither client includes tokens in command receipts.
 
 `GET /info` returns `{protocol: "knotra.desktop/1", engineId, principalId, version, capabilities}`.
-Operator diagnostics also include `backend` (new-run admission), `workerBackends` (running execution
-backends), `schedulerVersion`, `stateFormatVersion` and `executionTimeout`. `hostId` identifies the
-execution host across ordinary process restarts. Changing admission never changes an existing run's
-backend. Both execution backends can run in the same service; clients keep using the same commands.
-An incompatible protocol or missing engine identity prevents connecting. `engineId` is a durable
-deployment identity: replacing the database/deployment must create a new ID. The cache is namespaced
-by normalized base URL, engine identity AND authenticated `principalId`; run IDs from different
-engines or accounts cannot share cached state or commands.
+Operator diagnostics also include `backend` (`"river"`), `workerBackends` (`["river"]`),
+`schedulerVersion`, `stateFormatVersion` and `executionTimeout`. `hostId` identifies the execution
+host across ordinary process restarts. An incompatible protocol or missing engine identity prevents
+connecting. `engineId` is a durable deployment identity: replacing the database/deployment must
+create a new ID. The cache is namespaced by normalized base URL, engine identity AND authenticated
+`principalId`; run IDs from different engines or accounts cannot share cached state or commands.
 
 JSON uses camelCase. IDs are opaque, nonempty, at most 256 characters and cannot contain control
 characters. Every identifier is encoded as one URL segment; nested instance addresses are not
@@ -192,9 +190,8 @@ The client persists events and the cursor atomically BEFORE presenting them. On 
 `Last-Event-ID`. The engine replays from the next retained event; repeated delivery is permitted and
 deduplicated by `(engine identity,runId,eventId)`. Disconnecting stops observation only, not
 execution. Clients read fresh run/request/artifact projections after an event and periodically
-reconcile to observe newer state. River execution transitions and projections commit together;
-legacy Temporal projections can lag workflow execution. No client-derived state transition replaces
-the engine snapshot.
+reconcile to observe newer state. River execution transitions and projections commit together. No
+client-derived state transition replaces the engine snapshot.
 
 For this contract, events/cursors remain replayable for a retained run. If the run/event history was
 purged, the server returns a definitive error rather than silently skipping a gap.

@@ -118,7 +118,7 @@ func TestRiverCancellationProcessCrashBoundaries(t *testing.T) {
 			work := t.TempDir()
 			profilePath := filepath.Join(work, "profile.json")
 			writeJSON(t, profilePath, profile)
-			options := app.Options{Backend: execution.BackendRiver, Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), TemporalAddress: "127.0.0.1:1", DataDir: filepath.Join(work, "engine"), HelperPath: os.Getenv("KNOTRA_TEST_HELPER"), Profiles: []string{profilePath}, Version: "cancel-recovery-test"}
+			options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), DataDir: filepath.Join(work, "engine"), HelperPath: os.Getenv("KNOTRA_TEST_HELPER"), Profiles: []string{profilePath}, Version: "cancel-recovery-test"}
 			optionsPath := filepath.Join(work, "server.json")
 			writeJSON(t, optionsPath, options)
 			api := &client.Client{BaseURL: "http://" + options.Listen, StateDir: filepath.Join(work, "admission-client")}
@@ -347,7 +347,7 @@ func TestRiverHumanAnswerProcessCrashBoundaries(t *testing.T) {
 			profile.Spec.Sandboxes = nil
 			profilePath := filepath.Join(work, "profile.json")
 			writeJSON(t, profilePath, profile)
-			options := app.Options{Backend: execution.BackendRiver, Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), TemporalAddress: "127.0.0.1:1", DataDir: filepath.Join(work, "engine"), Profiles: []string{profilePath}, Version: "human-recovery-test"}
+			options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), DataDir: filepath.Join(work, "engine"), Profiles: []string{profilePath}, Version: "human-recovery-test"}
 			optionsPath := filepath.Join(work, "server.json")
 			writeJSON(t, optionsPath, options)
 			api := &client.Client{BaseURL: "http://" + options.Listen, StateDir: filepath.Join(work, "admission-client")}
@@ -649,7 +649,7 @@ func TestRiverResolutionProcessCrashBoundaries(t *testing.T) {
 			profile.Spec.Models = map[string]contract.ModelConnection{"cloud": {Provider: "openai", Model: "fixture-model", BaseURL: provider.URL, Auth: map[string]contract.Credential{"key": {SecretRef: "fixture"}}}}
 			profilePath := filepath.Join(work, "profile.json")
 			writeJSON(t, profilePath, profile)
-			options := app.Options{Backend: execution.BackendRiver, Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), TemporalAddress: "127.0.0.1:1", DataDir: filepath.Join(work, "engine"), Profiles: []string{profilePath}, Version: "resolution-recovery-test"}
+			options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), DataDir: filepath.Join(work, "engine"), Profiles: []string{profilePath}, Version: "resolution-recovery-test"}
 			optionsPath := filepath.Join(work, "server.json")
 			writeJSON(t, optionsPath, options)
 			api := &client.Client{BaseURL: "http://" + options.Listen, StateDir: filepath.Join(work, "admission-client")}

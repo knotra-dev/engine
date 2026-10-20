@@ -18,7 +18,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/engine"
 	"github.com/michael-bill/knotra/internal/execution"
 	"github.com/michael-bill/knotra/internal/protocol"
 	"github.com/michael-bill/knotra/internal/store/db"
@@ -72,7 +71,7 @@ func testStore(t *testing.T) *Store {
 	return db
 }
 
-func setupRun(t *testing.T, s *Store) (string, contract.Plan) {
+func setupDefinition(t *testing.T, s *Store) (string, contract.Plan) {
 	t.Helper()
 	ctx := context.Background()
 	tx, err := s.Pool.Begin(ctx)
@@ -80,7 +79,6 @@ func setupRun(t *testing.T, s *Store) (string, contract.Plan) {
 		t.Fatal(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	id := uuid.NewString()
 	def := protocol.Definition{
 		ID:            uuid.NewString(),
 		PackageDigest: "sha256:" + strings.Repeat("a", 64),
@@ -94,6 +92,8 @@ func setupRun(t *testing.T, s *Store) (string, contract.Plan) {
 		Version:         "knotra/v1",
 		CompilerVersion: contract.CompilerVersion,
 		CELVersion:      contract.CELVersion,
+		Digest:          "frozen-plan",
+		Profile:         contract.Profile{Spec: contract.ProfileSpec{Limits: contract.Limits{Timeout: "1h", MaxConcurrentNodes: 2, MaxNodeInstances: 100, MaxModelCalls: 10, MaxToolCalls: 10}}},
 		Root:            "pipeline.yaml",
 		Pipelines: map[string]*contract.Pipeline{"pipeline.yaml": {Spec: contract.Spec{Graph: contract.Graph{
 			Inputs:  map[string]contract.Port{},
@@ -101,20 +101,34 @@ func setupRun(t *testing.T, s *Store) (string, contract.Plan) {
 			Nodes:   map[string]contract.Node{},
 		}}}},
 	}
-	run := protocol.Run{
-		ID:           id,
-		DefinitionID: def.ID,
-		Status:       "pending",
-		CreatedAt:    time.Now().UTC(),
-		UpdatedAt:    time.Now().UTC(),
-	}
-	if err := PutRun(ctx, tx, run, plan, contract.Values{}); err != nil {
-		t.Fatal(err)
-	}
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
-	return id, plan
+	return def.ID, plan
+}
+
+func setupRun(t *testing.T, s *Store) (string, contract.Plan) {
+	t.Helper()
+	definition, plan := setupDefinition(t, s)
+	run := protocol.Run{ID: uuid.NewString(), DefinitionID: definition, Status: "pending"}
+	err := pgx.BeginFunc(context.Background(), s.Pool, func(tx pgx.Tx) error {
+		_, err := PutRiverRun(context.Background(), tx, run, plan, contract.Values{}, noOpWake)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return run.ID, plan
+}
+
+func noOpWake(context.Context, pgx.Tx, string, int64) error { return nil }
+
+func (s *Store) project(ctx context.Context, p execution.Projection) error {
+	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error { return s.ProjectTx(ctx, tx, p) })
+}
+
+func (s *Store) saveRequest(ctx context.Context, r execution.Request) error {
+	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error { return s.SaveRequestTx(ctx, tx, r) })
 }
 
 func TestCommandConcurrentIdempotency(t *testing.T) {
@@ -201,7 +215,7 @@ func TestHumanFirstValidResponseWins(t *testing.T) {
 	s := testStore(t)
 	runID, _ := setupRun(t, s)
 	ctx := context.Background()
-	request := engine.Request{
+	request := execution.Request{
 		ID:         uuid.NewString(),
 		RunID:      runID,
 		InstanceID: runID + "/root/human",
@@ -210,7 +224,7 @@ func TestHumanFirstValidResponseWins(t *testing.T) {
 		Deadline:   time.Now().Add(time.Hour),
 		Outputs:    map[string]contract.Port{"value": {Schema: json.RawMessage(`{"type":"integer"}`)}},
 	}
-	if err := s.SaveRequest(ctx, request); err != nil {
+	if err := s.saveRequest(ctx, request); err != nil {
 		t.Fatal(err)
 	}
 	var winners atomic.Int32
@@ -221,7 +235,7 @@ func TestHumanFirstValidResponseWins(t *testing.T) {
 		wg.Go(func() {
 			key := fmt.Sprintf("response-%d", i)
 			_, _, err := s.Command(ctx, "p", key, "POST /response", []byte(key), func(tx pgx.Tx) (int, any, error) {
-				err := Respond(ctx, tx, request.ID, key, contract.Values{"value": {JSON: json.RawMessage(`1e0`)}})
+				err := Respond(ctx, tx, request.ID, key, contract.Values{"value": {JSON: json.RawMessage(`1e0`)}}, noOpWake)
 				return 200, map[string]bool{"accepted": true}, err
 			})
 			if err == nil {
@@ -242,26 +256,27 @@ func TestHumanFirstValidResponseWins(t *testing.T) {
 	if winners.Load() != 1 {
 		t.Fatalf("expected one accepted answer, got %d", winners.Load())
 	}
-	accepted, err := s.Answer(ctx, engine.AnswerRequest{RunID: runID, RequestID: request.ID, CloseIfAbsent: "expired"})
-	if err != nil || accepted == nil {
-		t.Fatalf("committed answer discarded by timeout: %v", err)
+	var response []byte
+	var generation int64
+	if err := s.Pool.QueryRow(ctx, `SELECT q.response,r.wake_generation FROM knotra_requests q JOIN knotra_runs r ON r.id=q.run_id WHERE q.id=$1 AND q.status='answered'`, request.ID).Scan(&response, &generation); err != nil {
+		t.Fatal(err)
 	}
-	decoded, err := contract.DecodeJSON(accepted.Values["value"].JSON)
+	var accepted contract.Values
+	if err := json.Unmarshal(response, &accepted); err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := contract.DecodeJSON(accepted["value"].JSON)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := decoded.(float64); !ok {
 		t.Fatalf("database lost double token type: %#v", decoded)
 	}
-	var count int
-	if err := s.Pool.QueryRow(ctx, "SELECT count(*) FROM knotra_outbox WHERE run_id=$1 AND kind='human'", runID).Scan(&count); err != nil {
-		t.Fatal(err)
-	}
-	if count != 1 {
-		t.Fatalf("expected one durable human signal, got %d", count)
+	if generation != 2 {
+		t.Fatalf("expected one durable answer wake, got generation %d", generation)
 	}
 	request.Status = "expired"
-	if err := s.SaveRequest(ctx, request); err != nil {
+	if err := s.saveRequest(ctx, request); err != nil {
 		t.Fatal(err)
 	}
 	saved, err := s.Request(ctx, request.ID)
@@ -286,7 +301,7 @@ func TestHumanRejectsInvalidExpiredAndWrongKind(t *testing.T) {
 		{"resolution", "resolution", time.Now().Add(time.Hour), `1`, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			request := engine.Request{
+			request := execution.Request{
 				ID:       uuid.NewString(),
 				RunID:    runID,
 				Kind:     test.kind,
@@ -294,7 +309,7 @@ func TestHumanRejectsInvalidExpiredAndWrongKind(t *testing.T) {
 				Deadline: test.deadline,
 				Outputs:  map[string]contract.Port{"value": {Schema: json.RawMessage(`{"type":"integer"}`)}},
 			}
-			if err := s.SaveRequest(ctx, request); err != nil {
+			if err := s.saveRequest(ctx, request); err != nil {
 				t.Fatal(err)
 			}
 			tx, err := s.Pool.Begin(ctx)
@@ -302,7 +317,7 @@ func TestHumanRejectsInvalidExpiredAndWrongKind(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer func() { _ = tx.Rollback(ctx) }()
-			err = Respond(ctx, tx, request.ID, "response", contract.Values{"value": {JSON: json.RawMessage(test.value)}})
+			err = Respond(ctx, tx, request.ID, "response", contract.Values{"value": {JSON: json.RawMessage(test.value)}}, noOpWake)
 			if err == nil {
 				t.Fatal("invalid response accepted")
 			}
@@ -313,62 +328,12 @@ func TestHumanRejectsInvalidExpiredAndWrongKind(t *testing.T) {
 	}
 }
 
-func TestBudgetAtomicAcrossScopes(t *testing.T) {
-	s := testStore(t)
-	runID, _ := setupRun(t, s)
-	ctx := context.Background()
-	scopes := []engine.BudgetScope{
-		{ID: runID, Limits: contract.Limits{MaxModelCalls: 3}},
-		{ID: runID + "/child", Limits: contract.Limits{MaxModelCalls: 1}},
-	}
-	var accepted atomic.Int32
-	var wg sync.WaitGroup
-
-	for range 12 {
-		wg.Go(func() {
-			if s.Reserve(ctx, runID, "model", scopes) == nil {
-				accepted.Add(1)
-			}
-		})
-	}
-
-	wg.Wait()
-	if accepted.Load() != 1 {
-		t.Fatalf("overspent child budget: %d", accepted.Load())
-	}
-	rows, err := s.Pool.Query(ctx, "SELECT scope,used FROM knotra_budgets WHERE run_id=$1", runID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	count := 0
-
-	for rows.Next() {
-		var scope string
-		var used int
-		if err := rows.Scan(&scope, &used); err != nil {
-			t.Fatal(err)
-		}
-		if used != 1 {
-			t.Fatalf("partial budget reservations persisted for %s: %d", scope, used)
-		}
-		count++
-	}
-
-	if err := rows.Err(); err != nil {
-		t.Fatal(err)
-	}
-	if count != 2 {
-		t.Fatal("missing ancestor counters")
-	}
-}
-
 func TestProjectionOrderingAndDeduplication(t *testing.T) {
 	s := testStore(t)
 	runID, _ := setupRun(t, s)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	events := []engine.Projection{
+	events := []execution.Projection{
 		{RunID: runID, Sequence: 1, Kind: "run", Status: "running", Time: now},
 		{
 			RunID:      runID,
@@ -385,12 +350,12 @@ func TestProjectionOrderingAndDeduplication(t *testing.T) {
 	}
 
 	for _, event := range events {
-		if err := s.Project(ctx, event); err != nil {
+		if err := s.project(ctx, event); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	if err := s.Project(ctx, events[1]); err != nil {
+	if err := s.project(ctx, events[1]); err != nil {
 		t.Fatal(err)
 	}
 	run, err := s.Run(ctx, runID)
@@ -413,34 +378,6 @@ func TestProjectionOrderingAndDeduplication(t *testing.T) {
 	next, err := s.Events(ctx, runID, stored[2].ID)
 	if err != nil || len(next) != 2 {
 		t.Fatal("event cursor replay failed", len(next), err)
-	}
-}
-
-func TestOperationIntentAndCompletion(t *testing.T) {
-	s := testStore(t)
-	runID, _ := setupRun(t, s)
-	ctx := context.Background()
-	operation := uuid.NewString()
-	first, err := s.BeginOperation(ctx, operation, runID, "tool", "write")
-	if err != nil || first.Started || first.Completed {
-		t.Fatal(first, err)
-	}
-	second, err := s.BeginOperation(ctx, operation, runID, "tool", "write")
-	if err != nil || !second.Started || second.Completed {
-		t.Fatal(second, err)
-	}
-	if err := s.CompleteOperation(ctx, operation, json.RawMessage(`{"ok":true}`)); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.CompleteOperation(ctx, operation, json.RawMessage(`{"ok":true}`)); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.CompleteOperation(ctx, operation, json.RawMessage(`{"ok":false}`)); !errors.Is(err, ErrConflict) {
-		t.Fatal("different completion accepted", err)
-	}
-	third, err := s.BeginOperation(ctx, operation, runID, "tool", "write")
-	if err != nil || !third.Completed || string(third.Response) != `{"ok":true}` {
-		t.Fatal(third, err)
 	}
 }
 
@@ -486,9 +423,9 @@ func TestStagedArtifactsPublishWithSuccessfulNode(t *testing.T) {
 		t.Fatal("trusted replay lost draft", err)
 	}
 	outputs := contract.Values{"file": {Artifacts: []contract.Artifact{art}}}
-	if err = s.Project(
+	if err = s.project(
 		ctx,
-		engine.Projection{
+		execution.Projection{
 			RunID:      id,
 			Sequence:   1,
 			Kind:       "node",
@@ -503,9 +440,9 @@ func TestStagedArtifactsPublishWithSuccessfulNode(t *testing.T) {
 	if _, err = s.Artifact(ctx, art.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatal("running node published draft")
 	}
-	if err = s.Project(
+	if err = s.project(
 		ctx,
-		engine.Projection{
+		execution.Projection{
 			RunID:      id,
 			Sequence:   2,
 			Kind:       "node",
@@ -521,9 +458,9 @@ func TestStagedArtifactsPublishWithSuccessfulNode(t *testing.T) {
 	if _, err = s.Artifact(ctx, art.ID); err != nil {
 		t.Fatal("successful output not published", err)
 	}
-	if err = s.Project(
+	if err = s.project(
 		ctx,
-		engine.Projection{
+		execution.Projection{
 			RunID:      id,
 			Sequence:   3,
 			Kind:       "request",
@@ -540,7 +477,7 @@ func TestStagedArtifactsPublishWithSuccessfulNode(t *testing.T) {
 	}
 }
 
-func TestExclusiveServiceLeaseAndSingleConnectionDelivery(t *testing.T) {
+func TestExclusiveServiceLeaseWithSingleConnectionPool(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
 	lease, err := s.AcquireLease(ctx)
@@ -570,16 +507,12 @@ func TestExclusiveServiceLeaseAndSingleConnectionDelivery(t *testing.T) {
 	s.Pool = single
 	deadline, stop := context.WithTimeout(ctx, 2*time.Second)
 	defer stop()
-	// Delivery exposes its own transaction for state reads; no nested pool checkout.
-	if err = s.Deliver(deadline, func(ctx context.Context, q Querier, runID, kind string, _ []byte) error {
-		if runID != id || kind != "start" {
-			t.Fatal(runID, kind)
-		}
-		status, err := ReadRunStatus(ctx, q, runID)
+	if _, _, err = s.Command(deadline, "p", "single-connection", "POST /read", nil, func(tx pgx.Tx) (int, any, error) {
+		status, err := ReadRunStatus(deadline, tx, id)
 		if status != "pending" {
 			t.Fatal(status)
 		}
-		return err
+		return 200, status, err
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -651,7 +584,7 @@ func TestSQLCPageBytesRetainCursorMarker(t *testing.T) {
 			if err := s.SaveRequestTx(ctx, tx, execution.Request{ID: id, RunID: runID, Kind: "human", Status: "open", Prompt: strings.Repeat("large", 256), Deadline: time.Now().Add(time.Minute)}); err != nil {
 				return err
 			}
-			if err := insertRun(ctx, tx, protocol.Run{ID: id, DefinitionID: id, Status: "succeeded", Outputs: map[string]json.RawMessage{"large": json.RawMessage(`"` + strings.Repeat("large", 256) + `"`)}}, contract.Plan{}, contract.Values{}); err != nil {
+			if err := insertRun(ctx, tx, protocol.Run{ID: id, DefinitionID: id, Status: "succeeded", Outputs: map[string]json.RawMessage{"large": json.RawMessage(`"` + strings.Repeat("large", 256) + `"`)}}, contract.Plan{}, contract.Values{}, now(), now().Add(time.Hour)); err != nil {
 				return err
 			}
 		}

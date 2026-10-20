@@ -106,7 +106,7 @@ func TestRiverMCPInitializationIdentitySurvivesCrashBeforeDatabaseCommit(t *test
 			work := t.TempDir()
 			profilePath := filepath.Join(work, "profile.json")
 			writeJSON(t, profilePath, profile)
-			options := app.Options{Backend: execution.BackendRiver, Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), TemporalAddress: "127.0.0.1:1", DataDir: filepath.Join(work, "engine"), HelperPath: os.Getenv("KNOTRA_TEST_HELPER"), Profiles: []string{profilePath}, Version: "mcp-evidence-crash"}
+			options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), DataDir: filepath.Join(work, "engine"), HelperPath: os.Getenv("KNOTRA_TEST_HELPER"), Profiles: []string{profilePath}, Version: "mcp-evidence-crash"}
 			application := "mcp-evidence-" + uuid.NewString()
 			parsed, parseErr := url.Parse(options.DatabaseURL)
 			if parseErr == nil && (parsed.Scheme == "postgres" || parsed.Scheme == "postgresql") {
@@ -407,7 +407,7 @@ func TestRiverProcessLossPreservesAgentAndMCPSessionUncertainty(t *testing.T) {
 			}
 			profilePath := filepath.Join(work, "profile.json")
 			writeJSON(t, profilePath, profile)
-			options := app.Options{Backend: execution.BackendRiver, Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), TemporalAddress: "127.0.0.1:1", DataDir: filepath.Join(work, "engine"), HelperPath: os.Getenv("KNOTRA_TEST_HELPER"), Profiles: []string{profilePath}, Version: "session-recovery-test"}
+			options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), DataDir: filepath.Join(work, "engine"), HelperPath: os.Getenv("KNOTRA_TEST_HELPER"), Profiles: []string{profilePath}, Version: "session-recovery-test"}
 			optionsPath := filepath.Join(work, "server.json")
 			writeJSON(t, optionsPath, options)
 			api := &client.Client{BaseURL: "http://" + options.Listen, StateDir: filepath.Join(work, "client")}

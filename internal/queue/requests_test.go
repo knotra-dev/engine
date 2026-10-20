@@ -59,18 +59,17 @@ func TestRuntimeHumanCommandIsAtomicAndFirstValidAnswerWins(t *testing.T) {
 	assertState := func(wantNode, wantRequest string, wantOpen int) {
 		t.Helper()
 		var node, request string
-		var open, slots, attempts, outbox int
+		var open, slots, attempts int
 		if err := r.Store.Pool.QueryRow(ctx, `SELECT n.state,q.status,
 			(SELECT count(*) FROM knotra_requests WHERE run_id=$1 AND status='open'),
 			(SELECT active_attempts FROM knotra_execution_scopes WHERE run_id=$1 AND id=$1),
-			(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1),
-			(SELECT count(*) FROM knotra_outbox WHERE run_id=$1)
+			(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1)
 			FROM knotra_execution_nodes n JOIN knotra_requests q ON q.id=$3 WHERE n.run_id=$1 AND n.id=$2`,
-			id, instance, requestID).Scan(&node, &request, &open, &slots, &attempts, &outbox); err != nil {
+			id, instance, requestID).Scan(&node, &request, &open, &slots, &attempts); err != nil {
 			t.Fatal(err)
 		}
-		if node != wantNode || request != wantRequest || open != wantOpen || slots != 0 || attempts != 0 || outbox != 0 {
-			t.Fatalf("node=%s request=%s open=%d slots=%d attempts=%d temporalCommands=%d", node, request, open, slots, attempts, outbox)
+		if node != wantNode || request != wantRequest || open != wantOpen || slots != 0 || attempts != 0 {
+			t.Fatalf("node=%s request=%s open=%d slots=%d attempts=%d", node, request, open, slots, attempts)
 		}
 	}
 	assertState("waiting_human", "open", 2)

@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -42,7 +43,7 @@ spec:
 	if contract.HasErrors(diags) {
 		t.Fatal(diags)
 	}
-	handler := (&Server{Store: db, Profiles: map[string]contract.Profile{"test": profile}}).Handler()
+	handler := (&Server{Store: db, Profiles: map[string]contract.Profile{"test": profile}, Wake: func(context.Context, pgx.Tx, string, int64) error { return nil }}).Handler()
 	call := func(method, path, key string, payload any) []byte {
 		t.Helper()
 		body, err := json.Marshal(payload)
@@ -99,8 +100,10 @@ spec:
 	if again := call("POST", "/runs", "start-int64", payload); !bytes.Equal(rawReceipt, again) {
 		t.Fatal("preview changed the stored command receipt")
 	}
-	if err := db.SaveRequest(t.Context(), execution.Request{ID: "int64-review", RunID: id, InstanceID: "review", Kind: "human", Status: "open", Prompt: "Review", Deadline: time.Now().Add(time.Hour),
-		Inputs: contract.Values{"exact": {JSON: json.RawMessage(integer)}}, Outputs: map[string]contract.Port{"exact": {Schema: json.RawMessage(`{"type":"integer","const":9223372036854775807}`)}}}); err != nil {
+	if err := pgx.BeginFunc(t.Context(), db.Pool, func(tx pgx.Tx) error {
+		return db.SaveRequestTx(t.Context(), tx, execution.Request{ID: "int64-review", RunID: id, InstanceID: "review", Kind: "human", Status: "open", Prompt: "Review", Deadline: time.Now().Add(time.Hour),
+			Inputs: contract.Values{"exact": {JSON: json.RawMessage(integer)}}, Outputs: map[string]contract.Port{"exact": {Schema: json.RawMessage(`{"type":"integer","const":9223372036854775807}`)}}})
+	}); err != nil {
 		t.Fatal(err)
 	}
 	for _, preview := range []bool{false, true} {
@@ -122,7 +125,9 @@ spec:
 			t.Fatalf("exact request changed: %s", body)
 		}
 	}
-	if err := db.Project(t.Context(), execution.Projection{RunID: id, Kind: "run", Sequence: 1, Status: "succeeded", Time: time.Now(), Outputs: contract.Values{"exact": {JSON: json.RawMessage(integer)}}}); err != nil {
+	if err := pgx.BeginFunc(t.Context(), db.Pool, func(tx pgx.Tx) error {
+		return db.ProjectTx(t.Context(), tx, execution.Projection{RunID: id, Kind: "run", Sequence: 1, Status: "succeeded", Time: time.Now(), Outputs: contract.Values{"exact": {JSON: json.RawMessage(integer)}}})
+	}); err != nil {
 		t.Fatal(err)
 	}
 	for _, path := range []string{"/runs/" + id, "/runs"} {
@@ -185,16 +190,20 @@ func TestJavaScriptRunPreviewPreservesByteLimitedPageCursor(t *testing.T) {
 	if err := contract.ValidateValue(contract.Port{Schema: json.RawMessage(`{"type":"object"}`)}, contract.Value{JSON: value}); err != nil {
 		t.Fatal(err)
 	}
-	now := time.Now().UTC()
+	plan := contract.Plan{Version: "knotra/v1", CompilerVersion: contract.CompilerVersion, CELVersion: contract.CELVersion, Root: "pipeline.yaml", Digest: "large-results",
+		Pipelines: map[string]*contract.Pipeline{"pipeline.yaml": {}}, Profile: contract.Profile{Spec: contract.ProfileSpec{Limits: contract.Limits{Timeout: "1h"}}}}
 	if err := pgx.BeginFunc(t.Context(), db.Pool, func(tx pgx.Tx) error {
 		definition := protocol.Definition{ID: "large-results", Name: "large-results", PackageDigest: "large-results", Package: contract.Package{Entrypoint: "pipeline.yaml", Files: []contract.File{{Path: "pipeline.yaml", Content: []byte("pipeline")}}}}
 		if _, err := store.PutDefinition(t.Context(), tx, definition); err != nil {
 			return err
 		}
 		for _, id := range []string{"r1", "r2", "r3"} {
-			run := protocol.Run{ID: id, DefinitionID: definition.ID, Title: id, Status: "succeeded", CreatedAt: now, UpdatedAt: now, Profile: "test",
+			run := protocol.Run{ID: id, DefinitionID: definition.ID, Title: id, Status: "pending", Profile: "test",
 				Outputs: map[string]json.RawMessage{"large": value}, Artifacts: []contract.Artifact{}, Diagnostics: []contract.Diagnostic{}, AvailableActions: []string{}}
-			if err := store.PutRun(t.Context(), tx, run, contract.Plan{}, contract.Values{}); err != nil {
+			if _, err := store.PutRiverRun(t.Context(), tx, run, plan, contract.Values{}, func(context.Context, pgx.Tx, string, int64) error { return nil }); err != nil {
+				return err
+			}
+			if err := db.ProjectTx(t.Context(), tx, execution.Projection{RunID: id, Kind: "run", Sequence: 1, Status: "succeeded", Time: time.Now(), Outputs: contract.Values{"large": {JSON: value}}}); err != nil {
 				return err
 			}
 		}

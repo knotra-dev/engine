@@ -45,7 +45,7 @@ func TestRiverStopAndSavedResultProcessCrashBoundaries(t *testing.T) {
 			profile := recoveryProfile()
 			profilePath := filepath.Join(work, "profile.json")
 			writeJSON(t, profilePath, profile)
-			options := app.Options{Backend: execution.BackendRiver, Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), TemporalAddress: "127.0.0.1:1", DataDir: filepath.Join(work, "engine"), DockerHost: os.Getenv("DOCKER_HOST"), HelperPath: os.Getenv("KNOTRA_TEST_HELPER"), Profiles: []string{profilePath}, Version: "stop-result-test"}
+			options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), DataDir: filepath.Join(work, "engine"), DockerHost: os.Getenv("DOCKER_HOST"), HelperPath: os.Getenv("KNOTRA_TEST_HELPER"), Profiles: []string{profilePath}, Version: "stop-result-test"}
 			optionsPath := filepath.Join(work, "server.json")
 			writeJSON(t, optionsPath, options)
 			api := &client.Client{BaseURL: "http://" + options.Listen, StateDir: filepath.Join(work, "client")}
@@ -289,7 +289,7 @@ func TestRiverStopAndSavedResultProcessCrashBoundaries(t *testing.T) {
 				return retainedCount == 1 && remainingSlots == 0 && remainingResources == 0
 			})
 			var nodeState, stopCode string
-			var attempts, tools, confirmed, slots, requests, successes, terminalEvents, outbox, verify int
+			var attempts, tools, confirmed, slots, requests, successes, terminalEvents, verify int
 			var finalRootDeadline, finalNodeDeadline time.Time
 			var storedOutcome []byte
 			if err := admin.Pool.QueryRow(ctx, `SELECT r.stop_cause->>'code',r.execution_deadline,n.state,n.deadline,a.outcome,
@@ -300,12 +300,11 @@ func TestRiverStopAndSavedResultProcessCrashBoundaries(t *testing.T) {
 				(SELECT count(*) FROM knotra_requests WHERE run_id=r.id AND status='open'),
 				(SELECT count(*) FROM knotra_events WHERE run_id=r.id AND document->'data'->>'nodeId'='prepare' AND document->'data'->>'status'='succeeded'),
 				(SELECT count(*) FROM knotra_events WHERE run_id=r.id AND document->>'type'='run' AND document->'data'->>'status'='cancelled'),
-				(SELECT count(*) FROM knotra_outbox),
 				(SELECT count(*) FROM knotra_execution_attempts a JOIN knotra_execution_nodes n ON n.run_id=a.run_id AND n.id=a.instance_id WHERE a.run_id=r.id AND n.node_id='verify'),
 				(SELECT count(*) FROM knotra_artifacts WHERE id=$3 AND published),
 				(SELECT count(*) FROM knotra_commands WHERE id=$4)
 				FROM knotra_runs r JOIN knotra_execution_nodes n ON n.run_id=r.id JOIN knotra_execution_attempts a ON a.run_id=n.run_id AND a.instance_id=n.id
-				WHERE r.id=$1 AND n.id=$2`, final.ID, instance, artifact.ID, key).Scan(&stopCode, &finalRootDeadline, &nodeState, &finalNodeDeadline, &storedOutcome, &attempts, &tools, &confirmed, &slots, &requests, &successes, &terminalEvents, &outbox, &verify, &published, &receipts); err != nil {
+				WHERE r.id=$1 AND n.id=$2`, final.ID, instance, artifact.ID, key).Scan(&stopCode, &finalRootDeadline, &nodeState, &finalNodeDeadline, &storedOutcome, &attempts, &tools, &confirmed, &slots, &requests, &successes, &terminalEvents, &verify, &published, &receipts); err != nil {
 				t.Fatal(err)
 			}
 			wantNode, wantPublished := "cancelled", 0
@@ -316,8 +315,8 @@ func TestRiverStopAndSavedResultProcessCrashBoundaries(t *testing.T) {
 			if err := json.Unmarshal(storedOutcome, &retained); err != nil || retained.Failure != nil || len(retained.Artifacts) != 1 || retained.Artifacts[0] != outcome.Artifacts[0] || string(retained.Outputs["nonce"].JSON) != string(outcome.Outputs["nonce"].JSON) {
 				t.Fatalf("late outcome changed: failure=%v artifacts=%v error=%v", retained.Failure, retained.Artifacts, err)
 			}
-			if final.Status != "cancelled" || len(final.Outputs) != 0 || len(final.Artifacts) != 0 || stopCode != "CANCELLED" || nodeState != wantNode || attempts != 1 || tools != 1 || confirmed != 1 || slots != 0 || requests != 0 || successes != wantPublished || terminalEvents != 1 || outbox != 0 || verify != 0 || published != wantPublished || receipts != 1 || !rootDeadline.Equal(finalRootDeadline) || !nodeDeadline.Equal(finalNodeDeadline) {
-				t.Fatalf("final stop/result: status=%s stop=%s node=%s attempts/tools/confirmed/slots/requests/successes/terminal/outbox/verify/published/receipts=%d/%d/%d/%d/%d/%d/%d/%d/%d/%d/%d", final.Status, stopCode, nodeState, attempts, tools, confirmed, slots, requests, successes, terminalEvents, outbox, verify, published, receipts)
+			if final.Status != "cancelled" || len(final.Outputs) != 0 || len(final.Artifacts) != 0 || stopCode != "CANCELLED" || nodeState != wantNode || attempts != 1 || tools != 1 || confirmed != 1 || slots != 0 || requests != 0 || successes != wantPublished || terminalEvents != 1 || verify != 0 || published != wantPublished || receipts != 1 || !rootDeadline.Equal(finalRootDeadline) || !nodeDeadline.Equal(finalNodeDeadline) {
+				t.Fatalf("final stop/result: status=%s stop=%s node=%s attempts/tools/confirmed/slots/requests/successes/terminal/verify/published/receipts=%d/%d/%d/%d/%d/%d/%d/%d/%d/%d", final.Status, stopCode, nodeState, attempts, tools, confirmed, slots, requests, successes, terminalEvents, verify, published, receipts)
 			}
 			download, err := api.Bytes(ctx, "/artifacts/"+artifact.ID+"/content")
 			if (resultFirst && (err != nil || !bytes.Equal(download, content))) || (!resultFirst && (err == nil || !strings.Contains(err.Error(), "HTTP 404"))) {

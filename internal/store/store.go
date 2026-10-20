@@ -89,7 +89,7 @@ func classify(err error) error {
 }
 
 // Command atomically binds an operation ID to content, effect and receipt.
-// The action must only mutate this transaction; external delivery uses the outbox.
+// The action must only mutate this transaction; queue delivery is committed with it.
 func (s *Store) Command(ctx context.Context, principal, key, route string, payload []byte, action func(pgx.Tx) (int, any, error)) (int, []byte, error) {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
@@ -248,14 +248,7 @@ func decodeRecords[T any](documents [][]byte, err error) ([]T, error) {
 	return out, nil
 }
 
-func PutRun(ctx context.Context, tx pgx.Tx, run protocol.Run, plan contract.Plan, inputs contract.Values) error {
-	if err := insertRun(ctx, tx, run, plan, inputs); err != nil {
-		return err
-	}
-	return Enqueue(ctx, tx, run.ID, "start", execution.RunAdmission{RunID: run.ID, AcceptedAt: run.CreatedAt, Inputs: inputs})
-}
-
-func insertRun(ctx context.Context, tx pgx.Tx, run protocol.Run, plan contract.Plan, inputs contract.Values) error {
+func insertRun(ctx context.Context, tx pgx.Tx, run protocol.Run, plan contract.Plan, inputs contract.Values, admitted, deadline time.Time) error {
 	state := run
 	state.Package = contract.Package{}
 	state.Inputs = nil
@@ -273,46 +266,15 @@ func insertRun(ctx context.Context, tx pgx.Tx, run protocol.Run, plan contract.P
 	if e != nil {
 		return e
 	}
-	_, e = db.New(tx).InsertRun(ctx, db.InsertRunParams{ID: run.ID, DefinitionID: run.DefinitionID, Document: b, Plan: p, Inputs: i})
+	_, e = db.New(tx).InsertRun(ctx, db.InsertRunParams{
+		ID: run.ID, DefinitionID: run.DefinitionID, Document: b, Plan: p, Inputs: i,
+		SchedulerVersion: execution.SchedulerVersion, StateFormatVersion: execution.StateFormatVersion,
+		AdmittedAt: admitted, ExecutionDeadline: deadline,
+	})
 	if e != nil {
 		return e
 	}
 	return nil
-}
-
-func Enqueue(ctx context.Context, tx pgx.Tx, runID, kind string, payload any) error {
-	b, e := raw(payload)
-	if e != nil {
-		return e
-	}
-	_, e = db.New(tx).Enqueue(ctx, db.EnqueueParams{RunID: runID, Kind: kind, Payload: b})
-	return e
-}
-
-func (s *Store) Deliver(ctx context.Context, send func(context.Context, Querier, string, string, []byte) error) error {
-	tx, e := s.Pool.Begin(ctx)
-	if e != nil {
-		return e
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	storedNextOutbox, queryErr7 := db.New(tx).LockNextOutbox(ctx)
-	e = queryErr7
-
-	if errors.Is(e, pgx.ErrNoRows) {
-		return nil
-	}
-	if e != nil {
-		return e
-	}
-	if e = send(ctx, tx, storedNextOutbox.RunID, storedNextOutbox.Kind, storedNextOutbox.Payload); e != nil {
-		return e
-	}
-	_, e = db.New(tx).MarkOutboxSent(ctx, storedNextOutbox.ID)
-	if e != nil {
-		return e
-	}
-	return tx.Commit(ctx)
 }
 
 func (s *Store) Events(ctx context.Context, runID, after string) ([]protocol.Event, error) {
@@ -415,12 +377,6 @@ func ReadRunStatus(ctx context.Context, q Querier, id string) (string, error) {
 	return status, classify(err)
 }
 
-func ReadRunBackend(ctx context.Context, q Querier, id string) (string, error) {
-	var backend string
-	backend, err := db.New(q).ReadRunBackend(ctx, id)
-	return backend, classify(err)
-}
-
 // MaxListPageBytes bounds materialized list responses. A single larger item is
 // returned alone; callers receive a cursor instead of silent truncation.
 const MaxListPageBytes = 32 << 20
@@ -448,10 +404,4 @@ func decodePage[T any](documents [][]byte, err error) ([]T, error) {
 		}
 	}
 	return out, nil
-}
-
-func ReadRunName(ctx context.Context, q Querier, id string) (string, error) {
-	var name string
-	name, err := db.New(q).ReadRunName(ctx, id)
-	return name, classify(err)
 }

@@ -27,8 +27,7 @@ func (r Role) Validate() error {
 	}
 }
 
-// These execution messages have no scheduler SDK dependencies. The retained
-// Temporal backend aliases them without changing their persisted JSON fields.
+// RunResult contains the terminal state and validated outputs of a run.
 type RunResult struct {
 	Status  string          `json:"status"`
 	Outputs contract.Values `json:"outputs,omitempty"`
@@ -49,8 +48,8 @@ type ExecuteRequest struct {
 	Node          contract.Node   `json:"node"`
 	Inputs        contract.Values `json:"inputs"`
 	ToolArguments json.RawMessage `json:"toolArguments,omitempty"`
-	// Plan is populated by the activity host from its admitted run snapshot.
-	// The workflow omits it to avoid copying the source package per attempt.
+	// Plan is loaded by the executor from the admitted run snapshot.
+	// Delivery messages omit it to avoid copying the source package per attempt.
 	Plan   contract.Plan `json:"plan,omitzero"`
 	Scopes []BudgetScope `json:"scopes"`
 	// Permissions is the intersection of all caller boundaries. Nil means the
@@ -114,12 +113,6 @@ type HumanSignal struct {
 	AcceptedAt time.Time       `json:"acceptedAt,omitempty"`
 }
 
-type AnswerRequest struct {
-	RunID         string `json:"runId"`
-	RequestID     string `json:"requestId"`
-	CloseIfAbsent string `json:"closeIfAbsent,omitempty"` // cancelled or expired
-}
-
 type ResolutionSignal struct {
 	InstanceID  string          `json:"instanceId"`
 	OperationID string          `json:"operationId"`
@@ -132,12 +125,4 @@ type ResolutionSignal struct {
 
 type CancelSignal struct {
 	Reason string `json:"reason,omitempty"`
-}
-
-// RunAdmission is the immutable start identity delivered by the legacy outbox.
-// Its JSON is accepted by the retained Temporal RunInput without SDK coupling.
-type RunAdmission struct {
-	RunID      string          `json:"runId"`
-	AcceptedAt time.Time       `json:"acceptedAt"`
-	Inputs     contract.Values `json:"inputs"`
 }

@@ -50,12 +50,3 @@ SELECT run_id,instance_id,number,outcome_key,owner,ownership_generation,state FR
 -- name: MaximumActiveExecutionDurationMicros :one
 SELECT COALESCE(max((extract(epoch FROM (execution_deadline-admitted_at))*1000000)::bigint),0)::bigint
 FROM knotra_runs WHERE backend='river' AND document->>'status' NOT IN ('succeeded','failed','cancelled','skipped');
-
--- name: RequiredExecutionBackends :many
--- Retained River state may still require outcome/resource cleanup after a run
--- terminates. Temporal is needed only for live runs or undelivered commands.
-SELECT DISTINCT backend FROM knotra_runs
-WHERE backend='river' OR document->>'status' NOT IN ('succeeded','failed','cancelled','skipped')
-UNION
-SELECT 'temporal'::text WHERE EXISTS(SELECT 1 FROM knotra_outbox WHERE sent_at IS NULL)
-ORDER BY backend;

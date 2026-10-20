@@ -13,19 +13,14 @@ verifies the published file.
 
 The package is used by `internal/integration/TestRealConcurrentPipelines`. That test starts the real
 engine and a separate functional MCP service, then submits three independent runs with different
-markers: one through the CLI, two through the HTTP client. Ollama, Docker, Temporal, PostgreSQL and
-the model are real services; their execution is not replaced by test doubles. The generated
-EngineProfile grants only the resources needed by this package.
-
-This concurrent-pipeline acceptance explicitly selects the legacy Temporal backend. Ordinary
-`knotra serve` and starter workflows use River by default and do not need Temporal. The recovery
-test below compares both backends.
+markers: one through the CLI, two through the HTTP client. Ollama, Docker, PostgreSQL and the model
+are real services; their execution is not replaced by test doubles. The generated EngineProfile
+grants only the resources needed by this package.
 
 ## Run the acceptance test
 
-Start PostgreSQL, Temporal, Ollama with `qwen3.5:9b`, and Docker/Colima. Build the Linux sandbox
-helper as described in the repository README and pull `python:3.13-alpine`. Then run from the
-repository root:
+Start PostgreSQL, Ollama with `qwen3.5:9b`, and Docker/Colima. Build the Linux sandbox helper as
+described in the repository README and pull `python:3.13-alpine`. Then run from the repository root:
 
 ```sh
 export KNOTRA_TEST_REAL=1
@@ -36,26 +31,22 @@ go test -mod=readonly -race -count=1 -timeout 30m ./internal/integration \
 ```
 
 Use the PostgreSQL credentials appropriate for your local installation. With the bundled Compose
-setup, start `docker compose --profile temporal up -d --wait` to include the optional legacy
-service. PostgreSQL uses port `25432` and Temporal uses `27233`; export
-`KNOTRA_TEST_TEMPORAL=127.0.0.1:27233`. The [running guide](../../docs/running.md) contains the
-development connection string and helper/firewall setup. The test creates and drops its own schema;
-it does not reset existing tables.
+setup, start `docker compose up -d --wait`; PostgreSQL uses port `25432`. The
+[running guide](../../docs/running.md) contains the development connection string and
+helper/firewall setup. The test creates and drops its own schema; it does not reset existing tables.
 
 Optional environment variables:
 
 | Variable                     | Default                                           |
 | ---------------------------- | ------------------------------------------------- |
-| `KNOTRA_TEST_TEMPORAL`       | `127.0.0.1:7233`                                  |
-| `KNOTRA_TEST_NAMESPACE`      | `default`                                         |
 | `KNOTRA_TEST_HELPER`         | `.knotra/bin/sandbox-helper` under the repository |
 | `KNOTRA_TEST_WORKDIR`        | `.knotra/integration-work` under the repository   |
 | `KNOTRA_TEST_FIREWALL_IMAGE` | `knotra-firewall:dev`                             |
 | `DOCKER_HOST`                | Current Docker context                            |
 
-On macOS, keep the work directory under a directory shared with Colima. The test uses a separate
-Temporal task queue and listens only on loopback addresses. Its MCP service computes statistics and
-saves actual archive records to disk. The sandbox secret is a harmless generated test value.
+On macOS, keep the work directory under a directory shared with Colima. The test listens only on
+loopback addresses. Its MCP service computes statistics and saves actual archive records to disk.
+The sandbox secret is a harmless generated test value.
 
 ## Assertions
 
@@ -77,14 +68,14 @@ diagnosis; successful runs clean it up.
 ## Recovery without a model
 
 `recovery.yaml` publishes a JSON artifact containing a random nonce, asks for human approval, and
-checks the file in a second sandbox. The recovery test runs against River and legacy Temporal,
-starts the actual engine in a separate process and kills it while the approval is open. It restarts
-the engine using the same database, data directory and backend settings, then answers through the
-CLI. The test checks that the engine and request IDs, deadline, artifact bytes and SSE event history
-survive, and that completed code does not execute again. A second run is cancelled through the CLI;
-a later human answer must return HTTP 409 and downstream code must remain unexecuted.
+checks the file in a second sandbox. The recovery test starts the actual River engine in a separate
+process and kills it while the approval is open. It restarts the engine using the same database and
+data directory, then answers through the CLI. The test checks that the engine and request IDs,
+deadline, artifact bytes and SSE event history survive, and that completed code does not execute
+again. A second run is cancelled through the CLI; a later human answer must return HTTP 409 and
+downstream code must remain unexecuted.
 
-This test needs Docker, Temporal and PostgreSQL, but no model or MCP service:
+This test needs Docker and PostgreSQL, but no model or MCP service:
 
 ```sh
 export KNOTRA_TEST_RECOVERY=1
@@ -93,5 +84,5 @@ go test -mod=readonly -race -count=1 -timeout 10m ./internal/integration \
   -run '^TestRealProcessRecovery$' -v
 ```
 
-The same helper, work directory, Docker and Temporal settings apply. Setting `KNOTRA_TEST_REAL=1`
-also enables this recovery test.
+The same helper, work directory and Docker settings apply. Setting `KNOTRA_TEST_REAL=1` also enables
+this recovery test.

@@ -1,8 +1,8 @@
 # Knotra Notation
 
-Status: implemented contract v1, verified on October 5, 2026. The compiler, executor, and adapters
-are located in `internal/contract`, `internal/engine`, and `internal/adapters`. Run is described in
-[guide](running.md).
+Status: implemented contract v1, verified on October 5, 2026. The compiler lives in
+`internal/contract`; execution lives in `internal/scheduler`, `internal/queue`, `internal/executor`
+and `internal/adapters`. Setup is described in the [running guide](running.md).
 
 The contract specifies exact YAML fields, data types, references, states, and observable behavior.
 Contract fixtures and tests verify these rules.

@@ -45,7 +45,6 @@ jobs:
       KNOTRA_TEST_RECOVERY: '1'
       KNOTRA_TEST_RUNTIME_RECOVERY: '1'
       KNOTRA_TEST_POSTGRES_CONTAINER: knotra-ci-postgres-1
-      KNOTRA_TEST_TEMPORAL: 127.0.0.1:27233
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -54,7 +53,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - run: docker compose --profile temporal up -d --wait --wait-timeout 120
+      - run: docker compose up -d --wait --wait-timeout 120
       - run: make helper firewall
       - run: docker pull python:3.13-alpine
       - name: PostgreSQL, HTTP, Docker and MCP integration
@@ -64,7 +63,7 @@ jobs:
           go test -p 1 -race -count=1 -timeout=20m ./internal/store ./internal/api ./internal/executor ./internal/queue ./internal/scheduler ./internal/adapters/... ./internal/integration
       - name: Infrastructure logs
         if: failure()
-        run: docker compose --profile temporal logs --no-color --tail=100
+        run: docker compose logs --no-color --tail=100
       - name: Clean up test infrastructure
         if: always()
-        run: docker compose --profile temporal down --volumes
+        run: docker compose down --volumes

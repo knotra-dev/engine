@@ -26,9 +26,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
-	temporalclient "go.temporal.io/sdk/client"
 
 	"github.com/michael-bill/knotra/internal/app"
 	"github.com/michael-bill/knotra/internal/cli"
@@ -41,7 +38,7 @@ import (
 // workflow, database, HTTP or client implementation is replaced by a mock.
 func TestRealConcurrentPipelines(t *testing.T) {
 	if os.Getenv("KNOTRA_TEST_REAL") != "1" {
-		t.Skip("set KNOTRA_TEST_REAL=1 for real Ollama/Docker/Temporal/PostgreSQL acceptance")
+		t.Skip("set KNOTRA_TEST_REAL=1 for real Ollama/Docker/PostgreSQL acceptance")
 	}
 	root, err := filepath.Abs("../..")
 	if err != nil {
@@ -87,18 +84,14 @@ func TestRealConcurrentPipelines(t *testing.T) {
 	serverCtx, stopServer := context.WithCancel(ctx)
 	serverDone := make(chan error, 1)
 	options := app.Options{
-		Backend:         "temporal",
-		Listen:          address,
-		DatabaseURL:     dsn,
-		TemporalAddress: env("KNOTRA_TEST_TEMPORAL", "127.0.0.1:7233"),
-		Namespace:       env("KNOTRA_TEST_NAMESPACE", "default"),
-		TaskQueue:       "knotra-real-" + uuid.NewString(),
-		DataDir:         filepath.Join(work, "engine"),
-		DockerHost:      os.Getenv("DOCKER_HOST"),
-		HelperPath:      snapshotHelper(t, root, work),
-		FirewallImage:   env("KNOTRA_TEST_FIREWALL_IMAGE", "knotra-firewall:dev"),
-		Profiles:        []string{profilePath},
-		Version:         "integration",
+		Listen:        address,
+		DatabaseURL:   dsn,
+		DataDir:       filepath.Join(work, "engine"),
+		DockerHost:    os.Getenv("DOCKER_HOST"),
+		HelperPath:    snapshotHelper(t, root, work),
+		FirewallImage: env("KNOTRA_TEST_FIREWALL_IMAGE", "knotra-firewall:dev"),
+		Profiles:      []string{profilePath},
+		Version:       "integration",
 	}
 	go func() { defer close(serverDone); serverDone <- app.Serve(serverCtx, options, logger) }()
 	t.Cleanup(func() {
@@ -145,20 +138,6 @@ func TestRealConcurrentPipelines(t *testing.T) {
 		watchCancel context.CancelFunc
 	}
 	runs := make([]*execution, len(markers))
-	t.Cleanup(func() {
-		if !t.Failed() {
-			return
-		}
-		var owned []string
-
-		for _, run := range runs {
-			if run != nil {
-				owned = append(owned, run.run.ID)
-			}
-		}
-
-		cleanupWorkflows(t, options, owned)
-	})
 	started := make(chan error, len(markers))
 	var starters sync.WaitGroup
 
@@ -528,41 +507,6 @@ func snapshotHelper(t *testing.T, root, work string) string {
 		t.Fatal(err)
 	}
 	return path
-}
-
-// Failed tests must not leave unreachable workflows after their private database
-// schema is removed. Never list or terminate workflows belonging to another test
-// or user: the only IDs considered are admissions returned to this test.
-func cleanupWorkflows(t *testing.T, options app.Options, owned []string) {
-	t.Helper()
-	if len(owned) == 0 {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	connection, err := temporalclient.DialContext(ctx, temporalclient.Options{HostPort: options.TemporalAddress, Namespace: options.Namespace})
-	if err != nil {
-		t.Errorf("connect for owned workflow cleanup: %v", err)
-		return
-	}
-	defer connection.Close()
-
-	for _, id := range owned {
-		state, err := connection.DescribeWorkflowExecution(ctx, id, "")
-		var missing *serviceerror.NotFound
-		if errors.As(err, &missing) {
-			continue
-		}
-		if err != nil {
-			t.Errorf("inspect owned workflow %s: %v", id, err)
-			continue
-		}
-		if state.WorkflowExecutionInfo.Status == enums.WORKFLOW_EXECUTION_STATUS_RUNNING {
-			if err := connection.TerminateWorkflow(ctx, id, "", "failed integration test cleanup"); err != nil && !errors.As(err, &missing) {
-				t.Errorf("terminate owned workflow %s: %v", id, err)
-			}
-		}
-	}
 }
 
 func unusedAddress(t *testing.T) string {

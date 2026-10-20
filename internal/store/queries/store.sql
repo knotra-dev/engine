@@ -29,16 +29,8 @@ SELECT document FROM knotra_runs WHERE id=$1;
 SELECT plan FROM knotra_runs WHERE id=$1;
 
 -- name: InsertRun :execresult
-INSERT INTO knotra_runs(id,definition_id,document,plan,inputs) VALUES($1,$2,$3,$4,$5);
-
--- name: Enqueue :execresult
-INSERT INTO knotra_outbox(run_id,kind,payload) VALUES($1,$2,$3);
-
--- name: LockNextOutbox :one
-SELECT o.id,o.run_id,o.kind,o.payload FROM knotra_outbox o WHERE o.sent_at IS NULL AND NOT EXISTS (SELECT 1 FROM knotra_outbox earlier WHERE earlier.run_id=o.run_id AND earlier.id<o.id AND earlier.sent_at IS NULL) ORDER BY o.id FOR UPDATE OF o SKIP LOCKED LIMIT 1;
-
--- name: MarkOutboxSent :execresult
-UPDATE knotra_outbox SET sent_at=now() WHERE id=$1;
+INSERT INTO knotra_runs(id,definition_id,document,plan,inputs,scheduler_version,state_format_version,admitted_at,execution_deadline,wake_generation,dirty_since)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,1,$8);
 
 -- name: EventIDExists :one
 SELECT EXISTS(SELECT 1 FROM knotra_events WHERE run_id=$1 AND id=$2);
@@ -51,12 +43,6 @@ SELECT inputs FROM knotra_runs WHERE id=$1;
 
 -- name: ReadRunStatus :one
 SELECT (document->>'status')::text FROM knotra_runs WHERE id=$1;
-
--- name: ReadRunBackend :one
-SELECT backend FROM knotra_runs WHERE id=$1;
-
--- name: ReadRunName :one
-SELECT (d.document->>'name')::text FROM knotra_runs r JOIN knotra_definitions d ON d.id=r.definition_id WHERE r.id=$1;
 
 -- name: ListDefinitions :many
 -- Bound raw documents before sqlc materializes them; keep one cursor marker.

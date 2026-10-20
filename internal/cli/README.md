@@ -68,28 +68,20 @@ bytes and cannot be combined with `--json`.
 
 Run `knotra serve --help` for infrastructure options. The service requires at least one trusted
 `--profile FILE` and a PostgreSQL URL through `KNOTRA_DATABASE_URL` or `--database-url`. River is
-the default execution backend. Engine logs go to stderr.
+the execution backend. Engine logs go to stderr.
 
-`knotra serve` starts the embedded River queues; `--backend river` (`KNOTRA_BACKEND=river`) selects
-this default explicitly. A fresh River engine uses PostgreSQL without dialing Temporal. For an
-isolated test database, start just PostgreSQL with `docker compose up -d --wait postgres`. Keep the
-data directory across restarts: it contains durable outcomes and artifacts. `--execution-workers`
-bounds simultaneous River leaf deliveries (default 16); existing profile concurrency and budgets
-still apply. The queue timeout covers current profile limits and the original durations of active
-admitted runs, with a one-minute margin.
+`knotra serve` starts the embedded River queues. For an isolated test database, start PostgreSQL
+with `docker compose up -d --wait postgres`. Keep the data directory across restarts: it contains
+durable outcomes and artifacts. `--execution-workers` bounds simultaneous River leaf deliveries
+(default 16); existing profile concurrency and budgets still apply. The queue timeout covers current
+profile limits and the original durations of active admitted runs, with a one-minute margin.
 
 `--host-id` (`KNOTRA_HOST_ID`, default `local`) identifies the execution host across restarts. Use a
 stable ASCII name containing letters, digits, dots, underscores or hyphens, up to 128 characters,
 starting with a letter or digit. Explicit host names have separate sandbox staging directories.
 `--shared-data-dir` (`KNOTRA_SHARED_DATA_DIR`) places `artifacts/` and `outcomes/` in a separate
-directory while `--data-dir` retains local staging and legacy Temporal payloads. Without that flag,
-the existing storage layout is unchanged. Back up the shared directory together with PostgreSQL. The
-filesystem must support hard links, atomic same-directory rename, file/directory syncing and
-consistent reads between clients. See
+directory while `--data-dir` retains local staging. Without that flag, the existing storage layout
+is unchanged. Back up the shared directory together with PostgreSQL. The filesystem must support
+hard links, atomic same-directory rename, file/directory syncing and consistent reads between
+clients. See
 [deployment and recovery](../../docs/running.md#data-recovery-and-deployment-boundaries).
-
-`--backend temporal` selects the optional legacy backend; its address defaults to `127.0.0.1:7233`
-(`--temporal-address` / `KNOTRA_TEMPORAL_ADDRESS`). `--backend` controls new-run admission, while
-commands keep using the backend recorded on each admitted run. Startup also starts Temporal if the
-database contains live legacy runs or unsent legacy outbox commands. Once those finish, retained
-completed legacy projections do not require a Temporal connection.

@@ -20,32 +20,6 @@ func (q *Queries) CancelOpenRequests(ctx context.Context, runID string) (pgconn.
 	return q.db.Exec(ctx, cancelOpenRequests, runID)
 }
 
-const closeRequest = `-- name: CloseRequest :execresult
-UPDATE knotra_requests SET status=$2 WHERE id=$1 AND status IN ('open','pending')
-`
-
-type CloseRequestParams struct {
-	ID     string
-	Status string
-}
-
-func (q *Queries) CloseRequest(ctx context.Context, arg CloseRequestParams) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, closeRequest, arg.ID, arg.Status)
-}
-
-const completeLegacyOperation = `-- name: CompleteLegacyOperation :execresult
-UPDATE knotra_operations SET completed=true,response=$2 WHERE id=$1 AND NOT completed AND worker_id IS NULL
-`
-
-type CompleteLegacyOperationParams struct {
-	ID       string
-	Response []byte
-}
-
-func (q *Queries) CompleteLegacyOperation(ctx context.Context, arg CompleteLegacyOperationParams) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, completeLegacyOperation, arg.ID, arg.Response)
-}
-
 const eventSequenceExists = `-- name: EventSequenceExists :one
 SELECT EXISTS(SELECT 1 FROM knotra_events WHERE run_id=$1 AND sequence=$2)
 `
@@ -88,27 +62,6 @@ type InsertExecutionEventParams struct {
 
 func (q *Queries) InsertExecutionEvent(ctx context.Context, arg InsertExecutionEventParams) (pgconn.CommandTag, error) {
 	return q.db.Exec(ctx, insertExecutionEvent, arg.RunID, arg.Sequence, arg.Document)
-}
-
-const insertLegacyOperation = `-- name: InsertLegacyOperation :execresult
-INSERT INTO knotra_operations(id,run_id,kind,effect)
-		 SELECT $1,r.id,$2,$3 FROM knotra_runs r WHERE r.id=$4 AND backend='temporal' ON CONFLICT DO NOTHING
-`
-
-type InsertLegacyOperationParams struct {
-	ID     string
-	Kind   string
-	Effect string
-	RunID  string
-}
-
-func (q *Queries) InsertLegacyOperation(ctx context.Context, arg InsertLegacyOperationParams) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, insertLegacyOperation,
-		arg.ID,
-		arg.Kind,
-		arg.Effect,
-		arg.RunID,
-	)
 }
 
 const listHumanRequests = `-- name: ListHumanRequests :many
@@ -159,34 +112,6 @@ func (q *Queries) ListHumanRequests(ctx context.Context, arg ListHumanRequestsPa
 		return nil, err
 	}
 	return items, nil
-}
-
-const lockHumanAnswer = `-- name: LockHumanAnswer :one
-SELECT status,response_id,response,accepted_at FROM knotra_requests WHERE id=$1 AND run_id=$2 FOR UPDATE
-`
-
-type LockHumanAnswerParams struct {
-	ID    string
-	RunID string
-}
-
-type LockHumanAnswerRow struct {
-	Status     string
-	ResponseID *string
-	Response   []byte
-	AcceptedAt *time.Time
-}
-
-func (q *Queries) LockHumanAnswer(ctx context.Context, arg LockHumanAnswerParams) (LockHumanAnswerRow, error) {
-	row := q.db.QueryRow(ctx, lockHumanAnswer, arg.ID, arg.RunID)
-	var i LockHumanAnswerRow
-	err := row.Scan(
-		&i.Status,
-		&i.ResponseID,
-		&i.Response,
-		&i.AcceptedAt,
-	)
-	return i, err
 }
 
 const lockRunProjection = `-- name: LockRunProjection :one
@@ -241,39 +166,6 @@ func (q *Queries) ReadBudgetUsed(ctx context.Context, arg ReadBudgetUsedParams) 
 	var used int64
 	err := row.Scan(&used)
 	return used, err
-}
-
-const readLegacyOperation = `-- name: ReadLegacyOperation :one
-SELECT o.completed,o.response FROM knotra_operations o JOIN knotra_runs r ON r.id=o.run_id
-		WHERE o.id=$1 AND o.run_id=$2 AND r.backend='temporal'
-`
-
-type ReadLegacyOperationParams struct {
-	ID    string
-	RunID string
-}
-
-type ReadLegacyOperationRow struct {
-	Completed bool
-	Response  []byte
-}
-
-func (q *Queries) ReadLegacyOperation(ctx context.Context, arg ReadLegacyOperationParams) (ReadLegacyOperationRow, error) {
-	row := q.db.QueryRow(ctx, readLegacyOperation, arg.ID, arg.RunID)
-	var i ReadLegacyOperationRow
-	err := row.Scan(&i.Completed, &i.Response)
-	return i, err
-}
-
-const readLegacyOperationResponse = `-- name: ReadLegacyOperationResponse :one
-SELECT response FROM knotra_operations WHERE id=$1 AND completed AND worker_id IS NULL
-`
-
-func (q *Queries) ReadLegacyOperationResponse(ctx context.Context, id string) ([]byte, error) {
-	row := q.db.QueryRow(ctx, readLegacyOperationResponse, id)
-	var response []byte
-	err := row.Scan(&response)
-	return response, err
 }
 
 const readRequest = `-- name: ReadRequest :one

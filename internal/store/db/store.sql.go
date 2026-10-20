@@ -7,23 +7,10 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
-
-const enqueue = `-- name: Enqueue :execresult
-INSERT INTO knotra_outbox(run_id,kind,payload) VALUES($1,$2,$3)
-`
-
-type EnqueueParams struct {
-	RunID   string
-	Kind    string
-	Payload []byte
-}
-
-func (q *Queries) Enqueue(ctx context.Context, arg EnqueueParams) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, enqueue, arg.RunID, arg.Kind, arg.Payload)
-}
 
 const eventIDExists = `-- name: EventIDExists :one
 SELECT EXISTS(SELECT 1 FROM knotra_events WHERE run_id=$1 AND id=$2)
@@ -74,15 +61,20 @@ func (q *Queries) InsertEngineID(ctx context.Context, value string) (pgconn.Comm
 }
 
 const insertRun = `-- name: InsertRun :execresult
-INSERT INTO knotra_runs(id,definition_id,document,plan,inputs) VALUES($1,$2,$3,$4,$5)
+INSERT INTO knotra_runs(id,definition_id,document,plan,inputs,scheduler_version,state_format_version,admitted_at,execution_deadline,wake_generation,dirty_since)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,1,$8)
 `
 
 type InsertRunParams struct {
-	ID           string
-	DefinitionID string
-	Document     []byte
-	Plan         []byte
-	Inputs       []byte
+	ID                 string
+	DefinitionID       string
+	Document           []byte
+	Plan               []byte
+	Inputs             []byte
+	SchedulerVersion   int
+	StateFormatVersion int
+	AdmittedAt         time.Time
+	ExecutionDeadline  time.Time
 }
 
 func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) (pgconn.CommandTag, error) {
@@ -92,6 +84,10 @@ func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) (pgconn.Co
 		arg.Document,
 		arg.Plan,
 		arg.Inputs,
+		arg.SchedulerVersion,
+		arg.StateFormatVersion,
+		arg.AdmittedAt,
+		arg.ExecutionDeadline,
 	)
 }
 
@@ -242,43 +238,12 @@ func (q *Queries) ListRuns(ctx context.Context, arg ListRunsParams) ([][]byte, e
 	return items, nil
 }
 
-const lockNextOutbox = `-- name: LockNextOutbox :one
-SELECT o.id,o.run_id,o.kind,o.payload FROM knotra_outbox o WHERE o.sent_at IS NULL AND NOT EXISTS (SELECT 1 FROM knotra_outbox earlier WHERE earlier.run_id=o.run_id AND earlier.id<o.id AND earlier.sent_at IS NULL) ORDER BY o.id FOR UPDATE OF o SKIP LOCKED LIMIT 1
-`
-
-type LockNextOutboxRow struct {
-	ID      int64
-	RunID   string
-	Kind    string
-	Payload []byte
-}
-
-func (q *Queries) LockNextOutbox(ctx context.Context) (LockNextOutboxRow, error) {
-	row := q.db.QueryRow(ctx, lockNextOutbox)
-	var i LockNextOutboxRow
-	err := row.Scan(
-		&i.ID,
-		&i.RunID,
-		&i.Kind,
-		&i.Payload,
-	)
-	return i, err
-}
-
 const lockStoreSchema = `-- name: LockStoreSchema :execresult
 SELECT pg_advisory_xact_lock(712865723)
 `
 
 func (q *Queries) LockStoreSchema(ctx context.Context) (pgconn.CommandTag, error) {
 	return q.db.Exec(ctx, lockStoreSchema)
-}
-
-const markOutboxSent = `-- name: MarkOutboxSent :execresult
-UPDATE knotra_outbox SET sent_at=now() WHERE id=$1
-`
-
-func (q *Queries) MarkOutboxSent(ctx context.Context, id int64) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, markOutboxSent, id)
 }
 
 const putDefinition = `-- name: PutDefinition :one
@@ -359,17 +324,6 @@ func (q *Queries) ReadPlan(ctx context.Context, id string) ([]byte, error) {
 	return plan, err
 }
 
-const readRunBackend = `-- name: ReadRunBackend :one
-SELECT backend FROM knotra_runs WHERE id=$1
-`
-
-func (q *Queries) ReadRunBackend(ctx context.Context, id string) (string, error) {
-	row := q.db.QueryRow(ctx, readRunBackend, id)
-	var backend string
-	err := row.Scan(&backend)
-	return backend, err
-}
-
 const readRunInputs = `-- name: ReadRunInputs :one
 SELECT inputs FROM knotra_runs WHERE id=$1
 `
@@ -379,17 +333,6 @@ func (q *Queries) ReadRunInputs(ctx context.Context, id string) ([]byte, error) 
 	var inputs []byte
 	err := row.Scan(&inputs)
 	return inputs, err
-}
-
-const readRunName = `-- name: ReadRunName :one
-SELECT (d.document->>'name')::text FROM knotra_runs r JOIN knotra_definitions d ON d.id=r.definition_id WHERE r.id=$1
-`
-
-func (q *Queries) ReadRunName(ctx context.Context, id string) (string, error) {
-	row := q.db.QueryRow(ctx, readRunName, id)
-	var column_1 string
-	err := row.Scan(&column_1)
-	return column_1, err
 }
 
 const readRunProjection = `-- name: ReadRunProjection :one

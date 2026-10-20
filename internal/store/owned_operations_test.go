@@ -22,12 +22,6 @@ func TestOwnedOperationAdmissionAndBudgetAreAtomic(t *testing.T) {
 	if _, err := s.Pool.Exec(ctx, `UPDATE knotra_execution_scopes SET limits=jsonb_set(limits,'{maxModelCalls}','1') WHERE run_id=$1 AND id<>$1`, claim.RunID); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Reserve(ctx, claim.RunID, "model", claim.Request.Scopes); !errors.Is(err, ErrExecutionOwnership) {
-		t.Fatalf("unowned budget write bypassed guard: %v", err)
-	}
-	if _, err := s.BeginOperation(ctx, "unowned", claim.RunID, "tool", "write"); !errors.Is(err, ErrExecutionOwnership) {
-		t.Fatalf("unowned operation bypassed guard: %v", err)
-	}
 	var physicalCalls atomic.Int32
 	var wg sync.WaitGroup
 	for range 24 {
@@ -61,9 +55,6 @@ func TestOwnedOperationAdmissionAndBudgetAreAtomic(t *testing.T) {
 	}
 	if err := s.CompleteOwnedOperation(ctx, claim.Ownership, "model", json.RawMessage(`{"answer":43}`)); !errors.Is(err, ErrConflict) {
 		t.Fatalf("changed durable response: %v", err)
-	}
-	if err := s.CompleteOperation(ctx, "model", response); err == nil {
-		t.Fatal("legacy completion bypassed token guard")
 	}
 	state, err := s.BeginOwnedOperation(ctx, claim.Ownership, "model", "model", "read")
 	if err != nil || !state.Completed || string(state.Response) != string(response) {

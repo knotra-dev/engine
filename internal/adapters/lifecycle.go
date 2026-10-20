@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/michael-bill/knotra/internal/execution"
@@ -35,82 +34,6 @@ func (r *Runner) workRoot() string {
 		root = filepath.Join(root, "host-"+hex.EncodeToString(host[:16]))
 	}
 	return root
-}
-
-// CleanupOwned is called once after acquiring the engine's exclusive process
-// lease, before starting workers. It never selects another engine's containers
-// or resources with River ownership. The optional database check protects even
-// directories whose container creation was interrupted or already removed.
-// An abrupt engine exit can leave host package directories even though container
-// watchdogs stop its processes independently of this cleanup.
-func (r *Runner) CleanupOwned(ctx context.Context, protected func(context.Context, string) (bool, error)) error {
-	if r.EngineID == "" || r.WorkDir == "" {
-		return fmt.Errorf("cleanup requires engine identity and work directory")
-	}
-	docker, err := r.docker(ctx)
-	if err != nil {
-		return err
-	}
-	defer docker.client.CloseIdleConnections()
-	filters, err := json.Marshal(map[string][]string{"label": {"io.knotra.engine=" + r.EngineID}})
-	if err != nil {
-		return err
-	}
-	var containers []struct {
-		ID     string            `json:"Id"`
-		Labels map[string]string `json:"Labels"`
-	}
-	if err = docker.json(ctx, "GET", "/containers/json?all=true&filters="+url.QueryEscape(string(filters)), nil, &containers); err != nil {
-		return err
-	}
-
-	for _, container := range containers {
-		if container.Labels["io.knotra.engine"] != r.EngineID || container.ID == "" {
-			return fmt.Errorf("docker returned an unexpected container identity during cleanup")
-		}
-		if container.Labels["io.knotra.worker"] != "" {
-			continue
-		}
-		if protected != nil {
-			keep, err := protected(ctx, container.Labels["io.knotra.resource"])
-			if err != nil {
-				return err
-			}
-			if keep {
-				continue
-			}
-		}
-		if err = docker.remove(ctx, container.ID); err != nil {
-			return err
-		}
-	}
-
-	entries, err := os.ReadDir(r.workRoot())
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-
-	for _, entry := range entries {
-		if id, sandbox := strings.CutPrefix(entry.Name(), "sandbox-"); sandbox {
-			if protected != nil {
-				keep, err := protected(ctx, id)
-				if err != nil {
-					return err
-				}
-				if keep {
-					continue
-				}
-			}
-			if err = os.RemoveAll(filepath.Join(r.workRoot(), entry.Name())); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
 }
 
 // ResourcePage uses Docker's bounded container inventory. A removed pagination
@@ -297,7 +220,7 @@ func renewLease(dir string) (time.Time, error) {
 }
 
 // A stopped container keeps only bounded supervisor diagnostics until Close or
-// startup cleanup. Exec streams are separate and never enter the container log.
+// resource cleanup. Exec streams are separate and never enter the container log.
 func (s *sandbox) diagnose(original error) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

@@ -37,9 +37,7 @@ type Server struct {
 	Version          string
 	CORSOrigin       string
 	Admit            func(context.Context, *contract.Plan) error
-	Backend          string
 	HostID           string
-	WorkerBackends   []string
 	ExecutionTimeout time.Duration
 	Wake             store.EnqueueWake
 	Log              *slog.Logger
@@ -220,14 +218,6 @@ func (s *Server) command(w http.ResponseWriter, r *http.Request, payload []byte,
 }
 
 func (s *Server) info(w http.ResponseWriter, _ *http.Request) {
-	backend := s.Backend
-	if backend == "" {
-		backend = execution.BackendTemporal
-	}
-	schedulerVersion, stateFormatVersion := 0, 0
-	if backend == execution.BackendRiver {
-		schedulerVersion, stateFormatVersion = execution.SchedulerVersion, execution.StateFormatVersion
-	}
 	s.write(
 		w,
 		200,
@@ -236,11 +226,11 @@ func (s *Server) info(w http.ResponseWriter, _ *http.Request) {
 			"engineId":           s.Store.EngineID,
 			"principalId":        s.principal(),
 			"version":            s.Version,
-			"backend":            backend,
-			"workerBackends":     s.WorkerBackends,
+			"backend":            execution.BackendRiver,
+			"workerBackends":     []string{execution.BackendRiver},
 			"hostId":             s.HostID,
-			"schedulerVersion":   schedulerVersion,
-			"stateFormatVersion": stateFormatVersion,
+			"schedulerVersion":   execution.SchedulerVersion,
+			"stateFormatVersion": execution.StateFormatVersion,
 			"executionTimeout":   s.ExecutionTimeout.String(),
 			"capabilities":       []string{"validate", "definitions", "runs", "events", "history", "execution-observations", "human", "artifacts", "resolution"},
 		},

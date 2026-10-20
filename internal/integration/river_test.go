@@ -139,7 +139,7 @@ func startRiverService(t *testing.T, ctx context.Context, profile contract.Profi
 	profilePath := filepath.Join(directory, "profile.json")
 	writeJSON(t, profilePath, profile)
 	options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx),
-		TemporalAddress: "127.0.0.1:1", DataDir: filepath.Join(directory, "engine"), HelperPath: os.Getenv("KNOTRA_TEST_HELPER"), Profiles: []string{profilePath}}
+		DataDir: filepath.Join(directory, "engine"), HelperPath: os.Getenv("KNOTRA_TEST_HELPER"), Profiles: []string{profilePath}}
 	serviceCtx, stop := context.WithCancel(ctx)
 	done := make(chan error, 1)
 	go func() {

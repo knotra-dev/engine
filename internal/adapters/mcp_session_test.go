@@ -116,12 +116,18 @@ func TestRunSessionInitializationIsIndependentAndCancelable(t *testing.T) {
 	if result := await(lookup(t.Context(), fast)); result.err != nil || result.session != cached.session {
 		t.Fatalf("unrelated cached session was blocked or replaced: %v", result.err)
 	}
+	firstFastKey := fast.RunID + "/" + fast.ScopeID + "/tools"
 	fast.ScopeID = "other"
 	if result := await(lookup(t.Context(), fast)); result.err != nil || result.session == cached.session {
 		t.Fatalf("unrelated new session did not initialize independently: %v", result.err)
 	}
 	closed := make(chan error, 1)
-	go func() { closed <- base.ReleaseRun(fast.RunID) }()
+	go func() {
+		closed <- errors.Join(
+			base.ReleaseSession(firstFastKey),
+			base.ReleaseSession(fast.RunID+"/"+fast.ScopeID+"/tools"),
+		)
+	}()
 	select {
 	case err := <-closed:
 		if err != nil {
@@ -130,6 +136,9 @@ func TestRunSessionInitializationIsIndependentAndCancelable(t *testing.T) {
 	case <-time.After(time.Second):
 		release.Do(func() { close(unblock) })
 		t.Fatal("cleanup waited for an unrelated run's initialization")
+	}
+	if page, err := base.SessionPage(""); err != nil || len(page) != 1 || page[0] != slow.RunID+"/"+slow.ScopeID+"/tools" {
+		t.Fatalf("session cleanup affected another run or leaked completed entries: %v, %v", page, err)
 	}
 	var waiters []<-chan result
 	for range 8 {
@@ -150,7 +159,7 @@ func TestRunSessionInitializationIsIndependentAndCancelable(t *testing.T) {
 	}
 }
 
-func TestRunSessionCleanupWaitsForItsInitialization(t *testing.T) {
+func TestRunnerCloseWaitsForSessionInitialization(t *testing.T) {
 	started, unblock := make(chan struct{}), make(chan struct{})
 	var release, announce sync.Once
 	defer release.Do(func() { close(unblock) })
@@ -185,7 +194,7 @@ func TestRunSessionCleanupWaitsForItsInitialization(t *testing.T) {
 		t.Fatal("initialization did not start")
 	}
 	closed := make(chan error, 1)
-	go func() { closed <- runner.ReleaseRun(req.RunID) }()
+	go func() { closed <- runner.Close() }()
 	select {
 	case err := <-closed:
 		t.Fatalf("cleanup returned before initialization completed: %v", err)

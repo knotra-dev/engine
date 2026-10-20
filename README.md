@@ -115,8 +115,8 @@ flowchart TD
 ```
 
 The engine and CLI use Go; desktop uses Tauri/Rust and React/TypeScript. River runs inside the
-engine and uses PostgreSQL. Temporal remains an optional legacy backend. See
-[architecture](docs/architecture.md) for execution, storage and recovery.
+engine and uses PostgreSQL. See [architecture](docs/architecture.md) for execution, storage and
+recovery.
 
 ## Documentation
 

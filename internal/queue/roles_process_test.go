@@ -170,15 +170,14 @@ func TestThreeExecutorProcessesShareWorkAndSurviveDrain(t *testing.T) {
 			}
 		}
 	}
-	var attempts, invalid, debits, slots, legacy int
+	var attempts, invalid, debits, slots int
 	if err := r.Store.Pool.QueryRow(ctx, `SELECT count(*),count(*) FILTER (WHERE state<>'completed' OR number<>1),
 		(SELECT sum(used) FROM knotra_budgets WHERE kind='model' AND scope=run_id),
-		(SELECT count(*) FROM knotra_execution_slots WHERE released_at IS NULL),
-		(SELECT count(*) FROM knotra_outbox) FROM knotra_execution_attempts`).Scan(&attempts, &invalid, &debits, &slots, &legacy); err != nil {
+		(SELECT count(*) FROM knotra_execution_slots WHERE released_at IS NULL) FROM knotra_execution_attempts`).Scan(&attempts, &invalid, &debits, &slots); err != nil {
 		t.Fatal(err)
 	}
-	if attempts != 54 || calls.Load() != 54 || debits != 54 || invalid != 0 || slots != 0 || legacy != 0 {
-		t.Fatalf("attempts=%d calls=%d debits=%d invalid=%d slots=%d legacy=%d", attempts, calls.Load(), debits, invalid, slots, legacy)
+	if attempts != 54 || calls.Load() != 54 || debits != 54 || invalid != 0 || slots != 0 {
+		t.Fatalf("attempts=%d calls=%d debits=%d invalid=%d slots=%d", attempts, calls.Load(), debits, invalid, slots)
 	}
 	for i := 1; i < len(children); i++ {
 		if err := writeSignal(directory, fmt.Sprintf("stop-executor-%d", i+1)); err != nil {

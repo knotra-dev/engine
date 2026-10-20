@@ -1,8 +1,9 @@
 # Knotra v1: packages, validation and diagnostics
 
-The implementation lives in `internal/contract`, `internal/engine` and `internal/adapters`. Setup is
-described in the [running guide](../running.md); verified scenarios and support boundaries are in
-the [report](../verification.md).
+The compiler lives in `internal/contract`; execution lives in `internal/scheduler`,
+`internal/queue`, `internal/executor` and `internal/adapters`. Setup is described in the
+[running guide](../running.md); verified scenarios and support boundaries are in the
+[report](../verification.md).
 
 Status: normative v1 contract, checked against the implementation on 5 October 2026. The structural
 JSON Schema and textual semantics apply together. External system requirements are checked at
@@ -287,8 +288,9 @@ step. New capabilities must not require implicit deep merges or hidden global va
 observable behavior and invariants instead of reproducing internal functions for coverage.
 
 Go fixture tests check parse, structural and semantic expectations for all 39 documents. Runtime
-checks live in `internal/engine`, `internal/adapters`, `internal/api` and `internal/integration`.
-The auxiliary Python script checks only structure and explicitly prints `Semantic: NOT RUN`.
+checks live in `internal/scheduler`, `internal/queue`, `internal/executor`, `internal/adapters`,
+`internal/api` and `internal/integration`. The auxiliary Python script checks only structure and
+explicitly prints `Semantic: NOT RUN`.
 
 ## 10. References
 

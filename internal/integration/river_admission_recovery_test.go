@@ -65,7 +65,7 @@ func TestRiverAdmissionProcessCrashBoundaries(t *testing.T) {
 			profile.Spec.Models = map[string]contract.ModelConnection{"cloud": {Provider: "openai", Model: "fixture-model", BaseURL: provider.URL, Auth: map[string]contract.Credential{"key": {SecretRef: "fixture"}}}}
 			profilePath := filepath.Join(work, "profile.json")
 			writeJSON(t, profilePath, profile)
-			options := app.Options{Backend: execution.BackendRiver, Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), TemporalAddress: "127.0.0.1:1", DataDir: filepath.Join(work, "engine"), Profiles: []string{profilePath}}
+			options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), DataDir: filepath.Join(work, "engine"), Profiles: []string{profilePath}}
 			optionsPath := filepath.Join(work, "server.json")
 			writeJSON(t, optionsPath, options)
 			api := &client.Client{BaseURL: "http://" + options.Listen, StateDir: filepath.Join(work, "client")}
@@ -162,7 +162,7 @@ func TestRiverAdmissionProcessCrashBoundaries(t *testing.T) {
 			}
 			checkAdmission := func(want int) {
 				t.Helper()
-				var runs, graphs, scopes, nodes, attempts, receipts, advances, executes, effects, budgets, slots, outbox int
+				var runs, graphs, scopes, nodes, attempts, receipts, advances, executes, effects, budgets, slots int
 				if err := admin.Pool.QueryRow(ctx, `SELECT
 					(SELECT count(*) FROM knotra_runs),(SELECT count(*) FROM knotra_execution_graphs),
 					(SELECT count(*) FROM knotra_execution_scopes),(SELECT count(*) FROM knotra_execution_nodes),
@@ -171,12 +171,11 @@ func TestRiverAdmissionProcessCrashBoundaries(t *testing.T) {
 					(SELECT count(*) FROM river_job WHERE kind='knotra_advance_v1'),
 					(SELECT count(*) FROM river_job WHERE kind='knotra_execute_v1'),
 					(SELECT count(*) FROM knotra_operations),COALESCE((SELECT sum(used) FROM knotra_budgets),0),
-					COALESCE((SELECT sum(active_attempts) FROM knotra_execution_scopes),0),
-					(SELECT count(*) FROM knotra_outbox)`, key).Scan(&runs, &graphs, &scopes, &nodes, &attempts, &receipts, &advances, &executes, &effects, &budgets, &slots, &outbox); err != nil {
+					COALESCE((SELECT sum(active_attempts) FROM knotra_execution_scopes),0)`, key).Scan(&runs, &graphs, &scopes, &nodes, &attempts, &receipts, &advances, &executes, &effects, &budgets, &slots); err != nil {
 					t.Fatal(err)
 				}
-				if runs != want || graphs != want || scopes != want || nodes != want || attempts != want || receipts != want || advances != want || executes != want || effects != 0 || budgets != 0 || slots != 0 || outbox != 0 || calls.Load() != 0 {
-					t.Fatalf("admission run/graph/scope/node/attempt/receipt/jobs=%d/%d/%d/%d/%d/%d/%d/%d want=%d effects/budgets/slots/outbox/calls=%d/%d/%d/%d/%d", runs, graphs, scopes, nodes, attempts, receipts, advances, executes, want, effects, budgets, slots, outbox, calls.Load())
+				if runs != want || graphs != want || scopes != want || nodes != want || attempts != want || receipts != want || advances != want || executes != want || effects != 0 || budgets != 0 || slots != 0 || calls.Load() != 0 {
+					t.Fatalf("admission run/graph/scope/node/attempt/receipt/jobs=%d/%d/%d/%d/%d/%d/%d/%d want=%d effects/budgets/slots/calls=%d/%d/%d/%d", runs, graphs, scopes, nodes, attempts, receipts, advances, executes, want, effects, budgets, slots, calls.Load())
 				}
 			}
 			want := 0

@@ -47,7 +47,7 @@ Then run from this extracted directory:
   $launch quickstart
 
 The CLI downloads qwen3.5:9b if needed. Initial downloads may take time.
-Go, a source checkout and separately installed PostgreSQL/Temporal are not needed.
+Go, a source checkout and separately installed PostgreSQL are not needed.
 Keep this directory intact: both Linux sandbox helpers are shipped beside the CLI.
 
 For a cloud model, select its exact ID and set the key in your environment:
@@ -57,7 +57,7 @@ For a cloud model, select its exact ID and set the key in your environment:
 
 Set OPENAI_API_KEY or ANTHROPIC_API_KEY before the respective cloud command.
 Ctrl-C stops the engine. Repeating the same command preserves runs and artifacts.
-The bundled Temporal configuration is for development and evaluation.
+Quickstart is for development and evaluation.
 
 Project and full instructions: https://github.com/michael-bill/knotra
 GUIDE

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -95,41 +94,6 @@ func TestDockerLeaseTransientReadFailureDoesNotRevokeValidExpiry(t *testing.T) {
 	}
 }
 
-func TestDockerCleanupIsBoundToEngineIdentity(t *testing.T) {
-	runner := integrationRunner(t)
-	runner.EngineID = "cleanup-" + uuid.NewString()
-	other := integrationRunner(t)
-	other.EngineID = "other-" + uuid.NewString()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	req := testRequest("")
-	req.Node.Sandbox = "box"
-	owned, err := runner.nodeSandbox(ctx, req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = owned.close() }()
-	unrelated, err := other.nodeSandbox(ctx, req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = unrelated.close() }()
-	if err = runner.CleanupOwned(ctx, nil); err != nil {
-		t.Fatal(err)
-	}
-	assertContainerGone(t, ctx, owned.docker, owned.id)
-	if _, err = os.Stat(owned.dir); !os.IsNotExist(err) {
-		t.Fatalf("orphan files remain: %v", err)
-	}
-	var inspect map[string]any
-	if err = unrelated.docker.json(ctx, "GET", "/containers/"+unrelated.id+"/json", nil, &inspect); err != nil {
-		t.Fatalf("cleanup affected other engine: %v", err)
-	}
-	if err = runner.CleanupOwned(ctx, nil); err != nil {
-		t.Fatalf("cleanup is not idempotent: %v", err)
-	}
-}
-
 func TestDockerHardDeadlineCannotBeRenewed(t *testing.T) {
 	runner := integrationRunner(t)
 	req := testRequest("")
@@ -169,7 +133,7 @@ func TestDockerWatchdogSurvivesOwnerSIGKILL(t *testing.T) {
 				map[string]any{"command": []string{"python", "-c", "import time;time.sleep(120)"}, "timeout": "2m"},
 			)
 		}()
-		b, _ := json.Marshal(map[string]string{"id": sandbox.id, "dir": sandbox.dir, "engine": runner.EngineID})
+		b, _ := json.Marshal(map[string]string{"id": sandbox.id, "dir": sandbox.dir})
 		_, _ = fmt.Println("KNOTRA_SANDBOX_READY " + string(b))
 		<-ctx.Done()
 		return
@@ -188,7 +152,7 @@ func TestDockerWatchdogSurvivesOwnerSIGKILL(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }()
-	var ready struct{ ID, Dir, Engine string }
+	var ready struct{ ID, Dir string }
 	scanner := bufio.NewScanner(stdout)
 
 	for scanner.Scan() {
@@ -218,21 +182,6 @@ func TestDockerWatchdogSurvivesOwnerSIGKILL(t *testing.T) {
 	waitContainerStopped(t, docker, ready.ID, sandboxLeaseTTL+8*time.Second)
 	if _, err = os.Stat(filepath.Join(ready.Dir, "control", "lease")); err != nil {
 		t.Fatalf("watchdog test accidentally ran host cleanup: %v", err)
-	}
-	runner.EngineID = ready.Engine
-	if err = runner.CleanupOwned(ctx, nil); err != nil {
-		t.Fatal(err)
-	}
-	assertContainerGone(t, ctx, docker, ready.ID)
-}
-
-func assertContainerGone(t *testing.T, ctx context.Context, docker *dockerClient, id string) {
-	t.Helper()
-	var inspect map[string]any
-	err := docker.json(ctx, "GET", "/containers/"+id+"/json", nil, &inspect)
-	var apiErr *dockerAPIError
-	if !errors.As(err, &apiErr) || apiErr.status != http.StatusNotFound {
-		t.Fatalf("container %s still exists or inspection failed: %v", id, err)
 	}
 }
 

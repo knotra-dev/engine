@@ -193,26 +193,8 @@ CREATE TABLE knotra_operations (
     worker_id text,
     ownership_generation bigint,
     admitted_at timestamptz DEFAULT clock_timestamp(),
-    CONSTRAINT knotra_operations_ownership CHECK ((((instance_id IS NULL) AND (attempt_number IS NULL) AND (worker_id IS NULL) AND (ownership_generation IS NULL)) OR ((instance_id IS NOT NULL) AND (attempt_number IS NOT NULL) AND (attempt_number > 0) AND (worker_id IS NOT NULL) AND (ownership_generation IS NOT NULL) AND (ownership_generation > 0))))
+    CONSTRAINT knotra_operations_ownership CHECK (instance_id IS NOT NULL AND attempt_number IS NOT NULL AND attempt_number > 0 AND worker_id IS NOT NULL AND ownership_generation IS NOT NULL AND ownership_generation > 0)
 );
-
-CREATE TABLE knotra_outbox (
-    id bigint NOT NULL,
-    run_id text NOT NULL,
-    kind text NOT NULL,
-    payload json NOT NULL,
-    sent_at timestamptz,
-    created_at timestamptz DEFAULT now() NOT NULL
-);
-
-CREATE SEQUENCE knotra_outbox_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-ALTER SEQUENCE knotra_outbox_id_seq OWNED BY knotra_outbox.id;
 
 CREATE TABLE knotra_requests (
     id text NOT NULL,
@@ -235,11 +217,11 @@ CREATE TABLE knotra_runs (
     created_at timestamptz DEFAULT now() NOT NULL,
     sequence bigint DEFAULT 0 NOT NULL,
     cancel_requested boolean DEFAULT false NOT NULL,
-    backend text DEFAULT 'temporal'::text NOT NULL,
+    backend text DEFAULT 'river'::text NOT NULL,
     scheduler_version integer DEFAULT 0 NOT NULL,
     state_format_version integer DEFAULT 0 NOT NULL,
     admitted_at timestamptz DEFAULT clock_timestamp() NOT NULL,
-    execution_deadline timestamptz,
+    execution_deadline timestamptz NOT NULL,
     state_revision bigint DEFAULT 0 NOT NULL,
     execution_event_sequence bigint DEFAULT 0 NOT NULL,
     wake_generation bigint DEFAULT 0 NOT NULL,
@@ -251,9 +233,9 @@ CREATE TABLE knotra_runs (
     graph_scan_again boolean DEFAULT false NOT NULL,
     delivery_cursor text DEFAULT ''::text NOT NULL,
     CONSTRAINT knotra_runs_applied_generation_check CHECK ((applied_generation >= 0)),
-    CONSTRAINT knotra_runs_backend_check CHECK ((backend = ANY (ARRAY['temporal'::text, 'river'::text]))),
+    CONSTRAINT knotra_runs_backend_check CHECK (backend = 'river'),
     CONSTRAINT knotra_runs_execution_event_sequence_check CHECK ((execution_event_sequence >= 0)),
-    CONSTRAINT knotra_runs_execution_version CHECK ((((backend = 'temporal'::text) AND (scheduler_version = 0) AND (state_format_version = 0)) OR ((backend = 'river'::text) AND (scheduler_version > 0) AND (state_format_version > 0) AND (execution_deadline IS NOT NULL)))),
+    CONSTRAINT knotra_runs_execution_version CHECK (scheduler_version > 0 AND state_format_version > 0),
     CONSTRAINT knotra_runs_generations CHECK ((applied_generation <= wake_generation)),
     CONSTRAINT knotra_runs_state_revision_check CHECK ((state_revision >= 0)),
     CONSTRAINT knotra_runs_wake_generation_check CHECK ((wake_generation >= 0))
@@ -277,8 +259,6 @@ CREATE TABLE knotra_workers (
 );
 
 ALTER TABLE ONLY knotra_events ALTER COLUMN id SET DEFAULT nextval('knotra_events_id_seq'::regclass);
-
-ALTER TABLE ONLY knotra_outbox ALTER COLUMN id SET DEFAULT nextval('knotra_outbox_id_seq'::regclass);
 
 ALTER TABLE ONLY knotra_artifacts
     ADD CONSTRAINT knotra_artifacts_pkey PRIMARY KEY (id);
@@ -337,9 +317,6 @@ ALTER TABLE ONLY knotra_instances
 ALTER TABLE ONLY knotra_operations
     ADD CONSTRAINT knotra_operations_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY knotra_outbox
-    ADD CONSTRAINT knotra_outbox_pkey PRIMARY KEY (id);
-
 ALTER TABLE ONLY knotra_requests
     ADD CONSTRAINT knotra_requests_pkey PRIMARY KEY (id);
 
@@ -391,8 +368,6 @@ CREATE INDEX knotra_execution_slots_active ON knotra_execution_slots USING btree
 CREATE INDEX knotra_execution_timers_due ON knotra_execution_timers USING btree (due_at, run_id, id) WHERE (consumed_at IS NULL);
 
 CREATE INDEX knotra_operations_unconfirmed_attempt ON knotra_operations USING btree (run_id, instance_id, attempt_number, created_at, id) WHERE ((admitted_at IS NOT NULL) AND (NOT completed));
-
-CREATE INDEX knotra_outbox_pending ON knotra_outbox USING btree (id) WHERE (sent_at IS NULL);
 
 CREATE INDEX knotra_requests_run ON knotra_requests USING btree (run_id);
 
@@ -455,9 +430,6 @@ ALTER TABLE ONLY knotra_operations
 
 ALTER TABLE ONLY knotra_operations
     ADD CONSTRAINT knotra_operations_worker_id_fkey FOREIGN KEY (worker_id) REFERENCES knotra_workers(id);
-
-ALTER TABLE ONLY knotra_outbox
-    ADD CONSTRAINT knotra_outbox_run_id_fkey FOREIGN KEY (run_id) REFERENCES knotra_runs(id);
 
 ALTER TABLE ONLY knotra_requests
     ADD CONSTRAINT knotra_requests_run_id_fkey FOREIGN KEY (run_id) REFERENCES knotra_runs(id);

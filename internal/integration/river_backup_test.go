@@ -41,8 +41,8 @@ func TestRiverBackupRestoresHumanAndUncommittedOutcome(t *testing.T) {
 	profile := recoveryProfile()
 	profilePath := filepath.Join(work, "profile.json")
 	writeJSON(t, profilePath, profile)
-	options := app.Options{Backend: execution.BackendRiver, Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx),
-		TemporalAddress: "127.0.0.1:1", DataDir: filepath.Join(work, "engine"), SharedDataDir: filepath.Join(work, "shared"),
+	options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx),
+		DataDir: filepath.Join(work, "engine"), SharedDataDir: filepath.Join(work, "shared"),
 		DockerHost: os.Getenv("DOCKER_HOST"), HelperPath: os.Getenv("KNOTRA_TEST_HELPER"), Profiles: []string{profilePath}, Version: "backup-test"}
 	optionsPath := filepath.Join(work, "server.json")
 	writeJSON(t, optionsPath, options)

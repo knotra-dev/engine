@@ -68,28 +68,6 @@ func (q *Queries) LockRequest(ctx context.Context, id string) (LockRequestRow, e
 	return i, err
 }
 
-const lockResolutionAnswer = `-- name: LockResolutionAnswer :one
-SELECT status,response,accepted_at FROM knotra_requests WHERE id=$1 AND run_id=$2 AND kind='resolution' FOR UPDATE
-`
-
-type LockResolutionAnswerParams struct {
-	ID    string
-	RunID string
-}
-
-type LockResolutionAnswerRow struct {
-	Status     string
-	Response   []byte
-	AcceptedAt *time.Time
-}
-
-func (q *Queries) LockResolutionAnswer(ctx context.Context, arg LockResolutionAnswerParams) (LockResolutionAnswerRow, error) {
-	row := q.db.QueryRow(ctx, lockResolutionAnswer, arg.ID, arg.RunID)
-	var i LockResolutionAnswerRow
-	err := row.Scan(&i.Status, &i.Response, &i.AcceptedAt)
-	return i, err
-}
-
 const lockResolutionRequest = `-- name: LockResolutionRequest :one
 SELECT document,status FROM knotra_requests WHERE run_id=$1 AND kind='resolution' AND document->>'instanceId'=$2::text ORDER BY created_at DESC LIMIT 1 FOR UPDATE
 `

@@ -296,7 +296,7 @@ func TestRunSessionSharedAndLostStateIsExplicit(t *testing.T) {
 	if !errors.As(err, &failure) || !failure.Unknown || calls != 2 {
 		t.Fatalf("lost session silently recovered: %v, calls=%d", err, calls)
 	}
-	if err := base.ReleaseRun(req.RunID); err != nil {
+	if err := base.ReleaseSession(req.RunID + "/" + req.ScopeID + "/tools"); err != nil {
 		t.Fatal(err)
 	}
 	if len(base.cache().sessions) != 0 {

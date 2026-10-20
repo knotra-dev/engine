@@ -192,7 +192,7 @@ func testRiverFailFastProcessCrashBoundaries(t *testing.T, peerKind string) {
 			profile.Spec.MCP = map[string]contract.MCPConnection{"data": {Transport: "streamable_http", URL: remote.URL, AllowRunSession: true, Headers: map[string]contract.Credential{"X-Cleanup-Key": {SecretRef: "fixture"}}, AllowedTools: []string{"stats"}, ToolPolicies: map[string]contract.ToolPolicy{"stats": {Effect: "read"}}}}
 			profilePath := filepath.Join(work, "profile.json")
 			writeJSON(t, profilePath, profile)
-			options := app.Options{Backend: execution.BackendRiver, Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), TemporalAddress: "127.0.0.1:1", DataDir: filepath.Join(work, "engine"), HelperPath: os.Getenv("KNOTRA_TEST_HELPER"), Profiles: []string{profilePath}, Version: "failfast-recovery-test"}
+			options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), DataDir: filepath.Join(work, "engine"), HelperPath: os.Getenv("KNOTRA_TEST_HELPER"), Profiles: []string{profilePath}, Version: "failfast-recovery-test"}
 			if peerKind != "mcp" {
 				options.DockerHost = failFastDockerHost(t, ctx, &allowCleanup)
 			}

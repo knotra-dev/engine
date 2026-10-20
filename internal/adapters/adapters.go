@@ -13,7 +13,6 @@ import (
 	"os"
 	"slices"
 	"sort"
-	"strings"
 	"sync"
 
 	"github.com/michael-bill/knotra/internal/contract"
@@ -289,21 +288,6 @@ func (r *Runner) Close() error {
 	var failures error
 	for _, key := range keys {
 		failures = errors.Join(failures, r.releaseSession(key, true))
-	}
-	return failures
-}
-
-// ReleaseRun closes shared MCP sessions when a run reaches a terminal state.
-func (r *Runner) ReleaseRun(runID string) error {
-	cache := r.cache()
-	cache.mu.Lock()
-	keys := slices.Clone(cache.keys)
-	cache.mu.Unlock()
-	var failures error
-	for _, key := range keys {
-		if strings.HasPrefix(key, runID+"/") {
-			failures = errors.Join(failures, r.releaseSession(key, true))
-		}
 	}
 	return failures
 }

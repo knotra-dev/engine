@@ -33,7 +33,7 @@ func lockRun(ctx context.Context, tx pgx.Tx, id string) (protocol.Run, bool, err
 	return run, storedRunCommand.CancelRequested, classify(err)
 }
 
-func Cancel(ctx context.Context, tx pgx.Tx, id string, wake ...EnqueueWake) error {
+func Cancel(ctx context.Context, tx pgx.Tx, id string, wake EnqueueWake) error {
 	inner, err := tx.Begin(ctx)
 	if err != nil {
 		return err
@@ -56,14 +56,14 @@ func Cancel(ctx context.Context, tx pgx.Tx, id string, wake ...EnqueueWake) erro
 	if _, err = db.New(tx).CancelOpenRequests(ctx, id); err != nil {
 		return err
 	}
-	if err := enqueueControl(ctx, tx, id, "cancel", execution.CancelSignal{Reason: "requested by operator"}, wake); err != nil {
+	if err := enqueueControl(ctx, tx, id, wake); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
 }
 
 // Respond reserves the first valid answer and its durable delivery together.
-func Respond(ctx context.Context, tx pgx.Tx, id, responseID string, values contract.Values, wake ...EnqueueWake) error {
+func Respond(ctx context.Context, tx pgx.Tx, id, responseID string, values contract.Values, wake EnqueueWake) error {
 	if strings.TrimSpace(responseID) == "" {
 		return &ValidationError{"response requires an identity"}
 	}
@@ -124,14 +124,7 @@ func Respond(ctx context.Context, tx pgx.Tx, id, responseID string, values contr
 	if _, err = db.New(tx).AcceptHumanAnswer(ctx, db.AcceptHumanAnswerParams{ID: id, ResponseID: new(responseID), Response: response, AcceptedAt: new(accepted)}); err != nil {
 		return err
 	}
-	if err := enqueueControl(
-		ctx,
-		tx,
-		runID,
-		"human",
-		execution.HumanSignal{RequestID: id, ResponseID: responseID, Values: values, AcceptedAt: accepted},
-		wake,
-	); err != nil {
+	if err := enqueueControl(ctx, tx, runID, wake); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -144,7 +137,7 @@ func Resolve(
 	tx pgx.Tx,
 	runID, instanceID, responseID, decision, evidence string,
 	outputs contract.Values,
-	wake ...EnqueueWake,
+	wake EnqueueWake,
 ) error {
 	if strings.TrimSpace(responseID) == "" {
 		return &ValidationError{"resolution requires an identity"}
@@ -221,7 +214,7 @@ func Resolve(
 	if _, err = db.New(tx).AcceptResolution(ctx, db.AcceptResolutionParams{ID: req.ID, ResponseID: new(responseID), Response: response, AcceptedAt: new(accepted)}); err != nil {
 		return err
 	}
-	if err := enqueueControl(ctx, tx, runID, "resolve", signal, wake); err != nil {
+	if err := enqueueControl(ctx, tx, runID, wake); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -245,13 +238,6 @@ func validateResponse(ctx context.Context, tx pgx.Tx, ports map[string]contract.
 }
 
 func controlTime(ctx context.Context, tx pgx.Tx, runID string) (time.Time, error) {
-	backend, err := ReadRunBackend(ctx, tx, runID)
-	if err != nil {
-		return time.Time{}, err
-	}
-	if backend == execution.BackendTemporal {
-		return time.Now().UTC(), nil
-	}
 	run, err := LockExecutionRun(ctx, tx, runID)
 	if err != nil {
 		return time.Time{}, err
@@ -265,54 +251,10 @@ func controlTime(ctx context.Context, tx pgx.Tx, runID string) (time.Time, error
 	return run.Now, nil
 }
 
-func enqueueControl(ctx context.Context, tx pgx.Tx, runID, kind string, signal any, wake []EnqueueWake) error {
-	backend, err := ReadRunBackend(ctx, tx, runID)
-	if err != nil {
-		return err
-	}
-	if backend == execution.BackendTemporal {
-		return Enqueue(ctx, tx, runID, kind, signal)
-	}
-	if len(wake) != 1 || wake[0] == nil {
+func enqueueControl(ctx context.Context, tx pgx.Tx, runID string, wake EnqueueWake) error {
+	if wake == nil {
 		return fmt.Errorf("river command requires transactional scheduler delivery")
 	}
-	_, err = WakeExecution(ctx, tx, runID, wake[0])
+	_, err := WakeExecution(ctx, tx, runID, wake)
 	return err
-}
-
-// Resolution arbitrates an accepted operator decision against a deadline or
-// cancellation using the same lock order and transaction as the HTTP command.
-func (s *Store) Resolution(ctx context.Context, q execution.AnswerRequest) (*execution.ResolutionSignal, error) {
-	tx, err := s.Pool.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if _, _, err = lockRun(ctx, tx, q.RunID); err != nil {
-		return nil, err
-	}
-
-	storedResolutionAnswer, queryErr5 := db.New(tx).LockResolutionAnswer(ctx, db.LockResolutionAnswerParams{ID: q.RequestID, RunID: q.RunID})
-	err = queryErr5
-
-	if err != nil {
-		return nil, classify(err)
-	}
-	if storedResolutionAnswer.Status == "resolved" && storedResolutionAnswer.AcceptedAt != nil {
-		var signal execution.ResolutionSignal
-		if err = json.Unmarshal(storedResolutionAnswer.Response, &signal); err != nil {
-			return nil, err
-		}
-		signal.AcceptedAt = *storedResolutionAnswer.AcceptedAt
-		return &signal, tx.Commit(ctx)
-	}
-	if q.CloseIfAbsent != "" {
-		if q.CloseIfAbsent != "cancelled" && q.CloseIfAbsent != "expired" {
-			return nil, ErrConflict
-		}
-		if _, err = db.New(tx).CloseRequest(ctx, db.CloseRequestParams{ID: q.RequestID, Status: q.CloseIfAbsent}); err != nil {
-			return nil, err
-		}
-	}
-	return nil, tx.Commit(ctx)
 }

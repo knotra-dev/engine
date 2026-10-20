@@ -1,7 +1,3 @@
--- name: SetRiverAdmission :execresult
-UPDATE knotra_runs SET backend='river',scheduler_version=$2,state_format_version=$3,
-		admitted_at=$4,execution_deadline=$5,wake_generation=1,dirty_since=$4 WHERE id=$1;
-
 -- name: InsertRootScope :execresult
 INSERT INTO knotra_execution_scopes(run_id,id,limits) VALUES($1,$1,$2);
 

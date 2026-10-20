@@ -15,6 +15,12 @@ import (
 	"github.com/michael-bill/knotra/internal/store/db"
 )
 
+type OperationState struct {
+	Started   bool
+	Completed bool
+	Response  json.RawMessage
+}
+
 // BeginOwnedOperation checks for a prior response without spending another
 // budget. Model/tool intents are prepared here and admitted by AdmitOperation
 // immediately before the physical call. Lifecycle intents (kind="") are admitted

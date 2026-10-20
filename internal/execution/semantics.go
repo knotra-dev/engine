@@ -10,8 +10,7 @@ import (
 	"github.com/michael-bill/knotra/internal/contract"
 )
 
-// The pure v1 decisions are shared with the legacy Temporal backend. They use
-// explicit values and timestamps and never perform external I/O.
+// BindPorts evaluates bindings and validates values without external I/O.
 func BindPorts(ports map[string]contract.Port, scope contract.Scope, skipMissing bool) (contract.Values, error) {
 	values := contract.Values{}
 
