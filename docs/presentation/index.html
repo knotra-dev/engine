@@ -7,12 +7,12 @@
     <meta name="color-scheme" content="light" />
     <meta
       name="description"
-      content="Knotra — AI-процессы под контролем. Презентация проекта и публикация в GitHub Community."
+      content="Knotra — движок для процессов с AI-агентами: проверки, согласование и сохранённая история."
     />
-    <title>Knotra — AI-процессы под контролем</title>
+    <title>Knotra — движок для процессов с AI-агентами</title>
     <link rel="icon" type="image/svg+xml" href="assets/knotra.svg" />
-    <link rel="stylesheet" href="style.css?v=20261020-knotra-light" />
-    <script src="script.js?v=20261020-knotra-light" defer></script>
+    <link rel="stylesheet" href="style.css?v=20261020-story-v2" />
+    <script src="script.js?v=20261020-story-v2" defer></script>
   </head>
   <body>
     <svg class="svg-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -73,8 +73,10 @@
           <div class="cover-copy">
             <p class="eyebrow"><span class="status-light"></span> Открытый движок AI-процессов</p>
             <h1 id="title-1">knotra<span class="title-dot">.</span></h1>
-            <h2>AI-процессы<br />под контролем</h2>
-            <p class="cover-description">Модели рассуждают.<br />Код проверяет. Человек решает.</p>
+            <h2>Движок процессов<br />с AI-агентами</h2>
+            <p class="cover-description">
+              Модели, код и согласование<br />в одном исполняемом графе.
+            </p>
             <div class="cover-signoff">
               <span>Open source</span><span class="little-line"></span><span>MIT License</span>
             </div>
@@ -118,80 +120,60 @@
               <span class="node-completed">✓ completed</span>
             </div>
             <div class="graph-footer">
-              <span class="status-light"></span> Один процесс. Вся история.
+              <span class="status-light"></span> Входы, результаты и история каждого шага
             </div>
           </div>
           <aside class="speech" hidden>
-            Мы представляем Knotra — открытый движок для AI-процессов. Он связывает работу моделей,
-            обычный код и решения человека в один исполняемый граф. Основная идея простая: модель
-            предлагает результат, код проверяет его, а человек принимает решения там, где требуется
-            оценка. За пять минут покажу, как это устроено и что уже проверено на практике.
+            Knotra — открытый движок для процессов с AI-агентами. Мы заранее описываем шаги: где
+            нужна модель, где запускается код и где требуется человек. Движок выполняет этот граф и
+            сохраняет состояние каждого запуска. Покажем, для каких задач мы его делаем, как
+            проверяем результат и куда развиваем архитектуру.
           </aside>
         </section>
 
         <section
           class="slide"
           id="slide-2"
-          data-title="Задача"
+          data-title="Зачем Knotra"
           data-duration="35"
           aria-labelledby="title-2"
           hidden
         >
-          <p class="eyebrow">Зачем это нужно</p>
-          <h2 class="slide-title" id="title-2">За ответом модели —<br />целый процесс</h2>
-          <div class="problem-layout">
-            <div class="problem-list">
-              <div>
-                <span class="row-number">01</span>
-                <p>
-                  <strong>Проверить результат</strong
-                  ><span>Тесты, схема данных, наличие нужных файлов</span>
-                </p>
-              </div>
-              <div>
-                <span class="row-number">02</span>
-                <p>
-                  <strong>Связать несколько шагов</strong
-                  ><span>Параллельная работа, условия, исправления</span>
-                </p>
-              </div>
-              <div>
-                <span class="row-number">03</span>
-                <p>
-                  <strong>Сохранить прогресс</strong
-                  ><span>История, согласование и продолжение после перезапуска</span>
-                </p>
-              </div>
+          <p class="eyebrow">Когда нужен отдельный движок</p>
+          <h2 class="slide-title" id="title-2">Зачем Knotra, если есть Codex?</h2>
+          <div class="comparison-layout">
+            <div class="comparison-card panel">
+              <span class="comparison-label">Разовая задача</span>
+              <h3>«Найди и исправь баг»</h3>
+              <p>Разработчик работает с агентом,<br />уточняет задачу и проверяет изменения.</p>
+              <span class="comparison-choice">Для этого удобно открыть Codex.</span>
             </div>
-            <div
-              class="task-stack"
-              aria-label="Пример составной задачи: генерация, тесты, исправление и согласование"
-            >
-              <div class="task-paper panel">
-                <span class="paper-index">Задача</span>
-                <h3>«Сделай<br />работающую игру»</h3>
-                <div class="paper-line"></div>
-                <p>Код — только начало.</p>
-              </div>
-              <span class="floating-chip chip-tests panel"
-                ><span class="status-light"></span> А тесты?</span
-              >
-              <span class="floating-chip chip-files panel"
-                ><svg class="icon"><use href="#i-file" /></svg> Где результат?</span
-              >
-              <span class="floating-chip chip-review panel"
-                ><svg class="icon"><use href="#i-person" /></svg> Кто согласует?</span
-              >
+            <div class="comparison-card comparison-knotra panel">
+              <span class="comparison-label">Повторяющийся процесс</span>
+              <h3>«Обработай каждую заявку»</h3>
+              <p>
+                Одинаковые этапы, проверки и согласование.<br />У каждой заявки — свой запуск и
+                история.
+              </p>
+              <span class="comparison-choice">Для этого мы делаем Knotra.</span>
             </div>
           </div>
+          <p class="comparison-takeaway">
+            Граф, права и лимиты задаются один раз — для всех запусков.
+          </p>
+          <p class="source-note">
+            Codex тоже поддерживает автоматизацию. Мы предлагаем готовый движок процесса с Desktop и
+            CLI.
+          </p>
           <aside class="speech" hidden>
-            Возьмём простую задачу: попросить модель написать игру. Получить текст программы
-            относительно легко. Но после этого нужно проверить правила и ошибки, запустить
-            независимые тесты, вернуть модели конкретную обратную связь, собрать файлы и убедиться,
-            что результат действительно работает. В других задачах добавляется согласование
-            человеком или несколько параллельных исполнителей. Если каждый шаг делать вручную,
-            процесс сложно повторить и легко потерять его состояние. Knotra позволяет описать эти
-            шаги заранее и выполнять их как единое целое.
+            Если нужно исправить баг или разобраться в незнакомом коде, удобно открыть Codex и
+            работать с агентом. У Knotra другой основной сценарий: один и тот же порядок действий
+            нужно повторять для множества входящих задач. Например, каждая заявка поддержки проходит
+            классификацию, подготовку ответа, проверку и при необходимости согласование. Мы задаём
+            граф, доступные инструменты и лимиты, а затем получаем отдельный запуск с историей для
+            каждой заявки. Codex тоже можно автоматизировать через SDK. Наше предложение — уже
+            готовый движок таких процессов, с типизированными шагами, Desktop, CLI и выбором модели,
+            включая локальную через Ollama.
           </aside>
         </section>
 
@@ -204,8 +186,8 @@
           hidden
         >
           <p class="eyebrow">Как это работает</p>
-          <h2 class="slide-title" id="title-3">Граф управляет процессом</h2>
-          <p class="subtitle">Шаги, проверки и правила переходов задаются заранее в YAML.</p>
+          <h2 class="slide-title" id="title-3">Порядок работы задаётся в графе</h2>
+          <p class="subtitle">В YAML описаны зависимости, входные данные и условия переходов.</p>
           <div class="workflow panel">
             <div class="flow-nodes">
               <div class="flow-node">
@@ -213,7 +195,7 @@
                   ><svg><use href="#i-spark" /></svg></span
                 ><span class="node-kind">llm / agent</span>
                 <h3>Модель</h3>
-                <p>Генерирует<br />кандидат</p>
+                <p>Готовит<br />ответ</p>
               </div>
               <svg class="flow-arrow"><use href="#i-arrow" /></svg>
               <div class="flow-node">
@@ -250,7 +232,7 @@
             </div>
             <div class="feedback-path">
               <span class="feedback-end">↑</span
-              ><span>Ошибка проверки → обратная связь → ограниченный цикл исправлений</span
+              ><span>Тест не прошёл → вернуть ошибку модели → повторить в пределах лимита</span
               ><span>↲</span>
             </div>
           </div>
@@ -258,19 +240,18 @@
             <span class="schema-braces">{ }</span>
             <p>
               <strong>Типизированные входы и выходы</strong
-              ><span>Следующий шаг получает завершённый и проверенный результат.</span>
+              ><span>Движок проверяет формат данных перед передачей следующему шагу.</span>
             </p>
             <span class="node-count"><b>9</b> типов узлов</span>
           </div>
           <aside class="speech" hidden>
-            Основа Knotra — граф, описанный в YAML. Узлы могут вызывать модель, запускать код,
-            обращаться к инструментам, выбирать ветку, ждать человека или выполнять вложенный
-            процесс. Всего поддерживается девять типов узлов, включая циклы и параллельные
-            коллекции. На схеме показан один пример: модель генерирует кандидат, код проверяет его,
-            условие выбирает дальнейший путь, человек согласует публикацию. Ошибка может вернуться в
-            ограниченный цикл исправления. Данные передаются через типизированные входы и выходы.
-            Поэтому успех шага определяется его контрактом, а не просто убедительным текстом ответа
-            модели.
+            Граф хранится в YAML. В нём описаны зависимости и контракты данных: что шаг получает и
+            что должен вернуть. Модель может подготовить ответ, код — проверить его, условие —
+            выбрать ветку, а человек — согласовать результат. Для исправлений есть цикл с заданным
+            пределом. В проекте девять типов узлов, включая вложенные процессы и обработку
+            коллекций. Агент выбирает действия внутри своего шага, а правила перехода между шагами
+            остаются в графе. Проверка формата данных при этом не заменяет проверку фактов: для неё
+            нужно написать отдельный код или добавить согласование.
           </aside>
         </section>
 
@@ -283,9 +264,7 @@
           hidden
         >
           <p class="eyebrow">Работающий пример</p>
-          <h2 class="slide-title" id="title-4">
-            Модель исправляет игру<br />по результатам тестов
-          </h2>
+          <h2 class="slide-title" id="title-4">Игра прошла тесты<br />со второй попытки</h2>
           <div class="game-layout">
             <div class="game-evidence">
               <div class="repair-path">
@@ -298,7 +277,8 @@
                 <div><strong>929</strong><span>игровых позиций</span></div>
               </div>
               <p class="evidence-copy">
-                Точная ошибка возвращается модели.<br />Отдельный sandbox проверяет финальный код.
+                Модель получает упавший тест и правит код.<br />Финальную версию проверяем в
+                отдельном sandbox.
               </p>
               <button
                 class="text-link"
@@ -332,81 +312,118 @@
             </div>
           </div>
           <aside class="speech" hidden>
-            Вот реальный пример из проекта — крестики-нолики. В записанном прогоне стартовая
-            стратегия специально содержала ошибку: компьютер проигрывал на допустимой
-            последовательности ходов. Движок выполнил фиксированные тесты и передал модели
-            конкретное падение вместе с предыдущим кодом. На второй итерации исправление прошло три
-            тысячи сто пятьдесят девять проверок на девятистах двадцати девяти позициях. После этого
-            отдельный sandbox повторно проверил код и собрал автономный HTML-файл. Справа можно
-            открыть именно этот готовый результат. Здесь важна связка: модель меняет код, но
-            критерий готовности задают независимые проверки. Эти цифры относятся к сохранённому
-            прогону, а не к новой генерации во время выступления.
+            В репозитории есть пример с крестиками-ноликами. Для демонстрации мы специально подали
+            стратегию с ошибкой: компьютер проигрывал на допустимой последовательности ходов. Тест
+            нашёл эту последовательность, и модель получила её вместе с исходным кодом. На второй
+            итерации исправление прошло 3159 проверок на 929 игровых позициях. Затем отдельный
+            sandbox повторно проверил код и собрал HTML-файл. По кнопке открывается сохранённая
+            игра. Это записанный прогон от 5 октября, поэтому цифры можно проверить после
+            выступления. Готовность здесь определяет фиксированный набор тестов; модель не оценивает
+            собственный ответ.
           </aside>
         </section>
 
         <section
           class="slide product-slide"
           id="slide-5"
-          data-title="Интерфейс"
+          data-title="Пример: досье"
           data-duration="40"
           aria-labelledby="title-5"
           hidden
         >
           <div class="product-heading">
             <div>
-              <p class="eyebrow">Наблюдаемость</p>
-              <h2 class="slide-title" id="title-5">Видно, что произошло</h2>
-            </div>
-            <span class="panel small-pill"><span class="status-light"></span> Desktop + CLI</span>
-          </div>
-          <div class="product-layout">
-            <button
-              class="app-window panel"
-              data-image="assets/release-graph.png"
-              data-caption="Реальный интерфейс Knotra: service fleet release gate, шесть сервисов и 30 узлов"
-              type="button"
-              aria-label="Увеличить скриншот реального интерфейса Knotra"
-            >
-              <span class="window-bar"
-                ><span class="window-dots"><i></i><i></i><i></i></span
-                ><span>Knotra Desktop / Release gate</span><span>↗</span></span
-              ><img
-                src="assets/release-graph.png"
-                alt="Knotra Desktop: граф проверок шести сервисов, ветки и состояния узлов"
-              />
-            </button>
-            <div class="product-points">
-              <div>
-                <span class="node-icon aqua"
-                  ><svg><use href="#i-eye" /></svg
-                ></span>
-                <h3>Каждый шаг</h3>
-                <p>Входы, выходы,<br />вызовы модели и tools</p>
-              </div>
-              <div>
-                <span class="node-icon pearl"
-                  ><svg><use href="#i-person" /></svg
-                ></span>
-                <h3>Согласование</h3>
-                <p>Сохранённый запрос<br />и файлы для проверки</p>
-              </div>
-              <div>
-                <span class="node-icon lime"
-                  ><svg><use href="#i-file" /></svg
-                ></span>
-                <h3>История и файлы</h3>
-                <p>Просмотр событий,<br />сравнение и экспорт</p>
-              </div>
+              <p class="eyebrow">Пример из репозитория · 8 шагов</p>
+              <h2 class="slide-title" id="title-5">Из трёх источников — согласованное досье</h2>
             </div>
           </div>
+          <p class="subtitle">
+            Сравниваем варианты запуска базы знаний: готовый сервис, CMS и собственная разработка.
+          </p>
+          <div
+            class="research-diagram panel"
+            role="group"
+            aria-label="Восемь шагов: три агента читают источники, код проверяет факты, модель объясняет выбор, код собирает досье, человек согласует, код экспортирует файлы"
+          >
+            <svg class="research-connections" viewBox="0 0 1456 430" aria-hidden="true">
+              <defs>
+                <marker
+                  id="research-arrow"
+                  markerWidth="8"
+                  markerHeight="8"
+                  refX="7"
+                  refY="4"
+                  orient="auto"
+                >
+                  <path d="m1 1 6 3-6 3" />
+                </marker>
+              </defs>
+              <path d="M290 138v43H144v59M728 138v43H290M1166 138v43H728" />
+              <path class="directed" d="M144 212v28" />
+              <path class="directed" d="M268 306h44" />
+              <path class="directed" d="M560 306h44" />
+              <path class="directed" d="M852 306h44" />
+              <path class="directed" d="M1144 306h44" />
+            </svg>
+            <div class="research-node research-agent source-one">
+              <span class="research-kind">agent · 1</span>
+              <h3>Готовый сервис</h3>
+              <p>Факты и цитаты из файла</p>
+            </div>
+            <div class="research-node research-agent source-two">
+              <span class="research-kind">agent · 2</span>
+              <h3>CMS</h3>
+              <p>Факты и цитаты из файла</p>
+            </div>
+            <div class="research-node research-agent source-three">
+              <span class="research-kind">agent · 3</span>
+              <h3>Своя разработка</h3>
+              <p>Факты и цитаты из файла</p>
+            </div>
+            <span class="research-merge">Сопоставить с оригиналами, учесть бюджет и срок</span>
+            <div class="research-node research-step step-compare">
+              <span class="research-kind">code · 4</span>
+              <h3>Проверить факты</h3>
+              <p>Цитаты, ограничения,<br />расчёт рейтинга</p>
+            </div>
+            <div class="research-node research-step step-synthesize">
+              <span class="research-kind">llm · 5</span>
+              <h3>Объяснить выбор</h3>
+              <p>Плюсы, минусы<br />и пробелы в данных</p>
+            </div>
+            <div class="research-node research-step step-package">
+              <span class="research-kind">code · 6</span>
+              <h3>Собрать досье</h3>
+              <p>Текст, расчёты<br />и исходные файлы</p>
+            </div>
+            <div class="research-node research-step step-review">
+              <span class="research-kind">human · 7</span>
+              <h3>Согласовать</h3>
+              <p>Прочитать досье<br />и оставить комментарий</p>
+            </div>
+            <div class="research-node research-step step-export">
+              <span class="research-kind">code · 8</span>
+              <h3>Выгрузить файлы</h3>
+              <p>Досье, ZIP<br />и запись согласования</p>
+            </div>
+            <p class="research-footer">
+              research-dossier/review.yaml · вложенные графы раскрыты · показаны основные
+              зависимости
+            </p>
+          </div>
+          <p class="source-note">
+            В Desktop можно открыть входы и выходы шага, вызовы инструментов, файлы и запрос на
+            согласование.
+          </p>
           <aside class="speech" hidden>
-            Помимо движка, в проекте есть desktop-приложение и CLI. На экране настоящий граф
-            сценария проверки релиза: шесть сервисов и тридцать узлов. Видны параллельные ветки и
-            состояние каждого шага. В инспекторе можно посмотреть входы и выходы, запросы к модели,
-            её видимый ответ и вызовы инструментов. В Inbox сохраняются запросы человеку вместе с
-            файлами для проверки. Историю можно просматривать и сравнивать между запусками. Закрытие
-            интерфейса не останавливает процесс: он продолжает выполняться в движке, а приложение
-            позже подключается к тому же состоянию.
+            Вот ещё один готовый пример из репозитория — выбор подхода для запуска базы знаний. В
+            нём три агента по отдельности читают три учебных предложения и извлекают факты с
+            цитатами. Код сверяет их с оригиналами, применяет ограничения по бюджету и сроку, затем
+            рассчитывает рейтинг. Следующая модель объясняет уже рассчитанный выбор, не пересчитывая
+            его. Код собирает досье, человек читает его и согласует, после чего сохраняются итоговые
+            файлы и запись решения. На схеме раскрыты восемь шагов вложенного процесса. Это пример с
+            вымышленными исходными предложениями, а не исследование рынка. В Desktop каждый шаг
+            можно открыть и посмотреть его данные.
           </aside>
         </section>
 
@@ -420,7 +437,9 @@
         >
           <p class="eyebrow">Внутри проекта</p>
           <h2 class="slide-title" id="title-6">Go + River + PostgreSQL</h2>
-          <p class="subtitle">Очередь и состояние исполнения живут в одной базе.</p>
+          <p class="subtitle">
+            Запуски и очередь заданий — в PostgreSQL. Файлы — в отдельном хранилище.
+          </p>
           <div class="architecture panel">
             <div class="architecture-top">
               <div class="architecture-client">
@@ -459,83 +478,89 @@
               ><svg><use href="#i-check" /></svg
             ></span>
             <p>
-              После перезапуска движок использует сохранённое состояние.<br /><strong
-                >Неопределённый внешний результат требует явного решения.</strong
+              Запуск сохраняется независимо от открытого окна Desktop.<br /><strong
+                >Локальная модель через Ollama или API-провайдер — на выбор.</strong
               >
             </p>
           </div>
           <aside class="speech" hidden>
-            Коротко об архитектуре. Движок и CLI написаны на Go, desktop — на React и Tauri с Rust.
-            Основной backend исполнения сейчас — River с PostgreSQL. River доставляет задания, а
-            Knotra определяет правила графа, права, бюджеты и готовность шагов. Переход состояния и
-            постановка следующего задания могут фиксироваться в одной транзакции. Файлы артефактов и
-            сохранённые результаты хранятся отдельно, поэтому для восстановления нужна и база, и
-            файлы. Завершённые ответы используются повторно. Если внешний вызов мог выполниться, но
-            подтверждения нет, движок сохраняет неопределённость и требует явного решения вместо
-            слепого повтора.
+            Движок и CLI написаны на Go, интерфейс — на React и Tauri. River доставляет задания
+            через PostgreSQL, а Knotra определяет готовность шагов, права и бюджеты. База хранит
+            состояние и события; отдельное хранилище — файлы и сохранённые результаты. Поэтому можно
+            закрыть Desktop и позже подключиться к тому же запуску. При восстановлении движок
+            использует сохранённые ответы. Если результат внешнего вызова неизвестен, требуется
+            явное решение оператора. Модель выбирается в подключениях: можно использовать API или
+            локальную Ollama. На своей инфраструктуре нужны и база, и файловое хранилище, и средства
+            исполнения шагов.
           </aside>
         </section>
 
         <section
           class="slide"
           id="slide-7"
-          data-title="Три воркера"
+          data-title="Масштабирование"
           data-duration="35"
           aria-labelledby="title-7"
           hidden
         >
-          <p class="eyebrow">Проверено сегодня</p>
-          <h2 class="slide-title" id="title-7">Три независимых процесса</h2>
+          <p class="eyebrow">Масштабирование в инфраструктуре компании</p>
+          <h2 class="slide-title" id="title-7">Больше задач — больше воркеров</h2>
+          <p class="subtitle">
+            Цель — одна система на множестве нод, с общей очередью и историей запусков.
+          </p>
           <div class="scale-layout">
             <div class="worker-diagram panel">
+              <p class="deployment-label">Целевая схема развёртывания</p>
               <div class="queue-label">
-                <svg class="icon"><use href="#i-db" /></svg><span>Общие River / PostgreSQL</span>
+                <svg class="icon"><use href="#i-db" /></svg><span>Общие PostgreSQL / River</span>
               </div>
               <div class="worker-branches"><i></i><i></i><i></i></div>
               <div class="workers">
                 <div>
                   <span class="node-icon aqua"
                     ><svg><use href="#i-server" /></svg></span
-                  ><strong>Executor 1</strong><span class="worker-status">работает → drain</span>
+                  ><strong>Нода 1</strong><span class="worker-status">executor</span>
                 </div>
                 <div>
                   <span class="node-icon aqua"
                     ><svg><use href="#i-server" /></svg></span
-                  ><strong>Executor 2</strong><span class="worker-status">продолжает</span>
+                  ><strong>Нода 2</strong><span class="worker-status">executor</span>
                 </div>
                 <div>
                   <span class="node-icon aqua"
                     ><svg><use href="#i-server" /></svg></span
-                  ><strong>Executor 3</strong><span class="worker-status">продолжает</span>
+                  ><strong>Нода N</strong><span class="worker-status">executor</span>
                 </div>
               </div>
-              <p class="worker-outcome">Один штатно остановлен — два завершают новую работу.</p>
+              <p class="worker-outcome">Общее хранилище файлов и результатов</p>
             </div>
             <div class="scale-evidence">
-              <div class="scale-number"><strong>18</strong><span>workflow завершены</span></div>
-              <div class="scale-number">
-                <strong>54</strong
-                ><span>вызова и списания бюджета<br />совпали с числом попыток</span>
-              </div>
-              <span class="check-label"
-                ><svg class="icon"><use href="#i-check" /></svg> Race detector: пройдено</span
-              >
+              <strong class="capacity-number">10 000+</strong>
+              <p class="capacity-caption">
+                workflow в сутки<br /><span>пример целевой нагрузки</span>
+              </p>
+              <h3>Например, поддержка</h3>
+              <p class="capacity-usecase">
+                Каждое обращение запускает<br />один и тот же пайплайн.<br />Воркеры разбирают общую
+                очередь.
+              </p>
             </div>
           </div>
           <p class="scope-note">
-            Тест на одной машине с фиксированными ответами модели. Разделение ролей — через
-            внутренний API;<br />CLI для кластера, разные хосты и нагрузка 10 000 workflow/сутки ещё
-            не проверены.
+            <strong>Проверено на одном хосте:</strong> 3 процесса, 18 workflow, 54 вызова с
+            фиксированными ответами модели.<br />Для кластера ещё нужны CLI ролей и проверка общего
+            хранилища; суточная нагрузка не измерялась.
           </p>
           <aside class="speech" hidden>
-            Сегодня дополнительно проверили независимые воркеры. Тест запускает три отдельных
-            процесса executor: у каждого собственное подключение к базе, River-клиент и heartbeat.
-            Они выполняют двенадцать процессов, затем один воркер штатно останавливается, и два
-            оставшихся завершают ещё шесть. Всего восемнадцать workflow и пятьдесят четыре вызова,
-            без повторных попыток и зависших слотов. Проверка с race detector прошла. Важно
-            обозначить границу: это отдельные процессы на одной машине с фиксированными ответами
-            модели. Разделение ролей есть внутри runtime; готовый кластерный запуск через CLI и
-            работа на разных машинах пока требуют дальнейшей проверки.
+            Если компания хочет обрабатывать десятки тысяч обращений в сутки, важно распределять
+            работу между машинами. Мы развиваем Knotra в эту сторону: одна система, общая очередь в
+            PostgreSQL, общее хранилище файлов и несколько нод с исполнителями. Например, каждое
+            обращение поддержки создаёт запуск одного и того же пайплайна. Внутри движка роли уже
+            разделены. Сегодня тест подтвердил работу трёх отдельных процессов: они завершили 18
+            workflow с 54 вызовами; после штатной остановки одного два других продолжили работу.
+            Тест шёл на одной машине с фиксированными ответами модели. Многомашинное развёртывание
+            ещё нужно довести, а десятки тысяч в сутки — целевой сценарий, не измеренная
+            производительность.
           </aside>
         </section>
 
@@ -551,7 +576,7 @@
             <p class="eyebrow">Внимание сообщества</p>
             <h2 class="slide-title" id="title-8">О нас написали<br />в GitHub Community</h2>
             <p class="community-description">
-              Telegram-канал поделился Knotra<br />со своей аудиторией.
+              В посте показали интерфейс<br />и рассказали о проекте.
             </p>
             <div class="community-metric">
               <strong>150 тыс.+</strong><span>подписчиков в канале</span>
@@ -579,12 +604,10 @@
             />
           </button>
           <aside class="speech" hidden>
-            О проекте уже написали в Telegram-канале GitHub Community. У канала больше ста
-            пятидесяти тысяч подписчиков; на скриншоте видно сто пятьдесят четыре тысячи восемьсот
-            восемьдесят два. В публикации показали наш интерфейс и представили Knotra как систему
-            для изолированного исполнения AI-workflow со своим движком, CLI и desktop-приложением.
-            Для нас это возможность показать наш проект большой аудитории и получить обратную связь
-            от людей за пределами нашей команды.
+            Knotra заметили и за пределами команды: о проекте написал Telegram-канал GitHub
+            Community. На предоставленном скриншоте у него 154882 подписчика, то есть больше 150
+            тысяч. В посте показали наш интерфейс и дали ссылку на GitHub. Для нас это способ
+            получить вопросы и отзывы от тех, кто пробует автоматизировать похожие задачи.
           </aside>
         </section>
 
@@ -599,10 +622,10 @@
           <div class="closing-copy">
             <p class="eyebrow">Knotra</p>
             <h2 id="title-9">
-              AI-задача.<br />Явный процесс.<br /><span>Проверенный результат.</span>
+              Описать один раз.<br /><span>Запускать<br />для каждой задачи.</span>
             </h2>
             <p class="closing-description">
-              Графы, исполняемые проверки, согласование<br />и история — в одном открытом проекте.
+              Код, примеры и инструкции — на GitHub.<br />Начать можно локально с Ollama и Docker.
             </p>
             <a
               class="repository-link panel"
@@ -621,12 +644,12 @@
             <span class="closing-caption panel">Есть вопросы?</span>
           </div>
           <aside class="speech" hidden>
-            В итоге Knotra объединяет модель, исполняемые проверки и человека в явном процессе с
-            сохранённой историей. Уже есть рабочий движок, desktop и CLI, девять типов узлов и
-            примеры: генерация игры, проверяемое исследование и согласование релиза. Независимые
-            процессы воркеров проверены; следующий этап — довести их до полноценного многомашинного
-            развёртывания. Проект открыт под лицензией MIT, код и примеры доступны на GitHub.
-            Спасибо, готовы ответить на вопросы.
+            Knotra имеет смысл там, где нужен повторяемый процесс: шаги известны, результаты нужно
+            проверить, а часть решений оставить человеку. Уже есть движок, Desktop, CLI и примеры с
+            игрой, исследованием и проверкой релиза. Начать можно локально с Ollama и Docker; код и
+            инструкции открыты на GitHub под MIT. Дальше хотим довести распределённый запуск и
+            проверить его на реальной нагрузке. Если у вас есть похожий процесс, интересно обсудить,
+            какие этапы и проверки в нём нужны.
           </aside>
         </section>
       </main>
@@ -703,7 +726,7 @@
     </aside>
     <dialog class="image-dialog" id="image-dialog">
       <button type="button" id="image-close" aria-label="Закрыть изображение">×</button
-      ><img id="zoom-image" src="assets/release-graph.png" alt="" />
+      ><img id="zoom-image" src="assets/game-correction.png" alt="" />
       <p id="zoom-caption"></p>
     </dialog>
     <div class="sr-only" id="announcement" aria-live="polite"></div>
