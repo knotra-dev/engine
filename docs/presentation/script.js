@@ -114,10 +114,6 @@
   notesToggle.addEventListener('click', () => toggleNotes());
   document.querySelector('#notes-close').addEventListener('click', () => toggleNotes(false));
   document.querySelector('#fullscreen').addEventListener('click', fullscreen);
-  document.querySelector('.brand').addEventListener('click', (event) => {
-    event.preventDefault();
-    show(0);
-  });
   addEventListener('hashchange', showHash);
   addEventListener('resize', fit);
 

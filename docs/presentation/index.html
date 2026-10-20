@@ -11,8 +11,8 @@
     />
     <title>Knotra — движок для процессов с AI-агентами</title>
     <link rel="icon" type="image/svg+xml" href="assets/knotra.svg" />
-    <link rel="stylesheet" href="style.css?v=20261020-game-evidence-v4" />
-    <script src="script.js?v=20261020-game-evidence-v4" defer></script>
+    <link rel="stylesheet" href="style.css?v=20261020-clean-layout-v5" />
+    <script src="script.js?v=20261020-clean-layout-v5" defer></script>
   </head>
   <body>
     <svg class="svg-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -55,13 +55,6 @@
     </svg>
 
     <div class="deck" id="deck">
-      <header class="masthead">
-        <a class="brand" href="#1" aria-label="Knotra — первый слайд"
-          ><img class="brand-mark" src="assets/knotra.svg" alt="" /><span>knotra</span></a
-        >
-        <span class="edition">AI <span>·</span> код <span>·</span> человек</span>
-      </header>
-
       <main id="slides" aria-label="Презентация проекта Knotra">
         <section
           class="slide cover active"
@@ -233,9 +226,26 @@
               </div>
             </div>
             <div class="feedback-path">
-              <span class="feedback-end">↑</span
-              ><span>Тест не прошёл → вернуть ошибку модели → повторить в пределах лимита</span
-              ><span>↲</span>
+              <svg class="feedback-connector" viewBox="0 0 1392 70" aria-hidden="true">
+                <defs>
+                  <marker
+                    id="feedback-arrow"
+                    markerWidth="8"
+                    markerHeight="8"
+                    refX="7"
+                    refY="4"
+                    orient="auto"
+                  >
+                    <path d="m1 1 6 3-6 3" />
+                  </marker>
+                </defs>
+                <path
+                  class="feedback-line"
+                  d="M696 1v39q0 12-12 12H115q-12 0-12-12V3"
+                  marker-end="url(#feedback-arrow)"
+                />
+              </svg>
+              <p>Ошибка проверки возвращается агенту<span>Число попыток ограничено</span></p>
             </div>
           </div>
           <div class="contract-line">
@@ -437,81 +447,13 @@
         <section
           class="slide"
           id="slide-6"
-          data-title="Архитектура"
-          data-duration="40"
+          data-title="Масштабирование"
+          data-duration="35"
           aria-labelledby="title-6"
           hidden
         >
-          <p class="eyebrow">Внутри проекта</p>
-          <h2 class="slide-title" id="title-6">Go + River + PostgreSQL</h2>
-          <p class="subtitle">
-            Запуски и очередь заданий — в PostgreSQL. Файлы — в отдельном хранилище.
-          </p>
-          <div class="architecture panel">
-            <div class="architecture-top">
-              <div class="architecture-client">
-                <span>Desktop / CLI</span><small>React · Tauri (Rust)<br />CLI: Go</small>
-              </div>
-              <svg class="flow-arrow"><use href="#i-arrow" /></svg>
-              <div class="architecture-engine">
-                <img class="brand-mark" src="assets/knotra.svg" alt="" />
-                <p><strong>Go engine</strong><small>HTTP / SSE · граф · права · бюджеты</small></p>
-              </div>
-              <svg class="flow-arrow"><use href="#i-arrow" /></svg>
-              <div class="architecture-providers">
-                <strong>Исполнение</strong><small>Модели · MCP · Docker sandbox</small>
-              </div>
-            </div>
-            <div class="architecture-connectors"><span>↓</span><span>↓</span></div>
-            <div class="architecture-bottom">
-              <div class="database">
-                <svg class="icon"><use href="#i-db" /></svg>
-                <p>
-                  <strong>PostgreSQL + River</strong
-                  ><small>Запуски · задания · попытки · события</small>
-                </p>
-              </div>
-              <div class="file-store">
-                <svg class="icon"><use href="#i-file" /></svg>
-                <p>
-                  <strong>Файловое хранилище</strong
-                  ><small>Артефакты и сохранённые результаты</small>
-                </p>
-              </div>
-            </div>
-          </div>
-          <div class="architecture-takeaway">
-            <span class="node-icon lime"
-              ><svg><use href="#i-check" /></svg
-            ></span>
-            <p>
-              Запуск сохраняется независимо от открытого окна Desktop.<br /><strong
-                >Локальная модель через Ollama или API-провайдер — на выбор.</strong
-              >
-            </p>
-          </div>
-          <aside class="speech" hidden>
-            Движок и CLI написаны на Go, интерфейс — на React и Tauri. River доставляет задания
-            через PostgreSQL, а Knotra определяет готовность шагов, права и бюджеты. База хранит
-            состояние и события; отдельное хранилище — файлы и сохранённые результаты. Поэтому можно
-            закрыть Desktop и позже подключиться к тому же запуску. При восстановлении движок
-            использует сохранённые ответы. Если результат внешнего вызова неизвестен, требуется
-            явное решение оператора. Модель выбирается в подключениях: можно использовать API или
-            локальную Ollama. На своей инфраструктуре нужны и база, и файловое хранилище, и средства
-            исполнения шагов.
-          </aside>
-        </section>
-
-        <section
-          class="slide"
-          id="slide-7"
-          data-title="Масштабирование"
-          data-duration="35"
-          aria-labelledby="title-7"
-          hidden
-        >
           <p class="eyebrow">Масштабирование в инфраструктуре компании</p>
-          <h2 class="slide-title" id="title-7">Больше задач — больше воркеров</h2>
+          <h2 class="slide-title" id="title-6">Больше задач — больше воркеров</h2>
           <p class="subtitle">
             Цель — одна система на множестве нод, с общей очередью и историей запусков.
           </p>
@@ -521,7 +463,15 @@
               <div class="queue-label">
                 <svg class="icon"><use href="#i-db" /></svg><span>Общие PostgreSQL / River</span>
               </div>
-              <div class="worker-branches"><i></i><i></i><i></i></div>
+              <div class="worker-branches">
+                <svg viewBox="0 0 48 48" aria-hidden="true">
+                  <use href="#i-arrow" transform="rotate(90 24 24)" /></svg
+                ><svg viewBox="0 0 48 48" aria-hidden="true">
+                  <use href="#i-arrow" transform="rotate(90 24 24)" /></svg
+                ><svg viewBox="0 0 48 48" aria-hidden="true">
+                  <use href="#i-arrow" transform="rotate(90 24 24)" />
+                </svg>
+              </div>
               <div class="workers">
                 <div>
                   <span class="node-icon aqua"
@@ -568,6 +518,80 @@
             Тест шёл на одной машине с фиксированными ответами модели. Многомашинное развёртывание
             ещё нужно довести, а десятки тысяч в сутки — целевой сценарий, не измеренная
             производительность.
+          </aside>
+        </section>
+
+        <section
+          class="slide"
+          id="slide-7"
+          data-title="Архитектура"
+          data-duration="40"
+          aria-labelledby="title-7"
+          hidden
+        >
+          <p class="eyebrow">Внутри проекта</p>
+          <h2 class="slide-title" id="title-7">Go + River + PostgreSQL</h2>
+          <p class="subtitle">
+            Запуски и очередь заданий — в PostgreSQL. Файлы — в отдельном хранилище.
+          </p>
+          <div class="architecture panel">
+            <div class="architecture-top">
+              <div class="architecture-client">
+                <span>Desktop / CLI</span><small>React · Tauri (Rust)<br />CLI: Go</small>
+              </div>
+              <svg class="flow-arrow"><use href="#i-arrow" /></svg>
+              <div class="architecture-engine">
+                <img class="brand-mark" src="assets/knotra.svg" alt="" />
+                <p><strong>Go engine</strong><small>HTTP / SSE · граф · права · бюджеты</small></p>
+              </div>
+              <svg class="flow-arrow"><use href="#i-arrow" /></svg>
+              <div class="architecture-providers">
+                <strong>Исполнение</strong><small>Модели · MCP · Docker sandbox</small>
+              </div>
+            </div>
+            <div class="architecture-connectors">
+              <svg viewBox="0 0 48 48" aria-hidden="true">
+                <use href="#i-arrow" transform="rotate(90 24 24)" /></svg
+              ><svg viewBox="0 0 48 48" aria-hidden="true">
+                <use href="#i-arrow" transform="rotate(90 24 24)" />
+              </svg>
+            </div>
+            <div class="architecture-bottom">
+              <div class="database">
+                <svg class="icon"><use href="#i-db" /></svg>
+                <p>
+                  <strong>PostgreSQL + River</strong
+                  ><small>Запуски · задания · попытки · события</small>
+                </p>
+              </div>
+              <div class="file-store">
+                <svg class="icon"><use href="#i-file" /></svg>
+                <p>
+                  <strong>Файловое хранилище</strong
+                  ><small>Артефакты и сохранённые результаты</small>
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="architecture-takeaway">
+            <span class="node-icon lime"
+              ><svg><use href="#i-check" /></svg
+            ></span>
+            <p>
+              Запуск сохраняется независимо от открытого окна Desktop.<br /><strong
+                >Локальная модель через Ollama или API-провайдер — на выбор.</strong
+              >
+            </p>
+          </div>
+          <aside class="speech" hidden>
+            Движок и CLI написаны на Go, интерфейс — на React и Tauri. River доставляет задания
+            через PostgreSQL, а Knotra определяет готовность шагов, права и бюджеты. База хранит
+            состояние и события; отдельное хранилище — файлы и сохранённые результаты. Поэтому можно
+            закрыть Desktop и позже подключиться к тому же запуску. При восстановлении движок
+            использует сохранённые ответы. Если результат внешнего вызова неизвестен, требуется
+            явное решение оператора. Модель выбирается в подключениях: можно использовать API или
+            локальную Ollama. На своей инфраструктуре нужны и база, и файловое хранилище, и средства
+            исполнения шагов.
           </aside>
         </section>
 
@@ -621,42 +645,25 @@
         <section
           class="slide closing"
           id="slide-9"
-          data-title="Итог"
+          data-title="Спасибо за внимание"
           data-duration="30"
           aria-labelledby="title-9"
           hidden
         >
           <div class="closing-copy">
-            <p class="eyebrow">Knotra</p>
-            <h2 id="title-9">
-              Описать один раз.<br /><span>Запускать<br />для каждой задачи.</span>
-            </h2>
-            <p class="closing-description">
-              Код, примеры и инструкции — на GitHub.<br />Начать можно локально с Ollama и Docker.
-            </p>
+            <h2 id="title-9">Спасибо<br />за внимание</h2>
             <a
               class="repository-link panel"
               href="https://github.com/michael-bill/knotra"
               target="_blank"
               rel="noopener"
               ><span class="repo-icon">{ }</span
-              ><span><small>Исходный код · MIT</small>github.com/michael-bill/knotra</span
+              ><span><small>Исходный код</small>github.com/michael-bill/knotra</span
               ><span>↗</span></a
             >
           </div>
-          <div class="closing-art" aria-hidden="true">
-            <div class="finish-mark">
-              <svg><use href="#i-check" /></svg>
-            </div>
-            <span class="closing-caption panel">Есть вопросы?</span>
-          </div>
           <aside class="speech" hidden>
-            Knotra имеет смысл там, где нужен повторяемый процесс: шаги известны, результаты нужно
-            проверить, а часть решений оставить человеку. Уже есть движок, Desktop, CLI и примеры с
-            игрой, исследованием и проверкой релиза. Начать можно локально с Ollama и Docker; код и
-            инструкции открыты на GitHub под MIT. Дальше хотим довести распределённый запуск и
-            проверить его на реальной нагрузке. Если у вас есть похожий процесс, интересно обсудить,
-            какие этапы и проверки в нём нужны.
+            Спасибо за внимание. Исходный код, примеры и инструкции доступны на GitHub.
           </aside>
         </section>
       </main>
