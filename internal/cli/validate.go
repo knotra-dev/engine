@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/michael-bill/knotra/internal/contract"
+	"github.com/knotra-dev/engine/internal/contract"
 )
 
 func (s *commandState) validateCommand() *cobra.Command {

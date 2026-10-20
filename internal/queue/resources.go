@@ -11,11 +11,11 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/michael-bill/knotra/internal/execution"
-	"github.com/michael-bill/knotra/internal/protocol"
-	"github.com/michael-bill/knotra/internal/store"
-	"github.com/michael-bill/knotra/internal/store/db"
-	"github.com/michael-bill/knotra/internal/telemetry"
+	"github.com/knotra-dev/engine/internal/execution"
+	"github.com/knotra-dev/engine/internal/protocol"
+	"github.com/knotra-dev/engine/internal/store"
+	"github.com/knotra-dev/engine/internal/store/db"
+	"github.com/knotra-dev/engine/internal/telemetry"
 )
 
 func (r *Runtime) cleanup(ctx context.Context, job *river.Job[CleanupArgs]) (err error) {

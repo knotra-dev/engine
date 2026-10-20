@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/michael-bill/knotra/internal/execution"
+	"github.com/knotra-dev/engine/internal/execution"
 )
 
 const sandboxLeaseTTL = 45 * time.Second

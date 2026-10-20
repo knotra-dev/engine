@@ -16,7 +16,7 @@ import (
 	"github.com/dlclark/regexp2"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
-	"github.com/michael-bill/knotra/schemas"
+	"github.com/knotra-dev/engine/schemas"
 )
 
 func sortedKeys[V any](m map[string]V) []string {

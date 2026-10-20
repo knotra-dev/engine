@@ -7,7 +7,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/michael-bill/knotra/internal/contract"
+	"github.com/knotra-dev/engine/internal/contract"
 )
 
 // BindPorts evaluates bindings and validates values without external I/O.

@@ -15,10 +15,10 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/michael-bill/knotra/internal/api"
-	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/execution"
-	"github.com/michael-bill/knotra/internal/store"
+	"github.com/knotra-dev/engine/internal/api"
+	"github.com/knotra-dev/engine/internal/contract"
+	"github.com/knotra-dev/engine/internal/execution"
+	"github.com/knotra-dev/engine/internal/store"
 )
 
 // Execute a real sandbox, then arbitrate its saved outcome using mutation locks.

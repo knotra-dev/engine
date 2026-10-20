@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/michael-bill/knotra/internal/execution"
+	"github.com/knotra-dev/engine/internal/execution"
 )
 
 func TestWorkDirectoriesStaySeparateForExecutionHosts(t *testing.T) {

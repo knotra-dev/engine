@@ -6,9 +6,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/protocol"
-	"github.com/michael-bill/knotra/internal/store"
+	"github.com/knotra-dev/engine/internal/contract"
+	"github.com/knotra-dev/engine/internal/protocol"
+	"github.com/knotra-dev/engine/internal/store"
 )
 
 func (s *Server) run(w http.ResponseWriter, r *http.Request) {

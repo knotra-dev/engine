@@ -59,7 +59,7 @@ Set OPENAI_API_KEY or ANTHROPIC_API_KEY before the respective cloud command.
 Ctrl-C stops the engine. Repeating the same command preserves runs and artifacts.
 Quickstart is for development and evaluation.
 
-Project and full instructions: https://github.com/michael-bill/knotra
+Project and full instructions: https://github.com/knotra-dev/engine
 GUIDE
   if [[ "$os" == windows ]]; then
     rm -f "$output/$name.zip"

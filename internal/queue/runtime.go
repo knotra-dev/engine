@@ -20,14 +20,14 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/execution"
-	"github.com/michael-bill/knotra/internal/executor"
-	"github.com/michael-bill/knotra/internal/protocol"
-	"github.com/michael-bill/knotra/internal/scheduler"
-	"github.com/michael-bill/knotra/internal/store"
-	"github.com/michael-bill/knotra/internal/store/db"
-	"github.com/michael-bill/knotra/internal/telemetry"
+	"github.com/knotra-dev/engine/internal/contract"
+	"github.com/knotra-dev/engine/internal/execution"
+	"github.com/knotra-dev/engine/internal/executor"
+	"github.com/knotra-dev/engine/internal/protocol"
+	"github.com/knotra-dev/engine/internal/scheduler"
+	"github.com/knotra-dev/engine/internal/store"
+	"github.com/knotra-dev/engine/internal/store/db"
+	"github.com/knotra-dev/engine/internal/telemetry"
 )
 
 const stepTransitions = 64

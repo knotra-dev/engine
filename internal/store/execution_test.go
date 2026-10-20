@@ -12,9 +12,9 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivermigrate"
 
-	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/execution"
-	"github.com/michael-bill/knotra/internal/protocol"
+	"github.com/knotra-dev/engine/internal/contract"
+	"github.com/knotra-dev/engine/internal/execution"
+	"github.com/knotra-dev/engine/internal/protocol"
 )
 
 type executionWakeFixture struct {

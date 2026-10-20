@@ -13,12 +13,12 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/michael-bill/knotra/internal/adapters"
-	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/execution"
-	"github.com/michael-bill/knotra/internal/protocol"
-	"github.com/michael-bill/knotra/internal/store"
-	"github.com/michael-bill/knotra/internal/telemetry"
+	"github.com/knotra-dev/engine/internal/adapters"
+	"github.com/knotra-dev/engine/internal/contract"
+	"github.com/knotra-dev/engine/internal/execution"
+	"github.com/knotra-dev/engine/internal/protocol"
+	"github.com/knotra-dev/engine/internal/store"
+	"github.com/knotra-dev/engine/internal/telemetry"
 )
 
 type Host struct {

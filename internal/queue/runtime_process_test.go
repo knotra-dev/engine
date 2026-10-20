@@ -25,13 +25,13 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 
-	"github.com/michael-bill/knotra/internal/adapters"
-	"github.com/michael-bill/knotra/internal/api"
-	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/execution"
-	"github.com/michael-bill/knotra/internal/executor"
-	"github.com/michael-bill/knotra/internal/protocol"
-	"github.com/michael-bill/knotra/internal/store"
+	"github.com/knotra-dev/engine/internal/adapters"
+	"github.com/knotra-dev/engine/internal/api"
+	"github.com/knotra-dev/engine/internal/contract"
+	"github.com/knotra-dev/engine/internal/execution"
+	"github.com/knotra-dev/engine/internal/executor"
+	"github.com/knotra-dev/engine/internal/protocol"
+	"github.com/knotra-dev/engine/internal/store"
 )
 
 // Each child is the real Runtime/Host, with its own heartbeat and River client.

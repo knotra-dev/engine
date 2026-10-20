@@ -23,13 +23,13 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
-	"github.com/michael-bill/knotra/internal/app"
-	"github.com/michael-bill/knotra/internal/client"
-	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/execution"
-	"github.com/michael-bill/knotra/internal/protocol"
-	"github.com/michael-bill/knotra/internal/store"
-	storedb "github.com/michael-bill/knotra/internal/store/db"
+	"github.com/knotra-dev/engine/internal/app"
+	"github.com/knotra-dev/engine/internal/client"
+	"github.com/knotra-dev/engine/internal/contract"
+	"github.com/knotra-dev/engine/internal/execution"
+	"github.com/knotra-dev/engine/internal/protocol"
+	"github.com/knotra-dev/engine/internal/store"
+	storedb "github.com/knotra-dev/engine/internal/store/db"
 )
 
 func TestRiverAdmissionProcessCrashBoundaries(t *testing.T) {

@@ -12,7 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/michael-bill/knotra/internal/contract"
+	"github.com/knotra-dev/engine/internal/contract"
 )
 
 // ExecutionEvent is diagnostic progress, not a durable execution decision.

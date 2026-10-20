@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/michael-bill/knotra/internal/contract"
+	"github.com/knotra-dev/engine/internal/contract"
 )
 
 // Failure describes a business outcome, independently of queue delivery errors.

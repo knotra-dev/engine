@@ -14,9 +14,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/fsutil"
-	"github.com/michael-bill/knotra/internal/store/db"
+	"github.com/knotra-dev/engine/internal/contract"
+	"github.com/knotra-dev/engine/internal/fsutil"
+	"github.com/knotra-dev/engine/internal/store/db"
 )
 
 const MaxArtifactBytes = 64 << 20

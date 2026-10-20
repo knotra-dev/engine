@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/michael-bill/knotra/internal/cli"
+	"github.com/knotra-dev/engine/internal/cli"
 )
 
 var version = "dev"

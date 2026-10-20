@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/michael-bill/knotra/internal/contract"
+	"github.com/knotra-dev/engine/internal/contract"
 )
 
 func TestDockerIsolationAndChildCleanup(t *testing.T) {

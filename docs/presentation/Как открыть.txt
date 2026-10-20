@@ -1,6 +1,6 @@
 KNOTRA — ПРЕЗЕНТАЦИЯ НА 5 МИНУТ + ДОПОЛНИТЕЛЬНЫЙ СЛАЙД
 
-Опубликованная версия: https://michael-bill.github.io/knotra/
+Опубликованная версия: https://knotra-dev.github.io/engine/
 
 Откройте index.html в Chrome, Edge, Firefox или Safari. Интернет и запуск движка не нужны.
 При переносе на другой компьютер копируйте всю папку или распакуйте ZIP целиком.
@@ -51,7 +51,7 @@ README.md, docs/architecture.md, docs/verification.md и реальные screen
 Подача: https://github.com/SkillMedev/skills/blob/main/skills/slide-deck-builder/SKILL.md
 и https://github.com/rhuss/cc-slidev/blob/main/slidev/skills/presentation-design/SKILL.md
 Использованы рекомендации о ясных заголовках, конкретных примерах и одной основной мысли на слайд.
-Логотип и палитра взяты из интерфейса Knotra: app/public/knotra.svg и app/src/styles.css.
+Логотип и палитра взяты из интерфейса Knotra: knotra-dev/desktop: public/knotra.svg и src/styles.css.
 Графические схемы и панели выполнены в HTML/CSS/SVG.
 Слайд 5 показывает целевую многомашинную схему, а не уже проверенное кластерное развёртывание.
 Презентация создана 20 октября 2026. Исходники презентации: docs/presentation/.

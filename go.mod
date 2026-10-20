@@ -1,4 +1,4 @@
-module github.com/michael-bill/knotra
+module github.com/knotra-dev/engine
 
 go 1.27.1
 

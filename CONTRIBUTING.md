@@ -56,8 +56,6 @@ PostgreSQL queries live in `internal/store/queries`; regenerate their typed pgx 
 | `internal/api`, `internal/protocol`        | Versioned HTTP/SSE boundary and transport DTOs                                           |
 | `internal/client`, `internal/cli`          | Client mutation journals, event observation and command presentation                     |
 | `internal/app`                             | Dependency wiring and service lifecycle                                                  |
-| `app/src/lib/engine`, native `backend`     | Engine API, command receipts, SSE and verified bytes                                     |
-| `app/src/components`                       | UI grouped by authoring, engine runs, review and artifacts                               |
 
 Keep external I/O out of scheduler decisions and expression evaluation. Pass `context.Context`
 through blocking work, bound reads and concurrency, preserve typed errors, and make cleanup
@@ -83,61 +81,14 @@ Use `gofmt` for Go, the root Prettier configuration for TypeScript/CSS/JSON/YAML
 rustfmt for Rust, and Black 25.1.0 for Python. Avoid mixing behavior changes into mechanical edits
 without explaining and testing them.
 
-Use Bun 1.3.10 and the Rust version pinned in `rust-toolchain.toml`:
+Desktop development and translations live in
+[knotra-dev/desktop](https://github.com/knotra-dev/desktop). Use
+[knotra-dev/dev](https://github.com/knotra-dev/dev) for paired changes and literal browser/native
+acceptance. Its lock file selects the tested engine and desktop commits; `make integration` runs
+`TestDesktopLiteralClients` with `KNOTRA_TEST_DESKTOP_DIR` set to the desktop checkout.
 
-```sh
-cd app
-bun install --frozen-lockfile
-bunx prettier --check .. --ignore-path ../.prettierignore
-bun run test
-bun run build
-bunx playwright install chromium
-bun run test:e2e
-cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-cargo test --locked --manifest-path src-tauri/Cargo.toml
-```
-
-`bun run format` formats app sources. `bunx prettier --write .. --ignore-path ../.prettierignore`
-also formats repository documentation and supported configs; `.prettierignore` excludes the notation
-fixtures and generated content. Use `black --check scripts examples/integration examples/starter`
-for the Python sources. The structural fixture script has reproducible
-[setup instructions](contracts/v1/fixtures/README.md).
-
-On push and pull requests, CI runs Go lint, sqlc generation checks, unit tests and builds, plus
-frontend, Playwright browser, native macOS and contract-script checks. Desktop engine acceptance
-also checks River against disposable services. Windows runs its unit tests and CLI build.
-
-The broader service checks run manually from **Actions → Go → Run workflow** before a release. These
-include Docker/PostgreSQL integration, process recovery and backup/restore. The desktop checks can
-also be rerun from **Actions → Desktop and documentation → Run workflow**. Browser screenshots and
-failure traces are written to per-test directories in `app/test-results/`; tests must use Playwright
-output paths rather than OS-specific temporary paths. Browser acceptance against a real engine is
-opt-in. Start an engine with `examples/local/profile.yaml` and the exact browser origin as described
-in [app/README](app/README.md), then run from `app/`:
-
-```sh
-KNOTRA_E2E_ENDPOINT=http://127.0.0.1:8787 bun run test:e2e
-KNOTRA_E2E_ENDPOINT=http://127.0.0.1:8787 \
-  cargo test --locked --manifest-path src-tauri/Cargo.toml real_engine -- --ignored
-```
-
-## Interface translations
-
-The frontend keeps English and Russian interface text in `app/src/locales/en.json` and
-`app/src/locales/ru.json`. Add the same stable semantic key to both catalogs, then render it with
-`t('settings.language')` from `useI18n()`. Use named parameters, for example
-`t('shell.countPendingReviews', { count })`, and preserve their names in every translation. Enum
-label maps refer to these keys while keeping protocol values unchanged. CodeMirror phrase lookups
-retain the library's original English tokens and map them to catalog keys.
-
-Only interface text is translated. Render user-defined names, YAML, prompts, model responses, engine
-diagnostics and artifact bytes verbatim. The `message()` adapter is reserved for messages from
-frontend validators; it must not translate engine or user content. Dates and sizes use the selected
-interface locale.
-
-Run frontend unit and browser tests after changing translations. They check catalog coverage,
-matching placeholders, legacy workspace compatibility, persistence, accessibility, editor search and
-preservation of authoring data, demo history and the engine cache during language switching.
+Engine CI checks Go, SQL generation, Windows builds, Python examples and contract fixtures. The
+manually triggered Go workflow adds PostgreSQL, Docker, process recovery and backup/restore.
 
 ## Integration tests
 

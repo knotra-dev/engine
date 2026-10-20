@@ -10,7 +10,7 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivermigrate"
 
-	"github.com/michael-bill/knotra/internal/store/db"
+	"github.com/knotra-dev/engine/internal/store/db"
 )
 
 // SchemaTarget is the final main-line PostgreSQL migration in River v0.48.0.

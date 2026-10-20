@@ -2,8 +2,10 @@
 
 Status: **implemented by the Go engine, CLI and desktop client, verified 4 October 2026**. The
 boundary originated in the desktop proposal of 1 October; its protocol identifier remains
-`knotra.desktop/1`. The desktop client lives in `app/`; browser and native acceptance tests also
-connect to the real engine. The machine-readable companion is [OpenAPI](desktop-v1.openapi.json).
+`knotra.desktop/1`. The desktop client lives in
+[knotra-dev/desktop](https://github.com/knotra-dev/desktop); browser and native acceptance tests
+also connect to the real engine. The machine-readable companion is
+[OpenAPI](desktop-v1.openapi.json).
 
 This contract follows [architecture](../architecture.md), [execution v1](../notation/execution.md),
 [validation](../notation/validation.md) and [EngineProfile](../notation/engine-profile.md).

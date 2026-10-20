@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/michael-bill/knotra/internal/contract"
+	"github.com/knotra-dev/engine/internal/contract"
 )
 
 const maxResponseBytes = 16 << 20

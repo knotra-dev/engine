@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/michael-bill/knotra/internal/contract"
+	"github.com/knotra-dev/engine/internal/contract"
 )
 
 var ollamaOptions = map[string]bool{

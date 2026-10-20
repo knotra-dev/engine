@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/michael-bill/knotra/internal/contract"
+	"github.com/knotra-dev/engine/internal/contract"
 )
 
 // Paid calls require a separate explicit opt-in, even when credentials happen

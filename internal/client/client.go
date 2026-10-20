@@ -22,8 +22,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/michael-bill/knotra/internal/fsutil"
-	"github.com/michael-bill/knotra/internal/protocol"
+	"github.com/knotra-dev/engine/internal/fsutil"
+	"github.com/knotra-dev/engine/internal/protocol"
 )
 
 type Client struct {

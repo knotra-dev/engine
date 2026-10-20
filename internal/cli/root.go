@@ -15,8 +15,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/michael-bill/knotra/internal/client"
-	"github.com/michael-bill/knotra/internal/contract"
+	"github.com/knotra-dev/engine/internal/client"
+	"github.com/knotra-dev/engine/internal/contract"
 )
 
 type Options struct {

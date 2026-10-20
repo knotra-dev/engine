@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/execution"
+	"github.com/knotra-dev/engine/internal/contract"
+	"github.com/knotra-dev/engine/internal/execution"
 )
 
 // ErrUnsupportedControl rejects node kinds outside the frozen v1 contract.

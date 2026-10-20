@@ -18,9 +18,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	assets "github.com/michael-bill/knotra"
-	"github.com/michael-bill/knotra/examples/starter"
-	"github.com/michael-bill/knotra/internal/contract"
+	assets "github.com/knotra-dev/engine"
+	"github.com/knotra-dev/engine/examples/starter"
+	"github.com/knotra-dev/engine/internal/contract"
 )
 
 type Config struct {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/michael-bill/knotra/internal/contract"
+	"github.com/knotra-dev/engine/internal/contract"
 )
 
 // RequestRecord retains the accepted command independently of delivery timing.

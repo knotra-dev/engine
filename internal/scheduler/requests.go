@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/michael-bill/knotra/internal/execution"
+	"github.com/knotra-dev/engine/internal/execution"
 )
 
 func responsePriority(node execution.NodeRecord, records map[string]execution.RequestRecord) int {

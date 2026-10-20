@@ -6,7 +6,8 @@ Define a repeatable process: models reason, code checks results, and people appr
 need judgment. Knotra keeps execution history and files across restarts.
 
 [Quick start](#quick-start) · [See it run](#workflow-in-pictures) · [Documentation](#documentation)
-· [Download CLI](https://github.com/michael-bill/knotra/releases/latest)
+· [Desktop](https://github.com/knotra-dev/desktop) ·
+[Development workspace](https://github.com/knotra-dev/dev)
 
 - YAML graphs with typed inputs, artifacts and nine node types: `llm`, `agent`, `code`, `tool`,
   `switch`, `human`, `foreach`, `loop`, `pipeline`.
@@ -17,29 +18,36 @@ need judgment. Knotra keeps execution history and files across restarts.
 
 ## Quick start
 
-Install Docker, Docker Compose and Ollama; Colima works on macOS. Unpack the
-[CLI for your OS](https://github.com/michael-bill/knotra/releases/latest), then run:
+Install Docker, Docker Compose and Ollama; Colima works on macOS. Build from this checkout with Go
+from `go.mod`:
 
 ```sh
-./knotra doctor
-./knotra quickstart --dir "$PWD/knotra-data"
+make build helper
+```
+
+Then run from the repository root (published
+[CLI bundles](https://github.com/knotra-dev/engine/releases) will use the same commands):
+
+```sh
+bin/knotra doctor
+bin/knotra quickstart --dir "$PWD/knotra-data"
 ```
 
 Quickstart prepares persistent PostgreSQL, the local model and five starter workflows, then produces
-`greeting.txt`. No Go installation is needed. Leave the terminal running; desktop connects to the
-printed engine address. Repeat with the same directory to reuse saved data.
+`greeting.txt`. Published bundles do not need Go. Leave the terminal running; desktop connects to
+the printed engine address. Repeat with the same directory to reuse saved data.
 
 On Windows use Docker Desktop with Linux containers and WSL 2, then run in PowerShell:
 
 ```powershell
-.\knotra.exe doctor
-.\knotra.exe quickstart --dir "$PWD\knotra-data"
+.\bin\knotra.exe doctor
+.\bin\knotra.exe quickstart --dir "$PWD\knotra-data"
 ```
 
-Run the game in a second terminal (`.\knotra.exe` on Windows):
+Run the game in a second terminal (`.\bin\knotra.exe` on Windows):
 
 ```sh
-./knotra run knotra-data/examples/tic-tac-toe/pipeline.yaml --profile local --wait
+bin/knotra run knotra-data/examples/tic-tac-toe/pipeline.yaml --profile local --wait
 ```
 
 Use `runs get RUN_ID` to find its artifact IDs, then
@@ -115,8 +123,10 @@ flowchart TD
 ```
 
 The engine and CLI use Go; desktop uses Tauri/Rust and React/TypeScript. River runs inside the
-engine and uses PostgreSQL. See [architecture](docs/architecture.md) for execution, storage and
-recovery.
+engine and uses PostgreSQL. This repository owns both the engine and its execution runtime. Desktop
+lives in [its own repository](https://github.com/knotra-dev/desktop);
+[dev](https://github.com/knotra-dev/dev) pins and develops the pair. See
+[architecture](docs/architecture.md) for execution, storage and recovery.
 
 ## Documentation
 
@@ -124,7 +134,7 @@ recovery.
 | -------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | Run examples                     | [First run](docs/first-run.md), [starter workflows](examples/starter/README.md)                        |
 | Configure and operate the engine | [Running](docs/running.md), [CLI](internal/cli/README.md)                                              |
-| Use or develop desktop           | [Desktop](app/README.md)                                                                               |
+| Use or develop desktop           | [Desktop](https://github.com/knotra-dev/desktop)                                                       |
 | Write pipelines                  | [Notation](docs/notation.md), [JSON Schema](schemas/knotra-v1.schema.json)                             |
 | Integrate a client               | [HTTP API](docs/api/desktop-v1.md)                                                                     |
 | Understand and contribute        | [Architecture](docs/architecture.md), [verification](docs/verification.md), [roadmap](docs/roadmap.md) |

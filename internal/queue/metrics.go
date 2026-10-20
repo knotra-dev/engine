@@ -11,7 +11,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/michael-bill/knotra/internal/store/db"
+	"github.com/knotra-dev/engine/internal/store/db"
 )
 
 // Metrics are collected only by the configured OTLP reader, not the one-second

@@ -24,8 +24,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/execution"
+	"github.com/knotra-dev/engine/internal/contract"
+	"github.com/knotra-dev/engine/internal/execution"
 )
 
 type dockerClient struct {

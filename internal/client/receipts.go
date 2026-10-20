@@ -10,7 +10,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/michael-bill/knotra/internal/protocol"
+	"github.com/knotra-dev/engine/internal/protocol"
 )
 
 // A JSON object alone is not proof of command acceptance. Validate the durable

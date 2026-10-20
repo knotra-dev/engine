@@ -1,0 +1,40 @@
+name: Contracts
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: contracts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract-script:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 -m venv /tmp/knotra-contract-venv
+      - run:
+          /tmp/knotra-contract-venv/bin/pip install -r scripts/requirements-contract.txt
+          black==25.1.0
+      - run:
+          /tmp/knotra-contract-venv/bin/black --check scripts examples/integration examples/starter
+          examples/showcase
+      - run: /tmp/knotra-contract-venv/bin/python scripts/check_contract.py
+      - run:
+          PYTHONDONTWRITEBYTECODE=1 /tmp/knotra-contract-venv/bin/python
+          examples/starter/research_test.py
+      - run:
+          PYTHONDONTWRITEBYTECODE=1 /tmp/knotra-contract-venv/bin/python -m unittest discover -s
+          examples/showcase/portfolio-review/tests -v
+      - run:
+          PYTHONDONTWRITEBYTECODE=1 /tmp/knotra-contract-venv/bin/python -m unittest discover -s
+          examples/showcase/release-gate/tests -v

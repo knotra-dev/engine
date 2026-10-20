@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/michael-bill/knotra/internal/app"
+	"github.com/knotra-dev/engine/internal/app"
 )
 
 func (s *commandState) serveCommand() *cobra.Command {

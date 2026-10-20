@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/michael-bill/knotra/internal/protocol"
+	"github.com/knotra-dev/engine/internal/protocol"
 )
 
 func (s *commandState) runCommand() *cobra.Command {

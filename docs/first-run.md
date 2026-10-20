@@ -5,8 +5,8 @@ Compose, and Ollama are required; the prebuilt CLI includes examples and helpers
 
 ## Get the first file
 
-Unpack the [CLI archive](https://github.com/michael-bill/knotra/releases/latest) and open its
-directory:
+Build from source using the [running guide](running.md#build-and-start-from-source), or unpack a
+published [CLI archive](https://github.com/knotra-dev/engine/releases) and open its directory:
 
 ```sh
 ./knotra doctor

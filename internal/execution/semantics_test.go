@@ -3,7 +3,7 @@ package execution
 import (
 	"testing"
 
-	"github.com/michael-bill/knotra/internal/contract"
+	"github.com/knotra-dev/engine/internal/contract"
 )
 
 func TestPermissionIntersectionCannotEscalate(t *testing.T) {

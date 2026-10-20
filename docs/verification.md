@@ -15,8 +15,9 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover \
 ```
 
 [CONTRIBUTING](../CONTRIBUTING.md#integration-tests) describes PostgreSQL, Docker, MCP and recovery
-test setup. [Desktop](../app/README.md#checks-and-build) covers frontend, native and real-engine
-client checks. Contract fixtures are documented [separately](../contracts/v1/fixtures/README.md).
+test setup. [Desktop](https://github.com/knotra-dev/desktop#checks-and-build) covers frontend,
+native and real-engine client checks. Contract fixtures are documented
+[separately](../contracts/v1/fixtures/README.md).
 
 | Suite                  | Scope                                                                                                    |
 | ---------------------- | -------------------------------------------------------------------------------------------------------- |

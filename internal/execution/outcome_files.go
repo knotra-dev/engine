@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/michael-bill/knotra/internal/fsutil"
+	"github.com/knotra-dev/engine/internal/fsutil"
 )
 
 var ErrInvalidOutcome = errors.New("invalid durable outcome")

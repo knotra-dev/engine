@@ -18,10 +18,10 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/execution"
-	"github.com/michael-bill/knotra/internal/store"
-	"github.com/michael-bill/knotra/internal/telemetry"
+	"github.com/knotra-dev/engine/internal/contract"
+	"github.com/knotra-dev/engine/internal/execution"
+	"github.com/knotra-dev/engine/internal/store"
+	"github.com/knotra-dev/engine/internal/telemetry"
 )
 
 func TestSchedulerMetricsCollectDurableBacklogAndFailures(t *testing.T) {

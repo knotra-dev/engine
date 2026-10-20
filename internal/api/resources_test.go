@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/michael-bill/knotra/internal/contract"
+	"github.com/knotra-dev/engine/internal/contract"
 )
 
 func TestResourceCatalogRecognizesCloudProvidersAndRequiresCredentials(t *testing.T) {

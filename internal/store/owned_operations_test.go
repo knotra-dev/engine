@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/michael-bill/knotra/internal/execution"
+	"github.com/knotra-dev/engine/internal/execution"
 )
 
 func TestOwnedOperationAdmissionAndBudgetAreAtomic(t *testing.T) {

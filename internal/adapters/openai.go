@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/michael-bill/knotra/internal/contract"
+	"github.com/knotra-dev/engine/internal/contract"
 )
 
 func openAIRequest(c contract.ModelConnection, messages []message, tools []functionTool, structured bool) (map[string]any, error) {

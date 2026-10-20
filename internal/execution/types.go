@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/michael-bill/knotra/internal/contract"
+	"github.com/knotra-dev/engine/internal/contract"
 )
 
 // Role selects the work performed by a service process, without changing YAML.

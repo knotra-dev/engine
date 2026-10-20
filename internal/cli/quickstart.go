@@ -12,9 +12,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/michael-bill/knotra/internal/app"
-	"github.com/michael-bill/knotra/internal/bootstrap"
-	"github.com/michael-bill/knotra/internal/protocol"
+	"github.com/knotra-dev/engine/internal/app"
+	"github.com/knotra-dev/engine/internal/bootstrap"
+	"github.com/knotra-dev/engine/internal/protocol"
 )
 
 func (s *commandState) bootstrapCommand(checkOnly bool) *cobra.Command {

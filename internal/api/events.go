@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/michael-bill/knotra/internal/protocol"
+	"github.com/knotra-dev/engine/internal/protocol"
 )
 
 func (s *Server) events(w http.ResponseWriter, r *http.Request) {

@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/michael-bill/knotra/internal/protocol"
+	"github.com/knotra-dev/engine/internal/protocol"
 )
 
 func TestCommandJournalConcurrentAndIdentity(t *testing.T) {

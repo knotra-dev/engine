@@ -13,8 +13,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/protocol"
+	"github.com/knotra-dev/engine/internal/contract"
+	"github.com/knotra-dev/engine/internal/protocol"
 )
 
 type journalOperation struct {

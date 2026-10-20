@@ -4,11 +4,14 @@ Knotra connects to PostgreSQL, model APIs and Docker. River runs inside the engi
 the bundled Compose configuration prepare development infrastructure; production needs managed
 storage, backups and access configuration.
 
+For the engine and desktop together, use [knotra-dev/dev](https://github.com/knotra-dev/dev). Build
+from source below until the first organization release is published.
+
 ## Quickstart from a CLI archive
 
 Install Docker Engine, Docker Compose and Ollama. Unpack the
-[CLI archive](https://github.com/michael-bill/knotra/releases/latest), keeping both Linux helpers
-next to the binary:
+[CLI archive](https://github.com/knotra-dev/engine/releases), keeping both Linux helpers next to the
+binary:
 
 ```sh
 ./knotra doctor
@@ -114,10 +117,10 @@ cover other commands.
 
 ## Connecting desktop and browser preview
 
-The engine listens on `http://127.0.0.1:8787` by default. Start [desktop](../app/README.md), save
-the address in Settings and connect. Browser preview additionally needs
-`--cors-origin http://127.0.0.1:1420`, exactly matching its origin; native desktop does not need
-CORS. Closing a client stops observation without cancelling execution.
+The engine listens on `http://127.0.0.1:8787` by default. Start
+[desktop](https://github.com/knotra-dev/desktop), save the address in Settings and connect. Browser
+preview additionally needs `--cors-origin http://127.0.0.1:1420`, exactly matching its origin;
+native desktop does not need CORS. Closing a client stops observation without cancelling execution.
 
 Remote access requires `KNOTRA_TOKEN`, `--tls-cert` and `--tls-key`; remote CLI uses HTTPS and the
 same token. One bearer token represents one trusted principal; independent-user RBAC is not

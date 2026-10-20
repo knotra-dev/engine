@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/michael-bill/knotra/internal/app"
-	"github.com/michael-bill/knotra/internal/client"
-	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/store"
+	"github.com/knotra-dev/engine/internal/app"
+	"github.com/knotra-dev/engine/internal/client"
+	"github.com/knotra-dev/engine/internal/contract"
+	"github.com/knotra-dev/engine/internal/store"
 )
 
 // TestDesktopLiteralClients exercises existing browser and native
@@ -25,6 +25,13 @@ import (
 func TestDesktopLiteralClients(t *testing.T) {
 	if os.Getenv("KNOTRA_TEST_DESKTOP") != "1" || os.Getenv("KNOTRA_TEST_DATABASE_URL") == "" || os.Getenv("KNOTRA_TEST_HELPER") == "" {
 		t.Skip("set KNOTRA_TEST_DESKTOP, KNOTRA_TEST_DATABASE_URL and KNOTRA_TEST_HELPER for desktop acceptance")
+	}
+	desktopDir := os.Getenv("KNOTRA_TEST_DESKTOP_DIR")
+	if !filepath.IsAbs(desktopDir) {
+		t.Fatal("set KNOTRA_TEST_DESKTOP_DIR to the absolute desktop checkout path")
+	}
+	if _, err := os.Stat(filepath.Join(desktopDir, "src-tauri/Cargo.toml")); err != nil {
+		t.Fatalf("desktop checkout: %v", err)
 	}
 	root, err := filepath.Abs("../..")
 	if err != nil {
@@ -69,7 +76,7 @@ func TestDesktopLiteralClients(t *testing.T) {
 	runClient := func(name string, args ...string) {
 		t.Helper()
 		cmd := exec.CommandContext(ctx, name, args...)
-		cmd.Dir = filepath.Join(root, "app")
+		cmd.Dir = desktopDir
 		cmd.Env = append(os.Environ(), "KNOTRA_E2E_ENDPOINT="+api.BaseURL)
 		logPath := filepath.Join(work, name+".log")
 		log, err := os.Create(logPath)

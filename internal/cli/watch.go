@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/michael-bill/knotra/internal/protocol"
+	"github.com/knotra-dev/engine/internal/protocol"
 )
 
 var errWatchComplete = errors.New("event stream reached terminal run status")

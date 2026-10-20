@@ -18,12 +18,12 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
-	"github.com/michael-bill/knotra/internal/app"
-	"github.com/michael-bill/knotra/internal/client"
-	"github.com/michael-bill/knotra/internal/execution"
-	"github.com/michael-bill/knotra/internal/protocol"
-	nativequeue "github.com/michael-bill/knotra/internal/queue"
-	"github.com/michael-bill/knotra/internal/store"
+	"github.com/knotra-dev/engine/internal/app"
+	"github.com/knotra-dev/engine/internal/client"
+	"github.com/knotra-dev/engine/internal/execution"
+	"github.com/knotra-dev/engine/internal/protocol"
+	nativequeue "github.com/knotra-dev/engine/internal/queue"
+	"github.com/knotra-dev/engine/internal/store"
 )
 
 func TestRiverBackupRestoresHumanAndUncommittedOutcome(t *testing.T) {

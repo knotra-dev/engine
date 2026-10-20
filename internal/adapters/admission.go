@@ -15,7 +15,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/michael-bill/knotra/internal/contract"
+	"github.com/knotra-dev/engine/internal/contract"
 )
 
 // modelInfo performs bounded discovery only; these requests never generate tokens.

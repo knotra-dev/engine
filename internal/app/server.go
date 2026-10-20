@@ -14,15 +14,15 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/michael-bill/knotra/internal/adapters"
-	"github.com/michael-bill/knotra/internal/api"
-	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/execution"
-	"github.com/michael-bill/knotra/internal/executor"
-	"github.com/michael-bill/knotra/internal/queue"
-	"github.com/michael-bill/knotra/internal/store"
-	storedb "github.com/michael-bill/knotra/internal/store/db"
-	"github.com/michael-bill/knotra/internal/telemetry"
+	"github.com/knotra-dev/engine/internal/adapters"
+	"github.com/knotra-dev/engine/internal/api"
+	"github.com/knotra-dev/engine/internal/contract"
+	"github.com/knotra-dev/engine/internal/execution"
+	"github.com/knotra-dev/engine/internal/executor"
+	"github.com/knotra-dev/engine/internal/queue"
+	"github.com/knotra-dev/engine/internal/store"
+	storedb "github.com/knotra-dev/engine/internal/store/db"
+	"github.com/knotra-dev/engine/internal/telemetry"
 )
 
 type Options struct {

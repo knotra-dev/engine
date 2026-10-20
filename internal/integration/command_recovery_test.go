@@ -16,12 +16,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/michael-bill/knotra/internal/app"
-	"github.com/michael-bill/knotra/internal/client"
-	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/execution"
-	"github.com/michael-bill/knotra/internal/protocol"
-	"github.com/michael-bill/knotra/internal/store"
+	"github.com/knotra-dev/engine/internal/app"
+	"github.com/knotra-dev/engine/internal/client"
+	"github.com/knotra-dev/engine/internal/contract"
+	"github.com/knotra-dev/engine/internal/execution"
+	"github.com/knotra-dev/engine/internal/protocol"
+	"github.com/knotra-dev/engine/internal/store"
 )
 
 // Commands retain their effects and receipts across a real engine restart.

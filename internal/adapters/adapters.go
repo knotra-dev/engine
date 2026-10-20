@@ -15,8 +15,8 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/michael-bill/knotra/internal/contract"
-	"github.com/michael-bill/knotra/internal/execution"
+	"github.com/knotra-dev/engine/internal/contract"
+	"github.com/knotra-dev/engine/internal/execution"
 )
 
 // Version identifies the execution ABI frozen by admission. Change it when a

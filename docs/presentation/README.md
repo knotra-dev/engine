@@ -1,6 +1,6 @@
 # Project presentation
 
-[Open the presentation](https://michael-bill.github.io/knotra/).
+[Open the presentation](https://knotra-dev.github.io/engine/).
 
 Nine Russian slides introduce Knotra in about five minutes: process graphs, a customer-support
 scenario, multi-host architecture, the verified game repair and the project. Speaker notes contain

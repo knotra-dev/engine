@@ -8,7 +8,7 @@ import (
 	"os"
 	"slices"
 
-	"github.com/michael-bill/knotra/internal/contract"
+	"github.com/knotra-dev/engine/internal/contract"
 )
 
 func (s *Server) profiles(w http.ResponseWriter, _ *http.Request) {
