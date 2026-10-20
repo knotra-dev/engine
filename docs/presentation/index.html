@@ -11,8 +11,8 @@
     />
     <title>Knotra — движок для процессов с AI-агентами</title>
     <link rel="icon" type="image/svg+xml" href="assets/knotra.svg" />
-    <link rel="stylesheet" href="style.css?v=20261020-node-types-v3" />
-    <script src="script.js?v=20261020-node-types-v3" defer></script>
+    <link rel="stylesheet" href="style.css?v=20261020-game-evidence-v4" />
+    <script src="script.js?v=20261020-game-evidence-v4" defer></script>
   </head>
   <body>
     <svg class="svg-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -274,19 +274,25 @@
           <h2 class="slide-title" id="title-4">Qwen 9B написала<br />крестики-нолики</h2>
           <div class="game-layout">
             <div class="game-evidence">
-              <div class="repair-path">
-                <span class="attempt failed"><i>1</i> Ошибка стратегии</span
-                ><span class="repair-arrow">→</span
-                ><span class="attempt passed"><i>2</i> Исправление</span>
-              </div>
-              <div class="metric-pair">
-                <div><strong>3 159</strong><span>независимых проверок</span></div>
-                <div><strong>929</strong><span>игровых позиций</span></div>
+              <div class="game-proof">
+                <div class="proof-row proof-failed">
+                  <span class="proof-status" aria-hidden="true">×</span>
+                  <p>
+                    <strong>Тест нашёл ошибку в стратегии</strong
+                    ><span>Компьютер проигрывал на конкретной последовательности ходов.</span>
+                  </p>
+                </div>
+                <div class="proof-row proof-passed">
+                  <span class="proof-status" aria-hidden="true">✓</span>
+                  <p>
+                    <strong>Исправленная версия прошла тесты</strong
+                    ><span>Проверены правила игры, допустимость ходов и стратегия.</span>
+                  </p>
+                </div>
               </div>
               <p class="evidence-copy">
-                Knotra сама запускает тесты.<br />Ошибки возвращаются модели на исправление.<br /><strong
-                  >Без пройденных тестов готового файла нет.</strong
-                >
+                Knotra вернула модели ошибку вместе с кодом<br />и автоматически проверила
+                исправление.<br /><strong>Без пройденных тестов готового файла нет.</strong>
               </p>
               <button
                 class="text-link"
@@ -296,9 +302,6 @@
               >
                 Посмотреть реальный прогон <span>↗</span>
               </button>
-              <p class="source-note">
-                Записанный repair-прогон · 5 октября 2026<br />Подробности: docs/verification.md
-              </p>
             </div>
             <div class="game-window panel">
               <div class="window-bar">
@@ -320,15 +323,16 @@
             </div>
           </div>
           <aside class="speech" hidden>
-            Эту игру написала небольшая локальная qwen3.5:9b через Ollama. Мы не ограничились
-            просьбой написать крестики-нолики: Knotra автоматически запускала фиксированные тесты и
-            возвращала ошибки модели вместе с кодом. Модель исправляла код, а пайплайн проверял его
-            снова. В показанном repair-прогоне мы специально подали ошибочную стратегию. Исправление
-            прошло 3159 проверок на 929 позициях со второй итерации, после чего отдельный sandbox
-            проверил и собрал HTML. Генерация с нуля тоже прошла, в отдельном запуске. Один ответ на
-            промпт сам по себе не подтверждает работоспособность игры. Здесь готовность определяют
-            тесты, которые модель не может менять. Исправление не гарантировано: при исчерпании
-            лимита попыток запуск завершается ошибкой и не выдаёт готовую игру.
+            Эту игру написала небольшая локальная qwen3.5:9b через Ollama. В демонстрационном
+            repair-прогоне мы специально подали ошибочную стратегию. Тест нашёл последовательность
+            ходов, на которой компьютер проигрывал. Knotra вернула модели эту ошибку вместе с кодом
+            и автоматически проверила исправление. Со второй итерации тесты прошли. Они проверяют
+            правила игры, допустимость ходов и стратегию, затем отдельный sandbox проверяет и
+            собирает HTML. В отчёте сохранены 3159 проверок на 929 позициях: это объём тестирования
+            игры, а не оценка модели или число попыток. Один ответ на промпт не подтверждает
+            работоспособность. Готовность определяют фиксированные тесты. При исчерпании лимита
+            попыток запуск завершается ошибкой и не выдаёт игру. Генерация с нуля тоже прошла, в
+            отдельном запуске. Запись от 5 октября 2026, источник: docs/verification.md.
           </aside>
         </section>
 

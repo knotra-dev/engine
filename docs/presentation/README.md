@@ -17,6 +17,9 @@ This is an application scenario, not a recorded run or a bundled helpdesk integr
 servers and helpdesk API would need to be connected separately. Slide 7 separates the target
 multi-host architecture and example daily workload from the verified same-host worker test.
 
+Slide 4 shows the concrete failing strategy and the checks passed after correction. The raw counts
+of executed checks and game positions remain in speaker notes as testing detail.
+
 Open `index.html` directly or serve this directory with any static HTTP server. All assets and the
 playable game are local; no engine, build step or internet connection is required.
 

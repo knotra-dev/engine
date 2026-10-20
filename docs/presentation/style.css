@@ -573,56 +573,41 @@ svg {
 .game-evidence {
   padding-top: 8px;
 }
-.repair-path {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-.attempt {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 20px;
-}
-.attempt i {
-  font-style: normal;
+.game-proof {
   display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 7px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  font-size: 15px;
+  gap: 26px;
 }
-.failed {
+.proof-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 17px;
+}
+.proof-status {
+  width: 32px;
+  flex: none;
+  font-size: 32px;
+  line-height: 1.15;
+}
+.proof-failed .proof-status {
   color: #ab443d;
 }
-.passed {
+.proof-passed .proof-status {
   color: var(--accent);
 }
-.repair-arrow {
-  color: var(--muted);
-}
-.metric-pair {
-  display: flex;
-  gap: 48px;
-  margin-top: 27px;
-}
-.metric-pair strong {
+.proof-row strong {
   display: block;
-  font-size: 83px;
-  line-height: 1.1;
-  color: var(--accent);
-  font-weight: 500;
-  letter-spacing: -4px;
+  font-size: 28px;
+  line-height: 1.25;
+  font-weight: 550;
+  letter-spacing: -0.5px;
 }
-.metric-pair span {
+.proof-row p > span {
   display: block;
-  font-size: 19px;
-  color: var(--muted);
   margin-top: 8px;
-  white-space: nowrap;
+  font-size: 21px;
+  line-height: 1.45;
+  color: var(--muted);
+  max-width: 710px;
 }
 .evidence-copy {
   font-size: 23px;
@@ -643,9 +628,6 @@ svg {
 }
 .text-link:hover {
   color: var(--text);
-}
-.game-evidence .source-note {
-  margin-top: 14px;
 }
 .evidence-copy strong {
   font-weight: 550;
