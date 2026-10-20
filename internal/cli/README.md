@@ -85,13 +85,11 @@ starting with a letter or digit. Explicit host names have separate sandbox stagi
 directory while `--data-dir` retains local staging and legacy Temporal payloads. Without that flag,
 the existing storage layout is unchanged. Back up the shared directory together with PostgreSQL. The
 filesystem must support hard links, atomic same-directory rename, file/directory syncing and
-consistent reads between clients; this flag does not enable concurrent engine processes. See the
-[storage acceptance notes](../../docs/scheduler-river-implementation.md#shared-filesystem-and-execution-host-identity).
+consistent reads between clients. See
+[deployment and recovery](../../docs/running.md#data-recovery-and-deployment-boundaries).
 
 `--backend temporal` selects the optional legacy backend; its address defaults to `127.0.0.1:7233`
 (`--temporal-address` / `KNOTRA_TEMPORAL_ADDRESS`). `--backend` controls new-run admission, while
 commands keep using the backend recorded on each admitted run. Startup also starts Temporal if the
 database contains live legacy runs or unsent legacy outbox commands. Once those finish, retained
 completed legacy projections do not require a Temporal connection.
-
-The combined service retains exclusive database ownership; cluster deployment is not enabled.

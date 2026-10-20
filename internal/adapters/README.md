@@ -127,15 +127,14 @@ process limits are enforced by Docker. Writable tmpfs allocations sum to the pro
 approximately 90% workspace, 5% ABI output, 5% temporary files, and a 4 KiB shared memory directory.
 Tmpfs also counts toward the memory limit.
 
-Each container carries the durable engine identity. The service acquires exclusive ownership of that
-engine before `CleanupOwned` removes its orphaned containers and temporary package directories.
-Cleanup never selects another engine's containers. The host renews a read-only lease every 5
-seconds; PID 1 exits when that lease is 45 seconds old, even if the engine was killed without
-running cleanup. All remaining processes stop; a stopped container retains at most 16 KiB of
-supervisor diagnostics until normal cleanup or the next engine startup removes it. Code and agent
-containers also enforce their activity deadline independently of lease renewal. Run-scoped MCP
-services retain the host lease until the run closes. The supervisor disables same-UID process
-tracing so workloads cannot alter its watchdog.
+Each container carries the durable engine identity. `CleanupOwned` removes orphaned containers and
+temporary package directories. Cleanup never selects another engine's containers. The host renews a
+read-only lease every 5 seconds; PID 1 exits when that lease is 45 seconds old, even if the engine
+was killed without running cleanup. All remaining processes stop; a stopped container retains at
+most 16 KiB of supervisor diagnostics until normal cleanup or the next engine startup removes it.
+Code and agent containers also enforce their activity deadline independently of lease renewal.
+Run-scoped MCP services retain the host lease until the run closes. The supervisor disables same-UID
+process tracing so workloads cannot alter its watchdog.
 
 A transient failed read or stale shared-filesystem inode cannot revoke an already verified lease.
 The supervisor retains its last valid expiry and the immutable hard deadline while the host retries

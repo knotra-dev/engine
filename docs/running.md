@@ -1,67 +1,76 @@
 # Running the engine and CLI
 
-The engine is started via a native Go binary with embedded River queues and connects to PostgreSQL,
-the API of the selected model, and Docker. The Compose setup below starts development
-infrastructure; the engine itself remains on the host to use local Ollama and Docker/Colima.
+Knotra connects to PostgreSQL, model APIs and Docker. River runs inside the engine. Quickstart and
+the bundled Compose configuration prepare development infrastructure; production needs managed
+storage, backups and access configuration.
 
 ## Quickstart from a CLI archive
 
-You need a working Docker Engine, Docker Compose, and Ollama. Download the archive for your OS and
-architecture from [Releases](https://github.com/michael-bill/knotra/releases/latest), unpack it, and
-keep both Linux helpers next to `knotra` (`knotra.exe` on Windows). Then run `./knotra doctor` and
-`./knotra quickstart`. Doctor checks dependencies and helper architecture without starting
-infrastructure. Quickstart starts PostgreSQL with a persistent volume, loads required images and
-model, starts the engine, and downloads the first `greeting.txt`. It stays in the terminal until
-Ctrl-C.
-
-The default directory is `knotra/quickstart` inside the user's system settings directory. The
-command prints the exact path. An explicit directory is more convenient for recovery:
+Install Docker Engine, Docker Compose and Ollama. Unpack the
+[CLI archive](https://github.com/michael-bill/knotra/releases/latest), keeping both Linux helpers
+next to the binary:
 
 ```sh
+./knotra doctor
 ./knotra quickstart --dir "$PWD/knotra-data"
 ```
 
-On Windows, extract the amd64 or arm64 ZIP and use PowerShell:
+Doctor checks dependencies without starting infrastructure. Quickstart starts persistent PostgreSQL,
+loads images/model, extracts editable examples, produces `greeting.txt` and serves until Ctrl-C. Use
+the same directory, provider, model and ports on restart; existing settings and edits are kept.
+Services and volumes survive Ctrl-C. The directory must be shared with Docker/Colima; keep it with
+the PostgreSQL volume. Without `--dir`, the system configuration directory is used and printed.
 
-```powershell
-.\knotra.exe doctor
-.\knotra.exe quickstart --dir "$PWD\knotra-data"
-```
+On Windows use Docker Desktop with Linux containers and WSL 2, a local NTFS data directory, and
+`.\knotra.exe` in PowerShell. Docker uses the current context's local named pipe; Ollama must be
+reachable at `http://127.0.0.1:11434`.
 
-Docker Desktop must use Linux containers with the WSL 2 backend. Keep data on a local NTFS drive
-accessible to Docker Desktop. The CLI connects through the current Docker context's local named
-pipe, normally `npipe:////./pipe/dockerDesktopLinuxEngine` or `npipe:////./pipe/docker_engine`.
-Ollama must be reachable from Windows at `http://127.0.0.1:11434`. For the remaining commands in
-this guide, replace `./knotra` or `bin/knotra` with `.\knotra.exe` or `.\bin\knotra.exe`. Set cloud
-keys in PowerShell with `$env:OPENAI_API_KEY = 'YOUR_KEY'` or `$env:ANTHROPIC_API_KEY = 'YOUR_KEY'`.
+Useful flags:
 
-Repeat the command with the same `--dir`, `--provider`, `--model`, and ports. Settings, DB password,
-first operation ID, profile, and examples are written once; your edits are not overwritten. Services
-and volumes remain after Ctrl-C. For another profile use a separate directory and free
-`--postgres-port`, `--listen`. `--no-run` starts the engine without greeting.
-`--cors-origin http://127.0.0.1:1420` is needed for preview. Engine data lies in `engine/`, logs in
-`engine.log`; keep this directory and the PostgreSQL volume together.
+- `--no-run`: start without generating the greeting.
+- `--cors-origin http://127.0.0.1:1420`: allow browser preview.
+- `--postgres-port` and `--listen`: select free ports for another quickstart directory.
+- `--provider openai --model YOUR_MODEL` or `--provider anthropic --model YOUR_MODEL`: use a cloud
+  model. Set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` in the environment; keys are not written into
+  profiles. In PowerShell use `$env:OPENAI_API_KEY = 'YOUR_KEY'`. Greeting generation is a paid
+  request unless `--no-run` is set.
 
-The persistent directory must be accessible to Docker. On macOS, choose a path shared with Colima or
-Docker Desktop. Quickstart copies the verified sandbox helper into this directory so execution does
-not depend on Docker sharing the archive's extraction directory.
+## Build and start from source
 
-For a cloud model specify an ID available to your account. Set the key in the terminal environment;
-it is not written to the profile. For example, after setting `OPENAI_API_KEY`:
+Use Go from `go.mod`, Make, Docker and Ollama with `qwen3.5:9b` installed:
 
 ```sh
-./knotra doctor --provider openai --model YOUR_MODEL --dir ./openai-data
-./knotra quickstart --provider openai --model YOUR_MODEL --dir ./openai-data
+make build helper firewall
+docker pull python:3.13-alpine
+docker pull node:22-alpine
+docker compose up -d --wait
+export KNOTRA_DATABASE_URL='postgres://knotra:knotra-development@127.0.0.1:25432/knotra?sslmode=disable'
+bin/knotra serve --profile examples/local/profile.yaml
 ```
 
-For Anthropic use `--provider anthropic` and `ANTHROPIC_API_KEY`. Quickstart with a cloud provider
-performs a paid model request for greeting; `--no-run` disables it. Support for a specific model and
-parameters depends on its API. These instructions do not promise production infrastructure or signed
-desktop build.
+`make helper` detects the Docker architecture; set `HELPER_ARCH=amd64` or `arm64` if detection is
+unavailable. The helper is written to `.knotra/bin/sandbox-helper`. Pipeline executables must exist
+in their configured images. Model/MCP credentials come from the engine environment through profile
+secret references.
 
-## OpenAI and Anthropic Connections
+To use existing PostgreSQL, omit Compose and point `KNOTRA_DATABASE_URL` to a dedicated Knotra
+database. The engine creates its tables at startup. Docker uses the current context or `DOCKER_HOST`
+/ `--docker-host` with a local Unix socket or Windows named pipe; remote TCP Docker endpoints are
+unsupported.
 
-In your `EngineProfile` replace only the `model_main` connection, keeping sandboxes and limits:
+Compose starts PostgreSQL 18.6 on loopback port `25432`. `KNOTRA_PG_PORT` overrides the port;
+`KNOTRA_DEV_DB_PASSWORD` changes the initial password. `docker compose stop` and `start` preserve
+data; `down` keeps named volumes, while `down --volumes` deletes the database.
+
+River is the default backend. For legacy runs/tests, start
+`docker compose --profile temporal up -d --wait` and use
+`--backend temporal --temporal-address 127.0.0.1:27233`. Startup also connects to Temporal when live
+legacy runs or unsent commands remain. Completed legacy projections alone do not require it.
+Existing runs retain their admitted backend; see [Temporal](temporal.md).
+
+## OpenAI and Anthropic connections
+
+Replace the `model_main` connection inside `EngineProfile.spec`, keeping sandboxes and limits:
 
 ```yaml
 secrets:
@@ -74,116 +83,25 @@ models:
     parameters: { max_output_tokens: 4096 }
 ```
 
-This fragment is inside `spec`. For Anthropic replace env with `ANTHROPIC_API_KEY`, provider with
-`anthropic`, and parameter with `max_tokens`. Default addresses: `https://api.openai.com/v1` and
-`https://api.anthropic.com/v1`. Do not copy Ollama parameters `think`/`num_predict` into a cloud
-profile. [Full list and limits](../internal/adapters/README.md).
+For Anthropic use `ANTHROPIC_API_KEY`, `provider: anthropic` and `max_tokens`. Default API bases are
+`https://api.openai.com/v1` and `https://api.anthropic.com/v1`. Models must support function
+calling; capabilities and accepted parameters depend on the provider/model. Cloud adapters reject
+`imageInput`. See [adapter parameters and guarantees](../internal/adapters/README.md).
 
-Admission checks access to the selected model ID and records the allowed identifier. Cloud catalogs
-do not provide verifiable weight digest or common capability contract: text/tools means protocol
-support by the adapter. The model must support function calling; its parameters and actual responses
-are checked by the API. `imageInput` is currently rejected by cloud adapters.
+## First run
 
-## Preparation
-
-You need the Go version from `go.mod`, Docker Engine, and Make. On macOS Docker can run through
-Colima. The local examples use the installed Ollama model `qwen3.5:9b`.
+In another terminal from the repository root:
 
 ```sh
-go version
-docker info
-ollama list
-make build helper firewall
-docker pull python:3.13-alpine
-docker pull node:22-alpine
-```
-
-`make helper` defines the Docker daemon architecture. If unavailable during build, set
-`HELPER_ARCH=arm64` or `HELPER_ARCH=amd64` explicitly. The CLI binary appears in `bin/knotra`,
-Linux-helper in `.knotra/bin/sandbox-helper`. A sandbox profile may choose another image: helper
-does not require Python or shell, but the pipeline program itself must be present in the chosen
-image.
-
-## Variant A: Existing PostgreSQL
-
-Use a separate Knotra database, not an application's foreign database. Tables are created by the
-engine at startup. River is the default execution backend.
-
-```sh
-export KNOTRA_DATABASE_URL='postgres://127.0.0.1:5432/knotra?sslmode=disable'
-bin/knotra serve \
-  --profile examples/local/profile.yaml
-```
-
-PostgreSQL user and password are defined by your installation. Model tokens and MCP are set via
-engine process environment variables referenced by `EngineProfile`; the client does not receive
-them. A local profile example does not require an Ollama token. The chosen Docker context is used
-automatically, or you can set `DOCKER_HOST` / `--docker-host` with a URL of a local Unix socket or,
-on Windows, a local named pipe. Remote TCP Docker endpoints are not supported.
-
-## Variant B: Infrastructure in Compose
-
-```sh
-docker compose up -d --wait
-export KNOTRA_DATABASE_URL='postgres://knotra:knotra-development@127.0.0.1:25432/knotra?sslmode=disable'
-bin/knotra serve \
-  --profile examples/local/profile.yaml
-```
-
-If Homebrew installed a separate `docker-compose`, use this name instead of `docker compose`; file
-format is identical. Default Compose starts PostgreSQL on loopback port `25432`; `KNOTRA_PG_PORT`
-overrides it. `KNOTRA_DEV_DB_PASSWORD` changes the password on first creation; update the connection
-string accordingly.
-
-Compose pins PostgreSQL 18.6 and mounts its volume in `/var/lib/postgresql`. Temporal is optional
-for legacy comparison tests: `docker compose --profile temporal up -d --wait` and
-`serve --backend temporal --temporal-address 127.0.0.1:27233`.
-
-`--backend` selects new-run admission. If the database still contains live Temporal runs or unsent
-legacy commands, startup also connects to Temporal to finish them, even with `--backend river`.
-Commands keep using each run's admitted backend. Completed legacy projections alone do not require
-Temporal; a fresh River engine uses only PostgreSQL for scheduling.
-
-```sh
-docker compose stop
-docker compose start
-```
-
-Stop preserves data. `docker compose down` removes containers, keeping named volumes.
-`docker compose down --volumes` also removes the database; this command is needed only for
-intentional development environment reset.
-
-## First Run
-
-In another terminal, from repository root:
-
-```sh
-bin/knotra validate examples/starter/hello/pipeline.yaml
 bin/knotra validate examples/starter/hello/pipeline.yaml --remote --profile local
 bin/knotra run examples/starter/hello/pipeline.yaml --profile local --wait
 bin/knotra runs list
-```
-
-The model creates a greeting for login `name`, the code node writes it to `greeting.txt`, the engine
-publishes an artifact. This small scenario checks connection and result saving. Use the ID from the
-result:
-
-```sh
-bin/knotra runs get RUN_ID --json
+bin/knotra artifacts list --run RUN_ID
 bin/knotra artifacts download ARTIFACT_ID --output greeting.txt
 ```
 
-CLI checks size and SHA-256 before writing the file. `--force` allows replacing an already existing
-file. `--json` is intended for scripts; the command reference is available via `bin/knotra --help`
-and in [CLI documentation](../internal/cli/README.md).
-
-Other [starter workflows](../examples/starter/README.md) compare three offers with independent
-agents and deterministic scoring, build a playable game with fixed tests, and demonstrate editorial
-review and research approval. All five use profile `local` and `model_main`; Python steps need
-`python_box`, the game needs `node_box` with image `node:22-alpine`. MCP servers and secrets are not
-needed.
-
-For `human`-nodes:
+Downloads verify size and SHA-256; replacing an existing file requires `--force`. Authoritative
+resource checks happen with `--remote` and at admission. For human requests:
 
 ```sh
 bin/knotra requests list --run RUN_ID --all --json
@@ -191,59 +109,53 @@ bin/knotra requests respond REQUEST_ID --outputs response.json
 bin/knotra runs watch RUN_ID
 ```
 
-The response is addressed to a specific request ID. If the connection is lost after sending the
-command, `operations list` will show its saved ID, and `operations retry ID` will re-verify the
-original command with the previous idempotency key.
+After transport loss, inspect `operations list` and reconcile with `operations retry OPERATION_ID`,
+which keeps the original command key. An uncertain external effect needs `runs resolve`; `resume`
+cannot bypass it. Completed operations are restored from journals, and a lost unfinished agent
+workspace is not automatically re-executed.
+
+[First run](first-run.md) walks through the game and release review;
+[starter workflows](../examples/starter/README.md) and [CLI reference](../internal/cli/README.md)
+cover other commands.
 
 ## Connecting desktop and browser preview
 
-The engine by default listens on `http://127.0.0.1:8787`. Run the application via
-[desktop README](../app/README.md), specify this address in Settings, and connect. On the
-**Pipelines** page select **Hello, model**, **Research dossier from source materials**, **Build a
-playable game**, **Research, verify and approve**, or **From brief to reviewed publication**. Create
-a new copy from the starter workflows library; select profile `local` when running it. The library
-also contains individual node examples and a guided demo with sample results. On submission, the
-engine checks admission and records the package; editing the draft does not change an already
-accepted run.
+The engine listens on `http://127.0.0.1:8787` by default. Start [desktop](../app/README.md), save
+the address in Settings and connect. Browser preview additionally needs
+`--cors-origin http://127.0.0.1:1420`, exactly matching its origin; native desktop does not need
+CORS. Closing a client stops observation without cancelling execution.
 
-For browser preview add at engine startup:
-
-```sh
-bin/knotra serve \
-  --profile examples/local/profile.yaml \
-  --cors-origin http://127.0.0.1:1420
-```
-
-This address must exactly match the browser origin. Native desktop uses a Rust HTTP client and does
-not require CORS. Both clients read the same API and SSE; human requests are available in Inbox,
-verified files — in Artifacts. Closing the application does not cancel the run. The built-in guided
-demo uses local data samples.
+Remote access requires `KNOTRA_TOKEN`, `--tls-cert` and `--tls-key`; remote CLI uses HTTPS and the
+same token. One bearer token represents one trusted principal; independent-user RBAC is not
+implemented. `--cors-origin` permits one browser origin. Keep credentials out of exported packages.
 
 ## Data, recovery, and deployment boundaries
 
-File contents are flushed before publication on every OS. On Windows, an explicit directory flush is
-unavailable; persistence of directory entries across sudden power loss depends on NTFS. Use backups
-and preserve the database and complete engine data directories together.
+Multiple hosts share PostgreSQL and durable artifact/outcome storage. Set a stable, distinct
+`--host-id` on each execution host. `--shared-data-dir` contains `artifacts/` and `outcomes/`;
+`--data-dir` keeps local staging. Shared filesystems need hard links, atomic same-directory rename,
+durable file/directory sync and consistent reads. Workers need compatible profiles, helpers and
+images. [EngineProfile](notation/engine-profile.md) defines resources and limits.
 
-For the default River backend, definitions, execution records, command receipts, requests, operation
-journals, projections, events and River delivery live in PostgreSQL. Its durable files are
-`artifacts/` and `outcomes/` under `--shared-data-dir`, which defaults to `--data-dir`. Keep
-complete directories, including outcome files whose publication has not committed, MCP
-initialization/session evidence and private artifact bytes. River job retention does not authorize
-deleting these files or Knotra history. A PostgreSQL copy alone is insufficient. Do not delete
-`.knotra` while its data is needed.
+Preserve PostgreSQL with the complete artifact/outcome directories, including unpublished envelopes
+and MCP recovery evidence. A database dump alone is insufficient. Legacy runs additionally need
+Temporal history and local `payloads/`. Storage files and Knotra history have no automatic cleanup;
+operators manage free space and backups. River job retention does not authorize deleting history or
+durable files. Individual artifacts are limited to 64 MiB.
 
-A River-only engine does not need Temporal storage. A mixed or legacy engine additionally requires
-its Temporal history and offloaded `payloads/` directory under `--data-dir`. Preserve these with
-PostgreSQL and artifact/outcome storage for as long as the legacy runs or their replay history are
-needed. See the [legacy backend details](temporal.md).
+On Windows, directory flushing is unavailable; directory-entry persistence after sudden power loss
+depends on NTFS. File contents are flushed before publication on every OS.
+
+Sandbox containers have independent deadlines and a watchdog that stops them about 45 seconds after
+engine heartbeats stop. Docker `allowlist` filters pinned IPs without inspecting HTTP Host/SNI;
+shared addresses/proxies share access. See [adapter guarantees](../internal/adapters/README.md).
 
 ### River backup and restore
 
-The supported initial procedure uses a maintenance stop on the single engine host. Stop admission
-and the API/worker process, wait for process exit, and keep all other writers stopped until the
-database dump and file archives finish. If an engine crashed, confirm the process has exited before
-backing up its surviving database and files. An HTTP outage alone does not prove that writers have
+The supported procedure uses a maintenance stop on all engine hosts. Stop admission and all
+API/scheduler/executor processes, wait for process exit, and keep all writers stopped until the
+database dump and file archives finish. After a crash, confirm all writers have exited before
+backing up the surviving database and files. An HTTP outage alone does not prove that writers have
 stopped. This procedure preserves pending evidence without needing a distributed snapshot protocol.
 
 Record the exact Knotra release/binary, PostgreSQL major version, engine ID (`GET /v1/info` before
@@ -273,7 +185,8 @@ Archive the whole application database, including River tables, migration metada
 and ownership records. The commands above intentionally omit database ownership and grants:
 provision the same application role and database access separately. Mark/copy a backup as complete
 only after every command succeeds, and retain the matching release/configuration inventory with it.
-Do not restart writers midway through making the archives.
+Archive each host's local data and the shared durable directories. Do not restart writers midway
+through making the archives.
 
 Restore into an empty database created from `template0` and fresh empty directories, with the engine
 still stopped. Set libpq settings to the restoration target, provision its application role, and run
@@ -294,7 +207,7 @@ fi
 
 Keep the engine stopped if either database or file restoration fails. Do not merge an archive into
 an active/newer engine. Preserve file contents, permissions and modification times. Start the
-matching binary with the restored database and data directories, original host ID, and compatible
+matching binary with the restored database and data directories, original host IDs, and compatible
 profiles/helpers/images. Check the original engine ID, waiting request IDs/deadlines, downloaded
 artifact bytes and SSE history. Lease reconciliation imports saved results idempotently; missing
 external evidence requires explicit outcome resolution and never justifies automatic repetition.
@@ -307,96 +220,26 @@ integration check `TestRiverBackupRestoresHumanAndUncommittedOutcome` exercises 
 and a second engine restart. It covers a stopped single-host River engine; online snapshots, network
 filesystem faults, multi-host recovery and mixed-backend backups need separate acceptance.
 
-The current release is one API/worker process on one host. If the worker moves, it needs the same
-saved data, profile references, and compatible helpers/images. Multiple hosts with independent local
-`data-dir` do not form a correct shared engine. A shared PostgreSQL alone does not solve this
-problem. For production, plan PostgreSQL operations, complete file backups, and a storage model
-consistent with this single-host boundary; Compose is not a production recipe. Temporal is needed
-only when using the legacy backend or finishing retained legacy work.
-
-After engine restart, completed external responses are read from the log. If the record outcome is
-unknown or the working environment of an unfinished agent is lost, the engine requires explicit
-state resolution instead of re-executing the command. `runs resolve` accepts proven outcomes and
-verified outputs; `resume` does not bypass this check.
-
-Containers have their own watchdog: after an abnormal termination of the engine process, heartbeat
-stoppage stops them approximately 45 seconds later. Agent/code are additionally limited by attempt
-deadline. Upon next startup the engine cleans remaining containers and temporary directories only
-for its own engine ID.
-
-The engine implements **Ollama**, **OpenAI Responses** and **Anthropic Messages**. An unknown
-`provider` is rejected at admission. MCP supports Streamable HTTP and stdio within an isolated
-container. Details and limits of the Docker backend, including network filtering by fixed IP, are
-described in [adapter documentation](../internal/adapters/README.md).
-
-For listening to the external interface, the engine requires `KNOTRA_TOKEN`, `--tls-cert`, and
-`--tls-key`. Remote CLI requires HTTPS and the same token. `--cors-origin` allows exactly one
-browser origin. The current bearer token sets one trusted principal; this is not a multi-user RBAC
-system.
-
 ## Observability and operational limits
 
-Server logs are JSON in stderr. `--debug` includes additional messages. HTTP request traces and node
-attempts, HTTP request counter and their duration can be sent via OTLP/HTTP by setting
-`OTEL_EXPORTER_OTLP_ENDPOINT` or separate `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` /
-`OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`. Without an explicit endpoint export is disabled.
-`OTEL_SDK_DISABLED=true` disables it. Prompts, request bodies, input values, and credentials are not
-included in attributes.
+JSON logs go to stderr; `--debug` includes successful execution boundaries. OTLP/HTTP export is
+opt-in through `OTEL_EXPORTER_OTLP_ENDPOINT` or separate `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` and
+`OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`. `OTEL_SDK_DISABLED=true` disables it.
 
-The River runtime also exports these instruments through the same OTLP metric reader:
+| Metric prefix `knotra.scheduler.`          | Meaning                                                |
+| ------------------------------------------ | ------------------------------------------------------ |
+| `dirty_run.age`, `ready_job.age`           | Oldest pending run wake and due delivery, seconds      |
+| `steps`                                    | Scheduler calls, including rolled-back work            |
+| `lease.expired`                            | Claimed attempts with expired ownership                |
+| `outcome.pending`, `outcome.pending.age`   | Unimported outcome files and oldest age                |
+| `outcome.unknown`                          | Instances waiting for resolution                       |
+| `slot.reservations`                        | Unreleased scope reservations                          |
+| `timer.lag`                                | Oldest due timer for a live run, seconds               |
+| `publication.failures`, `cleanup.failures` | Failed publication and cleanup work, including retries |
 
-| Instrument prefix `knotra.scheduler.`      | Meaning                                                                                                                                   |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `dirty_run.age`                            | Oldest live run's unconsumed wake, in seconds; coalesced wakes retain the first timestamp.                                                |
-| `ready_job.age`                            | Oldest due available/retryable/scheduled delivery in this engine's queues, in seconds. Future jobs are excluded.                          |
-| `steps`                                    | Pure scheduler calls attempted, including preparation and transactions that subsequently roll back.                                       |
-| `lease.expired`                            | Currently claimed attempts whose database lease has expired.                                                                              |
-| `outcome.pending`, `outcome.pending.age`   | Unimported immutable envelope count and oldest file age in seconds, including fenced/terminal attempts. Files not yet saved are excluded. |
-| `outcome.unknown`                          | Instances currently waiting for an outcome resolution.                                                                                    |
-| `slot.reservations`                        | Unreleased scope reservations; nested attempts can reserve more than one scope.                                                           |
-| `timer.lag`                                | Oldest unconsumed due timer for a live run, in seconds.                                                                                   |
-| `publication.failures`, `cleanup.failures` | Failed publication transactions and cleanup deliveries/session scans in this process, including retries.                                  |
-
-Gauges have no run, instance, provider or credential labels. Collection uses a one-second database
-deadline and reads envelope metadata without loading outputs. A database or storage error fails
-collection instead of exporting healthy zeros. Collection runs only when a metric reader is
-configured; it adds no database poll to the maintenance loop. Pending-file scans remain proportional
-to unimported outcome keys and should be measured before increasing that backlog substantially.
-
-River traces include delivery/job, engine and host identities. Claimed execution, outcome
-publication and claimed cleanup retain run, instance, attempt, owning worker and ownership
-generation; `knotra.actor.id` identifies the process handling recovery when the owner belongs to a
-previous incarnation. Advance spans carry the wake generation, and execution/cleanup deliveries
-carry their dispatch generation. Deliveries that acquire no ownership retain only their delivery
-identities. Each delivery starts its own trace; node and publication spans are children of that
-delivery. Command advancement retains the HTTP request's trace context.
-
-Operation intent, physical-call admission and response confirmation are trace events with
-`knotra.operation.id`. Successful execution boundaries are logged at debug level; failures are
-logged at warning level with identity and error type. Use `serve --debug` for successful boundary
-logs. Payloads, prompts, provider reasoning, credentials, endpoint URLs and raw error text are
-excluded. River's delivery error journal stores the sanitized error type, retaining
-cancellation/snooze classification internally. Panic values are sanitized before River handles them.
-Complete outputs and confirmed operation responses remain in their existing execution stores.
-
-One engine ID is served by one process: ownership is secured by a separate PostgreSQL connection.
-This is a deployment limitation, not parallel run capability. The engine simultaneously executes
-multiple pipelines and multiple instances of one YAML with independent limits and sandbox. The River
-queues are scoped by engine identity, with cleanup also scoped by host identity. For legacy
-execution, the Temporal task queue name is appended with the engine ID so that different engine
-databases do not pick up each other's tasks.
-
-Lists have cursors and are limited by record count and size. CLI flag `--all` bypasses all pages.
-Input artifacts are visible after upload; those created by a node — after verification and
-publication of its outputs. For resolving an unknown outcome, artifact output is set by a registered
-ID (or an array of IDs for a collection).
-
-Storage files and history are currently saved without automatic cleanup. The operator ensures free
-space and backups; deleting files manually when saves are in progress is not allowed. The maximum
-size of a single artifact is 64 MiB. Network `allowlist` Docker filters pinned addresses, not HTTP
-Host/SNI: access to an allowed external proxy implies access to its application functions.
-
-`resources` shows resources available according to installed profiles and issued tools; the absence
-of a required secret is marked as `unavailable`. This is the configuration catalog. The current
-connection to the service, capabilities of a specific model, MCP schemas, and image availability are
-checked by command `validate --remote` and upon acceptance of each run.
+Metric collection has a one-second database deadline; storage failures fail collection instead of
+reporting healthy zeros. Pending scans scale with unimported outcome keys. Traces identify
+deliveries, run/instance/attempt ownership and operation boundaries. Logs/traces exclude prompts,
+credentials, provider reasoning, payloads, endpoint URLs and raw error text. Stored outputs and tool
+results can still contain sensitive user data. Detailed client observations have explicit
+truncation/gap markers; see [API history](api/desktop-v1.md#execution-observations-and-history).

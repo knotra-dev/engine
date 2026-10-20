@@ -7,9 +7,8 @@ node commits validated outputs; uploaded inputs are visible immediately.
 
 For the default River backend, PostgreSQL owns authoritative execution records and queue delivery.
 Execution transitions and their client projections commit together; bounded projections never
-replace complete execution values. Clients do not schedule from these projections. The engine's
-advisory lock permits one owning process per engine ID. Legacy Temporal runs retain their workflow
-history in Temporal, and their PostgreSQL projections may lag execution.
+replace complete execution values. Clients do not schedule from these projections. Legacy Temporal
+runs retain their workflow history in Temporal, and their PostgreSQL projections may lag execution.
 
 ## Initial schema
 
@@ -54,8 +53,8 @@ Artifacts and outcome files can use `serve --shared-data-dir DIR`; local sandbox
 bytes, while damaged content, symlinks or directories cause a failure instead of being overwritten.
 The same confined root initialization syncs newly created parent entries for both stores. Shared
 filesystem deployments need hard links, atomic rename, durable sync and cross-client read
-consistency. Independent local writer processes and sequential engine replacement are tested;
-network filesystems and concurrent worker hosts still require acceptance.
+consistency. The recorded checks cover independent local writer processes and sequential engine
+replacement.
 
 ## Checks and recovery
 

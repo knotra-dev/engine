@@ -42,12 +42,11 @@ Home / End — первый / последний слайд.
 Сравнения вероятности успеха с одним промптом не проводилось. При исчерпании лимита попыток пайплайн может завершиться ошибкой.
 Три executor-процесса, 18 workflow и 54 вызова проверены 20 октября 2026 на одной машине.
 В тесте воркеров модель возвращала фиксированные HTTP-ответы. Это не нагрузочный тест Qwen.
-Кластерный CLI, несколько физических машин и 10000 workflow в сутки не заявлены как проверенные.
+Многомашинное развёртывание поддерживается; производительность 10000 workflow в сутки не измерена.
 Свежий движок использует River/PostgreSQL; Temporal — оставшийся legacy backend.
 
 ИСТОЧНИКИ
-README.md, docs/architecture.md, docs/verification.md,
-docs/scheduler-river-implementation.md и реальные screenshots из docs/media проекта Knotra.
+README.md, docs/architecture.md, docs/verification.md и реальные screenshots из docs/media проекта Knotra.
 Сравнение с Codex: https://developers.openai.com/blog/codex-as-a-platform
 Подача: https://github.com/SkillMedev/skills/blob/main/skills/slide-deck-builder/SKILL.md
 и https://github.com/rhuss/cc-slidev/blob/main/slidev/skills/presentation-design/SKILL.md

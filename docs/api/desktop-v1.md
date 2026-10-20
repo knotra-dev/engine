@@ -24,12 +24,11 @@ reads its token from the environment. Neither client includes tokens in command 
 Operator diagnostics also include `backend` (new-run admission), `workerBackends` (running execution
 backends), `schedulerVersion`, `stateFormatVersion` and `executionTimeout`. `hostId` identifies the
 execution host across ordinary process restarts. Changing admission never changes an existing run's
-backend. During the experimental transition both workers can run in the same service under the
-exclusive engine lease; clients keep using the same commands. An incompatible protocol or missing
-engine identity prevents connecting. `engineId` is a durable deployment identity: replacing the
-database/deployment must create a new ID. The cache is namespaced by normalized base URL, engine
-identity AND authenticated `principalId`; run IDs from different engines or accounts cannot share
-cached state or commands.
+backend. Both execution backends can run in the same service; clients keep using the same commands.
+An incompatible protocol or missing engine identity prevents connecting. `engineId` is a durable
+deployment identity: replacing the database/deployment must create a new ID. The cache is namespaced
+by normalized base URL, engine identity AND authenticated `principalId`; run IDs from different
+engines or accounts cannot share cached state or commands.
 
 JSON uses camelCase. IDs are opaque, nonempty, at most 256 characters and cannot contain control
 characters. Every identifier is encoded as one URL segment; nested instance addresses are not
