@@ -9,11 +9,12 @@ import (
 	"time"
 
 	"github.com/knotra-dev/engine/internal/protocol"
+	"github.com/knotra-dev/engine/internal/store"
 )
 
 func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if _, e := s.Store.Run(r.Context(), id); e != nil {
+	if _, e := store.ReadRunStatus(r.Context(), s.Store.Pool, id); e != nil {
 		s.err(w, e)
 		return
 	}
@@ -99,7 +100,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) history(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if _, err := s.Store.Run(r.Context(), id); err != nil {
+	if _, err := store.ReadRunStatus(r.Context(), s.Store.Pool, id); err != nil {
 		s.err(w, err)
 		return
 	}

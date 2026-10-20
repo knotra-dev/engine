@@ -366,8 +366,9 @@ func (s *Store) hydrateRun(ctx context.Context, run *protocol.Run) error {
 		}
 	}
 
-	documents, err := db.New(s.Pool).ListInstances(ctx, run.ID)
-	run.Instances, err = decodeRecords[protocol.Instance](documents, err)
+	instances, err := s.Instances(ctx, run.ID, "")
+	run.Instances = instances.Items
+	run.InstancesNextCursor = instances.NextCursor
 	return err
 }
 

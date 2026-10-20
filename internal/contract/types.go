@@ -322,7 +322,6 @@ type Plan struct {
 	ModelDigests    map[string]string                  `json:"modelDigests,omitempty"`
 	CompilerVersion string                             `json:"compilerVersion"`
 	CELVersion      string                             `json:"celVersion"`
-	Expressions     map[string]json.RawMessage         `json:"expressions,omitempty"`
 	MCPTools        map[string]map[string]ToolSnapshot `json:"mcpTools,omitempty"`
 	Version         string                             `json:"version"`
 	Digest          string                             `json:"digest"`

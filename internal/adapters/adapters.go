@@ -77,9 +77,11 @@ type Runner struct {
 }
 
 type sessionCache struct {
-	mu           sync.Mutex
-	sessions     map[string]*mcpSession
-	initializing map[string]chan struct{}
+	mu            sync.Mutex
+	sessions      map[string]*mcpSession
+	initializing  map[string]chan struct{}
+	discoveryGate chan struct{}
+	discovery     *mcpSession
 	// ponytail: sorted active keys bound cleanup scans; use an ordered index if insertion cost matters.
 	keys []string
 }
@@ -104,7 +106,7 @@ func (r *Runner) cache() *sessionCache {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.shared == nil {
-		r.shared = &sessionCache{sessions: map[string]*mcpSession{}, initializing: map[string]chan struct{}{}}
+		r.shared = &sessionCache{sessions: map[string]*mcpSession{}, initializing: map[string]chan struct{}{}, discoveryGate: make(chan struct{}, 1)}
 	}
 	return r.shared
 }
@@ -282,10 +284,12 @@ func textSource(req Request, t contract.TextSource) (string, error) {
 
 func (r *Runner) Close() error {
 	cache := r.cache()
+	cache.discoveryGate <- struct{}{}
+	failures := cache.closeDiscovery()
+	<-cache.discoveryGate
 	cache.mu.Lock()
 	keys := slices.Clone(cache.keys)
 	cache.mu.Unlock()
-	var failures error
 	for _, key := range keys {
 		failures = errors.Join(failures, r.releaseSession(key, true))
 	}

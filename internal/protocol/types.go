@@ -46,22 +46,23 @@ type Instance struct {
 }
 
 type Run struct {
-	ID               string                     `json:"id"`
-	DefinitionID     string                     `json:"definitionId"`
-	Title            string                     `json:"title"`
-	Status           string                     `json:"status"`
-	CreatedAt        time.Time                  `json:"createdAt"`
-	UpdatedAt        time.Time                  `json:"updatedAt"`
-	Profile          string                     `json:"profile"`
-	Package          contract.Package           `json:"package"`
-	Inputs           map[string]json.RawMessage `json:"inputs"`
-	InputArtifacts   map[string]any             `json:"inputArtifacts"`
-	Outputs          map[string]json.RawMessage `json:"outputs"`
-	Artifacts        []contract.Artifact        `json:"artifacts"`
-	Instances        []Instance                 `json:"instances"`
-	Diagnostics      []contract.Diagnostic      `json:"diagnostics"`
-	AvailableActions []string                   `json:"availableActions"`
-	DataTruncated    bool                       `json:"dataTruncated,omitempty"`
+	ID                  string                     `json:"id"`
+	DefinitionID        string                     `json:"definitionId"`
+	Title               string                     `json:"title"`
+	Status              string                     `json:"status"`
+	CreatedAt           time.Time                  `json:"createdAt"`
+	UpdatedAt           time.Time                  `json:"updatedAt"`
+	Profile             string                     `json:"profile"`
+	Package             contract.Package           `json:"package"`
+	Inputs              map[string]json.RawMessage `json:"inputs"`
+	InputArtifacts      map[string]any             `json:"inputArtifacts"`
+	Outputs             map[string]json.RawMessage `json:"outputs"`
+	Artifacts           []contract.Artifact        `json:"artifacts"`
+	Instances           []Instance                 `json:"instances"`
+	InstancesNextCursor *string                    `json:"instancesNextCursor,omitempty"`
+	Diagnostics         []contract.Diagnostic      `json:"diagnostics"`
+	AvailableActions    []string                   `json:"availableActions"`
+	DataTruncated       bool                       `json:"dataTruncated,omitempty"`
 }
 
 type Event struct {

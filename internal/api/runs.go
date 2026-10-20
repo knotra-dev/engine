@@ -23,6 +23,20 @@ func (s *Server) run(w http.ResponseWriter, r *http.Request) {
 	s.write(w, 200, map[string]any{"run": v})
 }
 
+func (s *Server) instances(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if _, err := store.ReadRunStatus(r.Context(), s.Store.Pool, id); err != nil {
+		s.err(w, err)
+		return
+	}
+	p, err := s.Store.Instances(r.Context(), id, r.URL.Query().Get("cursor"))
+	if err != nil {
+		s.err(w, err)
+		return
+	}
+	s.write(w, http.StatusOK, p)
+}
+
 func page[T any](items []T, id func(T) string) protocol.Page[T] {
 	p := protocol.Page[T]{Items: items}
 	size := 0

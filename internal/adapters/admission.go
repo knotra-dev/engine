@@ -7,6 +7,7 @@ import (
 	"debug/elf"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -40,14 +41,24 @@ func (r *Runner) modelInfo(ctx context.Context, profile contract.Profile, c cont
 	}
 	client := r.httpClient()
 	res, err := client.Do(req)
+	if err == nil {
+		defer func() { _ = res.Body.Close() }()
+		if res.StatusCode != http.StatusOK {
+			return modelHTTPFailure(res.StatusCode)
+		}
+		err = readBoundedModelJSON(res.Body, 4<<20, output)
+	}
 	if err != nil {
-		return fmt.Errorf("model discovery request failed")
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		var failed *Failure
+		if errors.As(err, &failed) {
+			return err
+		}
+		return &Failure{Code: "EXTERNAL_CALL_FAILED", Message: "model discovery request failed", Retryable: true}
 	}
-	defer func() { _ = res.Body.Close() }()
-	if res.StatusCode != 200 {
-		return fmt.Errorf("model discovery returned HTTP %d", res.StatusCode)
-	}
-	return readBoundedModelJSON(res.Body, 4<<20, output)
+	return nil
 }
 
 func (r *Runner) modelDigest(ctx context.Context, profile contract.Profile, c contract.ModelConnection) (string, error) {

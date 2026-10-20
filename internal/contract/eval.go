@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 
 	"cel.dev/cel-go/cel"
 	"cel.dev/cel-go/common/types"
@@ -202,7 +201,7 @@ type checkedExpression struct {
 	refs    []string
 }
 
-var expressions sync.Map
+var expressions compilationCache[*checkedExpression]
 
 // BindingReferences returns all static references, including every coalesce
 // candidate, using the same checked CEL analysis as the compiler.
@@ -256,12 +255,8 @@ func PortDependencies(ports map[string]Port) ([]string, error) {
 }
 
 func expression(source string) (*checkedExpression, error) {
-	if cached, ok := expressions.Load(source); ok {
-		expr, ok := cached.(*checkedExpression)
-		if !ok {
-			return nil, fmt.Errorf("invalid cached CEL expression")
-		}
-		return expr, nil
+	if cached, ok := expressions.load(source); ok {
+		return cached, nil
 	}
 	if len(source) > 8192 {
 		return nil, fmt.Errorf("CEL expression exceeds 8192 bytes")
@@ -297,8 +292,7 @@ func expression(source string) (*checkedExpression, error) {
 		return nil, err
 	}
 	x := &checkedExpression{ast: a, program: program, refs: sortedKeys(refs)}
-	expressions.Store(source, x)
-	return x, nil
+	return expressions.store(source, x), nil
 }
 
 var namespaces = map[string]bool{

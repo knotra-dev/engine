@@ -306,9 +306,11 @@ func (q *Queries) ReadChildExecutionGraphs(ctx context.Context, arg ReadChildExe
 }
 
 const readExecutionAttempts = `-- name: ReadExecutionAttempts :many
-SELECT (to_jsonb(a) || jsonb_build_object(
-    'runId',a.run_id,'instanceId',a.instance_id,'Ownership',CASE WHEN a.owner IS NULL THEN NULL ELSE jsonb_build_object(
-    'runId',a.run_id,'instanceId',a.instance_id,'number',a.number,'workerId',a.owner,'generation',a.ownership_generation) END))::jsonb
+SELECT jsonb_build_object('runId',a.run_id,'instanceId',a.instance_id,'number',a.number,
+    'dispatch_generation',a.dispatch_generation,'dispatch_pending',a.dispatch_pending,'state',a.state,
+    'lease_expires_at',a.lease_expires_at,'outcome_key',a.outcome_key,'result',a.result,
+    'Ownership',CASE WHEN a.owner IS NULL THEN NULL ELSE jsonb_build_object(
+    'runId',a.run_id,'instanceId',a.instance_id,'number',a.number,'workerId',a.owner,'generation',a.ownership_generation) END)::jsonb
 FROM knotra_execution_attempts a JOIN knotra_execution_nodes n ON n.run_id=a.run_id AND n.id=a.instance_id
 WHERE a.run_id=$1 AND n.graph_id=$2 AND a.number=n.attempt_number
     AND ($3::text[] IS NULL OR n.id=ANY($3::text[])) ORDER BY a.instance_id

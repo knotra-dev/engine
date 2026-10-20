@@ -147,9 +147,6 @@ func (c *Client) commandDir() string {
 
 func (c *Client) save(v Command) error {
 	dir := c.commandDir()
-	if e := os.MkdirAll(dir, 0700); e != nil {
-		return e
-	}
 	b, e := json.MarshalIndent(v, "", "  ")
 	if e != nil {
 		return e
@@ -200,6 +197,14 @@ func (c *Client) Command(ctx context.Context, route string, payload any, id stri
 	}
 	b, e := json.Marshal(payload)
 	if e != nil {
+		return e
+	}
+	// Persist new parent entries before locking can create the journal directory.
+	root, e := fsutil.OpenPrivateRoot(c.commandDir())
+	if e != nil {
+		return e
+	}
+	if e = root.Close(); e != nil {
 		return e
 	}
 	unlock, e := c.lockCommand(ctx, id)

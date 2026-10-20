@@ -139,6 +139,19 @@ func projectIdempotency(schema json.RawMessage, pointer string) (json.RawMessage
 			if child["type"] != "string" {
 				return nil, fmt.Errorf("idempotency field must be a string")
 			}
+			for _, keyword := range []string{"minProperties", "maxProperties"} {
+				if _, ok := current[keyword]; ok {
+					return nil, fmt.Errorf("cannot safely project idempotency field through %s", keyword)
+				}
+			}
+			if dependencies, ok := current["dependentRequired"].(map[string]any); ok {
+				for name, required := range dependencies {
+					names, _ := required.([]any)
+					if name == part || slices.Contains(names, any(part)) {
+						return nil, fmt.Errorf("cannot safely project idempotency field through dependentRequired")
+					}
+				}
+			}
 			delete(properties, part)
 			if required, ok := current["required"].([]any); ok {
 				filtered := []any{}

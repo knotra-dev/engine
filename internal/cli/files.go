@@ -55,11 +55,11 @@ func (s *commandState) object(file string, assignments []string) (map[string]jso
 		}
 
 		for key, value := range object {
-			data, err := json.Marshal(value)
+			data, err := contract.JSONValue(value)
 			if err != nil {
 				return nil, err
 			}
-			out[key] = data
+			out[key] = data.JSON
 		}
 	}
 
@@ -75,11 +75,11 @@ func (s *commandState) object(file string, assignments []string) (map[string]jso
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
-		b, err := json.Marshal(value)
+		b, err := contract.JSONValue(value)
 		if err != nil {
 			return nil, err
 		}
-		out[name] = b
+		out[name] = b.JSON
 	}
 
 	return out, nil

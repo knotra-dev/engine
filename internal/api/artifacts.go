@@ -44,7 +44,7 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 				Diagnostics: []contract.Diagnostic{},
 			}, nil
 		}
-		art, e := s.Artifacts.Write(q.Name, q.MediaType, content, map[string]string{})
+		art, e := s.Artifacts.Write(q.Name, mt, content, map[string]string{})
 		if e != nil {
 			return 0, nil, e
 		}

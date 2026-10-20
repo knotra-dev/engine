@@ -16,15 +16,6 @@ func OpenPrivateRoot(directory string) (*os.Root, error) {
 	if err != nil {
 		return nil, err
 	}
-	parents := []string{filepath.Dir(absolute)}
-	for parent := filepath.Dir(absolute); parent != filepath.Dir(parent); parent = filepath.Dir(parent) {
-		if _, err := os.Lstat(parent); err == nil {
-			break
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return nil, err
-		}
-		parents = append(parents, filepath.Dir(parent))
-	}
 	if err := os.MkdirAll(absolute, 0700); err != nil {
 		return nil, err
 	}
@@ -35,9 +26,13 @@ func OpenPrivateRoot(directory string) (*os.Root, error) {
 	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return nil, errors.New("private storage directory must be a real directory")
 	}
-	for _, path := range parents {
-		if err := SyncDir(path); err != nil {
+	// Another initializer may have created existing ancestors without syncing them yet.
+	for parent := filepath.Dir(absolute); ; parent = filepath.Dir(parent) {
+		if err := SyncDir(parent); err != nil {
 			return nil, err
+		}
+		if parent == filepath.Dir(parent) {
+			break
 		}
 	}
 	root, err := os.OpenRoot(absolute)

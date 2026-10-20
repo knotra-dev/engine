@@ -108,6 +108,16 @@ manufacture a succeeded run. The root run uses the same status vocabulary as ins
 `failed`, `cancelled` (root skipped may be omitted by an engine implementation). Terminal states are
 immutable.
 
+Run snapshots embed the first instance page, with at most 100 instances and a soft 1 MiB
+instance byte budget. If `instancesNextCursor` is present, the array is partial; read
+`GET /runs/{runId}/instances?cursor=…` for subsequent `{items: Instance[], nextCursor}` pages.
+Omitting the cursor starts at the first instance. Pages follow ascending instance ID order;
+each instance retains its complete stored projection, including context previews. A single
+oversized projection is returned alone. These are live projections: instances inserted before
+an already consumed cursor require a new traversal. Existing package and root-value limits
+remain separate; pagination bounds the instance collection, not the total size of those fields.
+The CLI exposes the same pages through `knotra runs instances RUN_ID [--cursor CURSOR] [--all]`.
+
 New workflow histories additionally expose optional instance metadata: `nodeType`, `graphPath` (the
 definition address, such as `/nodes/map/body/nodes/work`), `parentInstanceId`, and a zero-based
 `iterationIndex` under the immediate foreach/loop parent. `scope` remains the admitted pipeline

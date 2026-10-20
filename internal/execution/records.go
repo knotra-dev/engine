@@ -103,8 +103,6 @@ type AttemptRecord struct {
 	LeaseExpiresAt     time.Time `json:"lease_expires_at"`
 	OutcomeKey         string    `json:"outcome_key"`
 	Result             *ExecuteResult
-	EvidenceKey        string `json:"evidence_key"`
-	Outcome            *Outcome
 }
 
 // RootGraph derives stable identities from the run and root address.

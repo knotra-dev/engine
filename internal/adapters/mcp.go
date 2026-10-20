@@ -42,7 +42,10 @@ func (s *mcpSession) close() error {
 	s.deleteMu.Lock()
 	request, deletionErr := s.deleteRequest, s.deleteErr
 	s.deleteMu.Unlock()
-	err := s.session.Close()
+	var err error
+	if s.session != nil {
+		err = s.session.Close()
+	}
 	// The SDK closes locally once and caches its result. Retry only the same
 	// remote DELETE; a failed cleanup must never initialize a replacement session.
 	if request != nil && deletionErr != nil {
@@ -63,7 +66,8 @@ func (s *mcpSession) close() error {
 	if s.sandbox != nil {
 		err = errors.Join(err, s.sandbox.close())
 	}
-	if err == nil && s.resource.Ownership.WorkerID != "" {
+	// A failed handshake without a cleanup identity must leave its durable resource open.
+	if err == nil && s.resource.Ownership.WorkerID != "" && (s.session != nil || request != nil) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		err = s.hooks.CloseResource(ctx, s.resource.ID)
@@ -381,27 +385,39 @@ func (r *Runner) connectMCP(ctx context.Context, req Request, name string, conne
 	var err error
 	s.session, err = client.Connect(ctx, transport, nil)
 	if err != nil {
-		if s.sandbox != nil {
-			_ = s.sandbox.close()
+		connectionErr := fmt.Errorf("MCP connection failed: %w", err)
+		s.deleteMu.Lock()
+		request := s.deleteRequest
+		s.deleteMu.Unlock()
+		if s.resource.Ownership.WorkerID != "" && request != nil {
+			s.resource.MCP = &execution.MCPSessionRecord{
+				Connection: name, SessionID: request.Header.Get("Mcp-Session-Id"), ProtocolVersion: request.Header.Get("Mcp-Protocol-Version"),
+			}
+			connectionErr = errors.Join(connectionErr, r.recordMCPSession(ctx, s))
 		}
-		return nil, fmt.Errorf("MCP connection failed: %w", err)
+		return s, errors.Join(connectionErr, s.close())
 	}
 	if s.resource.Ownership.WorkerID != "" {
 		s.resource.MCP = &execution.MCPSessionRecord{Connection: name, SessionID: s.session.ID(), ProtocolVersion: s.session.InitializeResult().ProtocolVersion}
-		if err := r.ResourceEvidence.PutMCPSession(s.resource); err != nil {
-			_ = s.close()
-			return nil, fmt.Errorf("cannot save MCP cleanup evidence: %w", err)
-		}
-		evidence, stop := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
-		err = s.hooks.RecordMCPSession(evidence, s.resource.ID, *s.resource.MCP)
-		stop()
-		if err != nil {
-			_ = s.close()
-			return nil, fmt.Errorf("cannot persist MCP cleanup identity: %w", err)
+		if err := r.recordMCPSession(ctx, s); err != nil {
+			return s, errors.Join(err, s.close())
 		}
 	}
 	connected = true
 	return s, nil
+}
+
+func (r *Runner) recordMCPSession(ctx context.Context, s *mcpSession) error {
+	var failures error
+	if err := r.ResourceEvidence.PutMCPSession(s.resource); err != nil {
+		failures = fmt.Errorf("cannot save MCP cleanup evidence: %w", err)
+	}
+	evidence, stop := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+	defer stop()
+	if err := s.hooks.RecordMCPSession(evidence, s.resource.ID, *s.resource.MCP); err != nil {
+		failures = errors.Join(failures, fmt.Errorf("cannot persist MCP cleanup identity: %w", err))
+	}
+	return failures
 }
 
 func (r *Runner) session(ctx context.Context, req Request, alias string) (*mcpSession, func(), error) {
@@ -745,65 +761,9 @@ func (r *Runner) Prepare(ctx context.Context, plan *contract.Plan) error {
 				continue
 			}
 			connection := plan.Profile.Spec.MCP[resource.Connection]
-			s, err := r.connectMCP(ctx, req, resource.Connection, connection)
+			snapshots, err := r.discoverMCP(ctx, req, resource.Connection, connection)
 			if err != nil {
 				return err
-			}
-			snapshots := map[string]contract.ToolSnapshot{}
-			seen := map[string]bool{}
-			totalBytes := 0
-
-			for tool, err := range s.session.Tools(ctx, nil) {
-				if err != nil {
-					_ = s.close()
-					return err
-				}
-				if seen[tool.Name] {
-					_ = s.close()
-					return fmt.Errorf("MCP catalog contains duplicate tool %q", tool.Name)
-				}
-				seen[tool.Name] = true
-				if len(seen) > 4096 {
-					_ = s.close()
-					return fmt.Errorf("MCP catalog exceeds discovery limits")
-				}
-				input, e := json.Marshal(tool.InputSchema)
-				if e != nil {
-					_ = s.close()
-					return e
-				}
-				output, e := json.Marshal(tool.OutputSchema)
-				if e != nil {
-					_ = s.close()
-					return e
-				}
-				totalBytes += len(input) + len(output) + len(tool.Description) + len(tool.Name)
-				if len(input) > 1<<20 || len(output) > 1<<20 || totalBytes > 8<<20 {
-					_ = s.close()
-					return fmt.Errorf("MCP discovery exceeds capability snapshot limits")
-				}
-				if !slices.Contains(connection.AllowedTools, tool.Name) {
-					continue
-				}
-				if len(snapshots) >= 1024 {
-					_ = s.close()
-					return fmt.Errorf("MCP discovery exceeds capability snapshot limits")
-				}
-				if policy := connection.ToolPolicies[tool.Name]; policy.IdempotencyArgument != "" {
-					if _, e := projectIdempotency(input, policy.IdempotencyArgument); e != nil {
-						_ = s.close()
-						return e
-					}
-				}
-				snapshots[tool.Name] = contract.ToolSnapshot{InputSchema: input, OutputSchema: output, Description: tool.Description}
-			}
-
-			_ = s.close()
-
-			for _, name := range connection.AllowedTools {
-				if _, ok := snapshots[name]; !ok {
-					return fmt.Errorf("allowed MCP tool %q not discovered", name)
-				}
 			}
 
 			plan.MCPTools[resource.Connection] = snapshots
@@ -811,6 +771,94 @@ func (r *Runner) Prepare(ctx context.Context, plan *contract.Plan) error {
 	}
 
 	return nil
+}
+
+// Caller owns discoveryGate. Failed cleanup blocks new discovery, keeping at
+// most one temporary session while retaining its exact remote DELETE identity.
+func (c *sessionCache) closeDiscovery() error {
+	if c.discovery == nil {
+		return nil
+	}
+	if err := c.discovery.close(); err != nil {
+		return err
+	}
+	c.discovery = nil
+	return nil
+}
+
+func (r *Runner) discoverMCP(ctx context.Context, req Request, name string, connection contract.MCPConnection) (snapshots map[string]contract.ToolSnapshot, err error) {
+	cache := r.cache()
+	select {
+	case cache.discoveryGate <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	defer func() { <-cache.discoveryGate }()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := cache.closeDiscovery(); err != nil {
+		return nil, fmt.Errorf("previous MCP discovery cleanup failed: %w", err)
+	}
+	cache.discovery, err = r.connectMCP(ctx, req, name, connection)
+	if cache.discovery == nil {
+		return nil, err
+	}
+	defer func() {
+		if cleanupErr := cache.closeDiscovery(); cleanupErr != nil {
+			err = errors.Join(err, fmt.Errorf("MCP discovery cleanup failed: %w", cleanupErr))
+		}
+	}()
+	if err != nil {
+		return nil, err
+	}
+	snapshots = map[string]contract.ToolSnapshot{}
+	seen := map[string]bool{}
+	totalBytes := 0
+
+	for tool, err := range cache.discovery.session.Tools(ctx, nil) {
+		if err != nil {
+			return nil, err
+		}
+		if seen[tool.Name] {
+			return nil, fmt.Errorf("MCP catalog contains duplicate tool %q", tool.Name)
+		}
+		seen[tool.Name] = true
+		if len(seen) > 4096 {
+			return nil, fmt.Errorf("MCP catalog exceeds discovery limits")
+		}
+		input, err := json.Marshal(tool.InputSchema)
+		if err != nil {
+			return nil, err
+		}
+		output, err := json.Marshal(tool.OutputSchema)
+		if err != nil {
+			return nil, err
+		}
+		totalBytes += len(input) + len(output) + len(tool.Description) + len(tool.Name)
+		if len(input) > 1<<20 || len(output) > 1<<20 || totalBytes > 8<<20 {
+			return nil, fmt.Errorf("MCP discovery exceeds capability snapshot limits")
+		}
+		if !slices.Contains(connection.AllowedTools, tool.Name) {
+			continue
+		}
+		if len(snapshots) >= 1024 {
+			return nil, fmt.Errorf("MCP discovery exceeds capability snapshot limits")
+		}
+		if policy := connection.ToolPolicies[tool.Name]; policy.IdempotencyArgument != "" {
+			if _, err := projectIdempotency(input, policy.IdempotencyArgument); err != nil {
+				return nil, err
+			}
+		}
+		snapshots[tool.Name] = contract.ToolSnapshot{InputSchema: input, OutputSchema: output, Description: tool.Description}
+	}
+
+	for _, name := range connection.AllowedTools {
+		if _, ok := snapshots[name]; !ok {
+			return nil, fmt.Errorf("allowed MCP tool %q not discovered", name)
+		}
+	}
+	return snapshots, nil
 }
 
 func urlPath(s string) string { return strings.ReplaceAll(s, "/", "%2F") }

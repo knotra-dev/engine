@@ -1072,6 +1072,54 @@
         }
       }
     },
+    "/runs/{runId}/instances": {
+      "get": {
+        "operationId": "get_runs_runId_instances",
+        "summary": "Read a bounded page of instance projections",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Last instance ID from the preceding page; excluded from this page."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Up to 100 instance projections in ascending instance ID order, with a soft 1 MiB instance byte budget. A single larger projection is returned alone.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstancePage"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Run unavailable or storage failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/runs/{runId}/history": {
       "get": {
         "operationId": "get_run_history",
@@ -1707,6 +1755,10 @@
               "$ref": "#/components/schemas/Instance"
             }
           },
+          "instancesNextCursor": {
+            "type": "string",
+            "description": "When present, instances is partial. Read /runs/{runId}/instances with this cursor for the next page."
+          },
           "diagnostics": {
             "type": "array",
             "items": {
@@ -1741,6 +1793,21 @@
           "diagnostics",
           "availableActions"
         ]
+      },
+      "InstancePage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Instance"
+            }
+          },
+          "nextCursor": {
+            "type": ["string", "null"]
+          }
+        },
+        "required": ["items", "nextCursor"]
       },
       "RunPage": {
         "type": "object",

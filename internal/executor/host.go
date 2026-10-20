@@ -93,12 +93,6 @@ func (h *Host) Execute(ctx context.Context, q execution.ExecuteRequest) executio
 	if strings.Contains(e.Error(), "BUDGET_EXCEEDED") {
 		code = "BUDGET_EXCEEDED"
 	}
-	if errors.Is(e, context.Canceled) {
-		code = "CANCELLED"
-	}
-	if errors.Is(e, context.DeadlineExceeded) {
-		code = "TIMEOUT"
-	}
 	return execution.ExecuteResult{Failure: &execution.Failure{Code: code, Message: e.Error()}}
 }
 

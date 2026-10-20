@@ -81,4 +81,18 @@ WHERE p.position<=2 OR p.preceding_bytes<=sqlc.arg(max_bytes)::bigint
 ORDER BY d.id DESC;
 
 -- name: ListInstances :many
-SELECT document FROM knotra_instances WHERE run_id=$1 ORDER BY id;
+WITH candidates AS (
+    SELECT id,octet_length(document::text) AS bytes
+    FROM knotra_instances
+    WHERE run_id=sqlc.arg(run_id) AND id>sqlc.arg(cursor)::text
+    ORDER BY id
+    LIMIT 101
+), page AS (
+    SELECT id,row_number() OVER (ORDER BY id) AS position,
+        COALESCE(sum(bytes) OVER (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) AS preceding_bytes
+    FROM candidates
+)
+SELECT d.document
+FROM knotra_instances d JOIN page p ON p.id=d.id
+WHERE d.run_id=sqlc.arg(run_id) AND (p.position<=2 OR p.preceding_bytes<=sqlc.arg(max_bytes)::bigint)
+ORDER BY d.id;

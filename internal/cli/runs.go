@@ -118,6 +118,26 @@ func (s *commandState) runsCommand() *cobra.Command {
 		return s.nextCursor(page.NextCursor)
 	}}
 	pageFlags(list, &cursor, &all)
+	var instanceCursor string
+	var allInstances bool
+	instances := &cobra.Command{Use: "instances RUN_ID", Short: "List run instances", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		page, err := fetchPages[protocol.Instance](cmd.Context(), s, "/runs/"+url.PathEscape(args[0])+"/instances", instanceCursor, allInstances)
+		if err != nil {
+			return err
+		}
+		if s.json {
+			return s.printJSON(page)
+		}
+		rows := [][]string{}
+		for _, item := range page.Items {
+			rows = append(rows, []string{item.ID, item.NodeID, item.Status, item.AttemptID})
+		}
+		if err := s.table([]string{"INSTANCE", "NODE", "STATUS", "ATTEMPT"}, rows); err != nil {
+			return err
+		}
+		return s.nextCursor(page.NextCursor)
+	}}
+	pageFlags(instances, &instanceCursor, &allInstances)
 	get := &cobra.Command{Use: "get RUN_ID", Short: "Show run inputs, outputs, instances and diagnostics", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		run, err := s.getRun(cmd.Context(), args[0])
 		if err != nil {
@@ -160,7 +180,7 @@ func (s *commandState) runsCommand() *cobra.Command {
 		return runExit(run)
 	}}
 	wait.Flags().DurationVar(&timeout, "timeout", 0, "Maximum observation time; zero waits until interrupted")
-	root.AddCommand(list, get, watch, wait, s.runAction("cancel"), s.runAction("resume"), s.resolveCommand())
+	root.AddCommand(list, get, instances, watch, wait, s.runAction("cancel"), s.runAction("resume"), s.resolveCommand())
 	return root
 }
 
@@ -261,6 +281,11 @@ func (s *commandState) printRun(run protocol.Run, operation string) error {
 		}
 
 		if err := s.table([]string{"INSTANCE", "NODE", "STATUS", "ATTEMPT"}, rows); err != nil {
+			return err
+		}
+	}
+	if run.InstancesNextCursor != nil {
+		if _, err := fmt.Fprintf(s.options.Out, "More instances: knotra runs instances %s --cursor %s\n", run.ID, *run.InstancesNextCursor); err != nil {
 			return err
 		}
 	}

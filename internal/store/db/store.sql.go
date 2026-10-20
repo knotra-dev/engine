@@ -171,11 +171,31 @@ func (q *Queries) ListEvents(ctx context.Context, arg ListEventsParams) ([]ListE
 }
 
 const listInstances = `-- name: ListInstances :many
-SELECT document FROM knotra_instances WHERE run_id=$1 ORDER BY id
+WITH candidates AS (
+    SELECT id,octet_length(document::text) AS bytes
+    FROM knotra_instances
+    WHERE run_id=$1 AND id>$3::text
+    ORDER BY id
+    LIMIT 101
+), page AS (
+    SELECT id,row_number() OVER (ORDER BY id) AS position,
+        COALESCE(sum(bytes) OVER (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) AS preceding_bytes
+    FROM candidates
+)
+SELECT d.document
+FROM knotra_instances d JOIN page p ON p.id=d.id
+WHERE d.run_id=$1 AND (p.position<=2 OR p.preceding_bytes<=$2::bigint)
+ORDER BY d.id
 `
 
-func (q *Queries) ListInstances(ctx context.Context, runID string) ([][]byte, error) {
-	rows, err := q.db.Query(ctx, listInstances, runID)
+type ListInstancesParams struct {
+	RunID    string
+	MaxBytes int64
+	Cursor   string
+}
+
+func (q *Queries) ListInstances(ctx context.Context, arg ListInstancesParams) ([][]byte, error) {
+	rows, err := q.db.Query(ctx, listInstances, arg.RunID, arg.MaxBytes, arg.Cursor)
 	if err != nil {
 		return nil, err
 	}

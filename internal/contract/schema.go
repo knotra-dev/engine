@@ -131,16 +131,12 @@ func nativeUnicode(v reflect.Value, depth int) error {
 	return nil
 }
 
-var dataSchemas sync.Map // immutable compiled schemas, shared across runtime calls
+var dataSchemas compilationCache[*jsonschema.Schema]
 
 func compileDataSchema(raw json.RawMessage) (*jsonschema.Schema, error) {
 	key := string(raw)
-	if value, ok := dataSchemas.Load(key); ok {
-		schema, ok := value.(*jsonschema.Schema)
-		if !ok {
-			return nil, fmt.Errorf("invalid cached JSON schema")
-		}
-		return schema, nil
+	if cached, ok := dataSchemas.load(key); ok {
+		return cached, nil
 	}
 	if len(raw) == 0 {
 		return nil, fmt.Errorf("unresolved or absent JSON schema")
@@ -152,7 +148,7 @@ func compileDataSchema(raw json.RawMessage) (*jsonschema.Schema, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := validateDataProfile(value, value, map[string]bool{}, 0); err != nil {
+	if _, err := validateDataProfile(value, value, map[string]int{}, 0); err != nil {
 		return nil, err
 	}
 	c := jsonschema.NewCompiler()
@@ -166,8 +162,7 @@ func compileDataSchema(raw json.RawMessage) (*jsonschema.Schema, error) {
 	if err != nil {
 		return nil, err
 	}
-	dataSchemas.Store(key, schema)
-	return schema, nil
+	return dataSchemas.store(key, schema), nil
 }
 
 func initializeStructuralSchema() error {
@@ -196,92 +191,107 @@ var schemaKeys = func() map[string]bool {
 	return m
 }()
 
-func validateDataProfile(value, root any, stack map[string]bool, depth int) error {
+func validateDataProfile(value, root any, refs map[string]int, depth int) (int, error) {
 	if depth > MaxDepth {
-		return fmt.Errorf("schema reference depth exceeds 64")
+		return 0, fmt.Errorf("schema reference depth exceeds 64")
 	}
 	if _, ok := value.(bool); ok {
-		return nil
+		return 0, nil
 	}
 	m, ok := value.(map[string]any)
 	if !ok {
-		return fmt.Errorf("schema must be boolean or object")
+		return 0, fmt.Errorf("schema must be boolean or object")
 	}
+	height := 0
 
 	for _, k := range sortedKeys(m) {
 		v := m[k]
 		if !schemaKeys[k] {
-			return fmt.Errorf("unsupported DataSchema keyword %q", k)
+			return 0, fmt.Errorf("unsupported DataSchema keyword %q", k)
 		}
 
 		switch k {
 		case "$schema":
 			if v != "https://json-schema.org/draft/2020-12/schema" {
-				return fmt.Errorf("unsupported schema draft")
+				return 0, fmt.Errorf("unsupported schema draft")
 			}
 		case "$ref":
 			s, ok := v.(string)
 			if !ok || !strings.HasPrefix(s, "#") {
-				return fmt.Errorf("only local schema references permitted")
-			}
-			if stack[s] {
-				return fmt.Errorf("cyclic schema reference %s", s)
+				return 0, fmt.Errorf("only local schema references permitted")
 			}
 			fragment, err := url.PathUnescape(strings.TrimPrefix(s, "#"))
 			if err != nil {
-				return err
+				return 0, err
 			}
-			target, present, err := pointer(root, fragment)
-			if err != nil || !present {
-				return fmt.Errorf("unresolved schema reference %s", s)
+			targetHeight, done := refs[fragment]
+			if done && targetHeight < 0 {
+				return 0, fmt.Errorf("cyclic schema reference %s", s)
 			}
-			stack[s] = true
-			err = validateDataProfile(target, root, stack, depth+1)
-			delete(stack, s)
-			if err != nil {
-				return err
+			if !done {
+				target, present, err := pointer(root, fragment)
+				if err != nil || !present {
+					return 0, fmt.Errorf("unresolved schema reference %s", s)
+				}
+				// Pending references detect cycles; completed heights preserve depth limits on reuse.
+				refs[fragment] = -1
+				targetHeight, err = validateDataProfile(target, root, refs, depth+1)
+				if err != nil {
+					return 0, err
+				}
+				refs[fragment] = targetHeight
 			}
+			if depth+1+targetHeight > MaxDepth {
+				return 0, fmt.Errorf("schema reference depth exceeds 64")
+			}
+			height = max(height, targetHeight+1)
 		case "pattern":
 			s, ok := v.(string)
 			if !ok {
-				return fmt.Errorf("pattern must be string")
+				return 0, fmt.Errorf("pattern must be string")
 			}
 			if err := portableRegexp(s); err != nil {
-				return err
+				return 0, err
 			}
 		case "$defs", "properties", "patternProperties", "dependentSchemas":
 			obj, ok := v.(map[string]any)
 			if !ok {
-				return fmt.Errorf("%s must be object", k)
+				return 0, fmt.Errorf("%s must be object", k)
 			}
 			for _, name := range sortedKeys(obj) {
 				if k == "patternProperties" {
 					if err := portableRegexp(name); err != nil {
-						return err
+						return 0, err
 					}
 				}
-				if err := validateDataProfile(obj[name], root, stack, depth+1); err != nil {
-					return err
+				childHeight, err := validateDataProfile(obj[name], root, refs, depth+1)
+				if err != nil {
+					return 0, err
 				}
+				height = max(height, childHeight+1)
 			}
 		case "additionalProperties", "propertyNames", "items", "contains", "not", "if", "then", "else":
-			if err := validateDataProfile(v, root, stack, depth+1); err != nil {
-				return err
+			childHeight, err := validateDataProfile(v, root, refs, depth+1)
+			if err != nil {
+				return 0, err
 			}
+			height = max(height, childHeight+1)
 		case "prefixItems", "allOf", "anyOf", "oneOf":
 			a, ok := v.([]any)
 			if !ok {
-				return fmt.Errorf("%s must be array", k)
+				return 0, fmt.Errorf("%s must be array", k)
 			}
 			for _, item := range a {
-				if err := validateDataProfile(item, root, stack, depth+1); err != nil {
-					return err
+				childHeight, err := validateDataProfile(item, root, refs, depth+1)
+				if err != nil {
+					return 0, err
 				}
+				height = max(height, childHeight+1)
 			}
 		}
 	}
 
-	return nil
+	return height, nil
 }
 
 func portableRegexp(s string) error {

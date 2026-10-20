@@ -28,8 +28,13 @@ UPDATE knotra_execution_attempts SET dispatch_generation=$4,dispatch_pending=fal
 			WHERE run_id=$1 AND instance_id=$2 AND number=$3;
 
 -- name: ListDueTimerRuns :many
-SELECT DISTINCT run_id FROM knotra_execution_timers
-		WHERE consumed_at IS NULL AND due_at<=clock_timestamp() ORDER BY run_id LIMIT 64;
+-- Wrap within the page so one run can drain a batch on every poll.
+SELECT run_id FROM knotra_execution_timers
+WHERE consumed_at IS NULL AND due_at<=clock_timestamp()
+GROUP BY run_id ORDER BY (run_id<=$1),run_id LIMIT 64;
+
+-- name: TryLockTimerRun :one
+SELECT id FROM knotra_runs WHERE id=$1 FOR UPDATE SKIP LOCKED;
 
 -- name: ConsumeDueTimers :execresult
 WITH due AS (

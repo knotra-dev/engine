@@ -49,6 +49,7 @@ type Runtime struct {
 	// ponytail: scan 64 expired outcome keys per tick; the cursor prevents a
 	// missing envelope from starving later keys. Partition if scans dominate.
 	outcomeCursor   string
+	timerCursor     string
 	deliveryCursor  string
 	resourceCursor  string
 	containerCursor string
@@ -884,13 +885,19 @@ func (r *Runtime) verifyArtifacts(ctx context.Context, outcome execution.Outcome
 }
 
 func (r *Runtime) pumpTimers(ctx context.Context) error {
-	rows, err := db.New(r.Store.Pool).ListDueTimerRuns(ctx)
+	ids, err := db.New(r.Store.Pool).ListDueTimerRuns(ctx, r.timerCursor)
 	if err != nil {
 		return err
 	}
-	ids := rows
+	var pollErr error
 	for _, id := range ids {
+		r.timerCursor = id
 		if err := pgx.BeginFunc(ctx, r.Store.Pool, func(tx pgx.Tx) error {
+			if _, err := db.New(tx).TryLockTimerRun(ctx, id); errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			} else if err != nil {
+				return err
+			}
 			run, err := store.LockExecutionRun(ctx, tx, id)
 			if err != nil {
 				return err
@@ -905,10 +912,10 @@ func (r *Runtime) pumpTimers(ctx context.Context) error {
 			_, err = store.WakeExecution(ctx, tx, id, r.Wake)
 			return err
 		}); err != nil {
-			return err
+			pollErr = errors.Join(pollErr, err)
 		}
 	}
-	return nil
+	return pollErr
 }
 
 func (r *Runtime) reconcileOutcomes(ctx context.Context) error {

@@ -93,12 +93,14 @@ func (q *Queries) InsertNodeDeadline(ctx context.Context, arg InsertNodeDeadline
 }
 
 const listDueTimerRuns = `-- name: ListDueTimerRuns :many
-SELECT DISTINCT run_id FROM knotra_execution_timers
-		WHERE consumed_at IS NULL AND due_at<=clock_timestamp() ORDER BY run_id LIMIT 64
+SELECT run_id FROM knotra_execution_timers
+WHERE consumed_at IS NULL AND due_at<=clock_timestamp()
+GROUP BY run_id ORDER BY (run_id<=$1),run_id LIMIT 64
 `
 
-func (q *Queries) ListDueTimerRuns(ctx context.Context) ([]string, error) {
-	rows, err := q.db.Query(ctx, listDueTimerRuns)
+// Wrap within the page so one run can drain a batch on every poll.
+func (q *Queries) ListDueTimerRuns(ctx context.Context, runID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listDueTimerRuns, runID)
 	if err != nil {
 		return nil, err
 	}
@@ -238,4 +240,15 @@ type SetRunStopCauseParams struct {
 
 func (q *Queries) SetRunStopCause(ctx context.Context, arg SetRunStopCauseParams) (pgconn.CommandTag, error) {
 	return q.db.Exec(ctx, setRunStopCause, arg.ID, arg.StopCause)
+}
+
+const tryLockTimerRun = `-- name: TryLockTimerRun :one
+SELECT id FROM knotra_runs WHERE id=$1 FOR UPDATE SKIP LOCKED
+`
+
+func (q *Queries) TryLockTimerRun(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRow(ctx, tryLockTimerRun, id)
+	var id_2 string
+	err := row.Scan(&id_2)
+	return id_2, err
 }

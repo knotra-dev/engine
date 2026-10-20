@@ -116,6 +116,8 @@ func New(pool *pgxpool.Pool, config Config, handlers Handlers) (*Client, error) 
 		queues[c.execute], queues[c.cleanup] = river.QueueConfig{MaxWorkers: config.ExecutionWorkers}, river.QueueConfig{MaxWorkers: 2}
 	}
 	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
+		// River's hostname/time default can collide across simultaneous processes.
+		ID:     uuid.NewString(),
 		Schema: config.Schema, Logger: config.Logger, Workers: workers,
 		Queues: queues,
 		// Split roles enqueue typed, validated jobs for other clients. River's

@@ -55,6 +55,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/runs", s.start)
 	mux.HandleFunc("GET /v1/runs", s.runs)
 	mux.HandleFunc("GET /v1/runs/{id}", s.run)
+	mux.HandleFunc("GET /v1/runs/{id}/instances", s.instances)
 	mux.HandleFunc("POST /v1/runs/{id}/cancel", s.cancel)
 	mux.HandleFunc("POST /v1/runs/{id}/resume", s.resume)
 	mux.HandleFunc("POST /v1/runs/{id}/instances/{instance}/resolve", s.resolve)

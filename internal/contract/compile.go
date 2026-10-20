@@ -9,7 +9,6 @@ import (
 	"unicode/utf8"
 
 	"cel.dev/cel-go/cel"
-	"google.golang.org/protobuf/encoding/protojson"
 )
 
 const CompilerVersion = "knotra-go/v1"
@@ -51,7 +50,6 @@ func Compile(pkg Package, profile *Profile) (*Plan, []Diagnostic) {
 			Package:         pkg,
 			Root:            pkg.Entrypoint,
 			Pipelines:       map[string]*Pipeline{},
-			Expressions:     map[string]json.RawMessage{},
 			CompilerVersion: CompilerVersion,
 			CELVersion:      CELVersion,
 		},
@@ -435,14 +433,6 @@ func (c *compiler) expr(file, where, source string, s portScope, deps map[string
 		}
 		if strings.HasPrefix(ref, "nodes.") {
 			deps[strings.Split(ref, ".")[1]] = true
-		}
-	}
-
-	ast, err := cel.AstToCheckedExpr(x.ast)
-	if err == nil {
-		raw, err := protojson.Marshal(ast)
-		if err == nil {
-			c.plan.Expressions[source] = raw
 		}
 	}
 }

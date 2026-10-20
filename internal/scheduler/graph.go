@@ -49,7 +49,6 @@ type Changes struct {
 	ReserveInstances int
 	StartRun         bool
 	StopCause        *execution.Failure
-	RootResult       *execution.RunResult
 	Requests         []execution.Request
 	Pause            bool
 	PauseCause       *execution.Failure
@@ -418,9 +417,6 @@ func Step(plan contract.Plan, snapshot Snapshot, maxTransitions int) (Changes, e
 		}
 		graphChanged = true
 		changes.More = false
-		if graph.ParentInstanceID == "" {
-			changes.RootResult = &execution.RunResult{Status: graph.State, Outputs: graph.Outputs, Failure: graph.Failure}
-		}
 	} else if remaining == 0 || cause != nil {
 		changes.More = true
 	}
