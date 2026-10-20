@@ -1,151 +1,62 @@
-# Knotra
+# Knotra Engine
 
-### AI workflows you can verify, inspect and resume.
+Go execution engine and CLI for YAML AI workflows. Knotra compiles pipeline packages, runs their
+steps and keeps execution history, artifacts and pending human requests across restarts.
 
-Define a repeatable process: models reason, code checks results, and people approve the steps that
-need judgment. Knotra keeps execution history and files across restarts.
+- Typed inputs, artifacts and nine node types: `llm`, `agent`, `code`, `tool`, `switch`, `human`,
+  `foreach`, `loop` and `pipeline`.
+- Ollama, OpenAI Responses, Anthropic Messages and MCP through Streamable HTTP or isolated stdio.
+- Docker sandboxes with explicit tool and secret grants, network restrictions and run budgets.
+- Versioned HTTP/SSE API for submitting runs, inspecting execution and answering human requests.
 
-[Quick start](#quick-start) · [See it run](#workflow-in-pictures) · [Documentation](#documentation)
-· [Desktop](https://github.com/knotra-dev/desktop) ·
+PostgreSQL stores execution state; River delivers work to engine workers. Multiple execution hosts
+can share the database and durable artifact/outcome storage. See [architecture](docs/architecture.md)
+for scheduling, persistence and recovery boundaries.
+
+[Desktop client](https://github.com/knotra-dev/desktop) ·
+[User documentation](https://knotra-dev.github.io/docs/) ·
 [Development workspace](https://github.com/knotra-dev/dev)
 
-- YAML graphs with typed inputs, artifacts and nine node types: `llm`, `agent`, `code`, `tool`,
-  `switch`, `human`, `foreach`, `loop`, `pipeline`.
-- Ollama, OpenAI Responses, Anthropic Messages and MCP through Streamable HTTP or isolated stdio.
-- Docker sandboxes, explicit tool/secret grants, network restrictions and run budgets.
-- Saved human requests, command receipts, live inspection, history rewind and run comparison.
-- Execution across multiple hosts with shared PostgreSQL and artifact/outcome storage.
+## Development
 
-## Quick start
-
-Install Docker, Docker Compose and Ollama; Colima works on macOS. Build from this checkout with Go
-from `go.mod`:
+Use Go from `go.mod`, Make and Docker with Compose:
 
 ```sh
-make build helper
+make install
+make infra
+make dev
 ```
 
-Then run from the repository root (published
-[CLI bundles](https://github.com/knotra-dev/engine/releases) will use the same commands):
+`make infra` starts PostgreSQL and prepares sandbox helpers and images. `make dev` builds the CLI
+and serves the local engine at `http://127.0.0.1:8787`. Set `KNOTRA_DATABASE_URL` for an existing
+database or custom Compose credentials/port. `make stop` stops PostgreSQL while preserving its data.
+
+Local model examples additionally need a running Ollama with this model downloaded separately:
 
 ```sh
-bin/knotra doctor
-bin/knotra quickstart --dir "$PWD/knotra-data"
+ollama pull qwen3.5:9b
 ```
 
-Quickstart prepares persistent PostgreSQL, the local model and five starter workflows, then produces
-`greeting.txt`. Published bundles do not need Go. Leave the terminal running; desktop connects to
-the printed engine address. Repeat with the same directory to reuse saved data.
-
-On Windows use Docker Desktop with Linux containers and WSL 2, then run in PowerShell:
-
-```powershell
-.\bin\knotra.exe doctor
-.\bin\knotra.exe quickstart --dir "$PWD\knotra-data"
-```
-
-Run the game in a second terminal (`.\bin\knotra.exe` on Windows):
-
-```sh
-bin/knotra run knotra-data/examples/tic-tac-toe/pipeline.yaml --profile local --wait
-```
-
-Use `runs get RUN_ID` to find its artifact IDs, then
-`artifacts download ARTIFACT_ID --output index.html` to retrieve it. [First run](docs/first-run.md)
-walks through inspection, correction and human review; [running](docs/running.md) covers source
-builds, cloud models and engine configuration.
-
-## Workflow in pictures
-
-### Build and repair a game
-
-The [game workflow](examples/starter/tic-tac-toe/pipeline.yaml) generates JavaScript, runs fixed
-independent tests and feeds failures into a bounded correction loop. A separate sandbox verifies and
-packages the playable offline HTML. The [repair exercise](examples/showcase/game-repair/README.md)
-starts with a deliberately incorrect opponent.
-
-![Passing tests after correcting the initial candidate](docs/media/game-correction.png)
-
-<details>
-<summary>Initial failure and playable result</summary>
-
-![The initial opponent fails an executed game test](docs/media/game-failed-tests.png)
-
-![The verified game running in a browser](docs/media/playable-game.png)
-
-</details>
-
-### Check a service release
-
-The [release gate](examples/showcase/release-gate/README.md) checks six sample services through 30
-nodes: regression tests, API compatibility, configuration policy, agent assessment and human review.
-Supply your service inventory, repository snapshot and check adapters for your own release process.
-
-![Service fleet workflow in progress](docs/media/release-graph.png)
-
-<details>
-<summary>Agent activity, executed checks, review and exported evidence</summary>
-
-Agents read scoped evidence; code verifies their citations against executed checks.
-
-![Two model iterations and actual tool reads](docs/media/agent-cycle.png)
-
-![Executed regression results tied to the repository snapshot](docs/media/release-checks.png)
-
-The release owner reviews the dossier and supplies their name, change ticket and comments.
-
-![Release review and change ticket before publication](docs/media/human-review.png)
-
-Approval publishes the reviewed packet with source files, checks and SHA-256 hashes.
-
-![Published authorization record with reviewed file hashes](docs/media/authorized-release.png)
-
-</details>
-
-## Architecture
-
-```mermaid
-flowchart TD
-    Package["Pipeline package: YAML and supporting files"] --> CLI["Knotra CLI"]
-    Package --> Desktop["Knotra Desktop"]
-    Desktop <-->|HTTP API and SSE| API
-    CLI <-->|HTTP API and SSE| API["Knotra API"]
-    API --> River["River: job delivery"]
-    River <--> Workers["Knotra workers"]
-    Workers --> Models["Model APIs"]
-    Workers --> MCP["MCP servers"]
-    Workers --> Sandbox["Docker sandboxes"]
-    API --> DB[("PostgreSQL")]
-    River <--> DB
-    Workers --> DB
-    API --> Artifacts[("Shared artifacts and outcomes")]
-    Workers --> Artifacts
-```
-
-The engine and CLI use Go; desktop uses Tauri/Rust and React/TypeScript. River runs inside the
-engine and uses PostgreSQL. This repository owns both the engine and its execution runtime. Desktop
-lives in [its own repository](https://github.com/knotra-dev/desktop);
-[dev](https://github.com/knotra-dev/dev) pins and develops the pair. See
-[architecture](docs/architecture.md) for execution, storage and recovery.
+Run `make` or `make help` to list development, test, lint, format and build commands.
+[Running](docs/running.md) covers source configuration, CLI archives, cloud models and deployment.
 
 ## Documentation
 
-| Task                             | Guide                                                                                                  |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Run examples                     | [First run](docs/first-run.md), [starter workflows](examples/starter/README.md)                        |
-| Configure and operate the engine | [Running](docs/running.md), [CLI](internal/cli/README.md)                                              |
-| Use or develop desktop           | [Desktop](https://github.com/knotra-dev/desktop)                                                       |
-| Write pipelines                  | [Notation](docs/notation.md), [JSON Schema](schemas/knotra-v1.schema.json)                             |
-| Integrate a client               | [HTTP API](docs/api/desktop-v1.md)                                                                     |
-| Understand and contribute        | [Architecture](docs/architecture.md), [verification](docs/verification.md), [roadmap](docs/roadmap.md) |
-
-Quickstart is for development and evaluation. Authenticated multi-user approval, RBAC and retention
-policies remain further work.
+| Task                 | Guide                                                                                |
+| -------------------- | ------------------------------------------------------------------------------------ |
+| Run a workflow       | [First run](docs/first-run.md), [starter workflows](examples/starter/README.md)      |
+| Operate the engine   | [Running](docs/running.md), [CLI reference](internal/cli/README.md)                  |
+| Write pipelines      | [Notation](docs/notation.md), [JSON Schema](schemas/knotra-v1.schema.json)           |
+| Integrate a client   | [HTTP API](docs/api/desktop-v1.md)                                                   |
+| Understand execution | [Architecture](docs/architecture.md), [verification](docs/verification.md)           |
+| Contribute           | [Contributing](CONTRIBUTING.md), [roadmap](docs/roadmap.md), [security](SECURITY.md) |
 
 ## Contributing
 
-Run `make build` and `make check`; default tests need no model weights or paid keys. See
-[CONTRIBUTING](CONTRIBUTING.md) for development and opt-in integration checks, and
-[SECURITY](SECURITY.md) for vulnerability reports.
+Run `make check` before submitting changes. Default checks need no model weights or paid keys;
+integration checks are opt-in. See [CONTRIBUTING](CONTRIBUTING.md) for setup and compatibility
+rules.
+
+Authenticated multi-user approval, RBAC and retention policies remain further work.
 
 [MIT](LICENSE) · [Code of conduct](CODE_OF_CONDUCT.md)

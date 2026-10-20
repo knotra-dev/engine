@@ -36,12 +36,6 @@ X and O. A failed test and the candidate source become inputs to the next iterat
 stops when tests pass or fails after four attempts. A separate sandbox verifies the final source
 again before packaging the game. A first attempt can pass without a correction.
 
-In desktop, connect the printed address in Settings and select **Build a playable game**. For
-browser preview, add quickstart's `--cors-origin http://127.0.0.1:1420` flag. In the run observer,
-select a **build · Iteration** using **Graph and iteration**, then inspect **check** under **Inputs
-& outputs**. Its `passed` and `feedback` come from executed tests. Open **generate** in the next
-iteration to inspect the previous code and feedback in the model's input.
-
 For a visible correction, use the repository's
 [repair exercise](../examples/showcase/game-repair/README.md). Its intentionally incorrect initial
 module fails the same tests before the model receives it. The optional `initial_source` input also
@@ -62,17 +56,17 @@ produces an authorized evidence packet.
 
 ## Restart and approve
 
-Wait for **release_authorization** to reach `waiting_human` and its request to appear in Inbox. The
-overall run can still show Running. Review the dossier and executed checks, then save the request
-ID:
+Wait for **release_authorization** to reach `waiting_human`. The overall run can still show
+Running. List requests to inspect the inputs and response schema, then save the request ID:
 
 ```sh
 ./knotra requests list --run RUN_ID --all --json
 ```
 
-Stop quickstart via Ctrl-C and repeat **the same command with the same directory**. Reconnect in
-Settings if needed, then open the saved request again: its identity and files remain available. Fill
-in `approved`, `reviewer`, `change_ticket` and `comments`, or use CLI:
+Review the dossier and executed checks using the artifact IDs in the request inputs and
+`artifacts download`. Stop quickstart via Ctrl-C and repeat **the same command with the same
+directory**. List requests again: the saved request and its files remain available. Respond with
+`approved`, `reviewer`, `change_ticket` and `comments`:
 
 ```sh
 ./knotra requests respond REQUEST_ID \
@@ -90,5 +84,4 @@ results, agent reviews, dossier and `authorization.json` with the reviewer, tick
 refuse publication, cancel the run; `approved: false` does not match the schema. Reviewer and ticket
 are recorded response fields, not authenticated identities or verified ticket-system records.
 
-[Workflow screenshots](../README.md#workflow-in-pictures) follow the game repair and release gate.
 [Implementation Checks](verification.md) record actual executions and their boundaries.

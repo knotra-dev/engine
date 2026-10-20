@@ -40,15 +40,21 @@ Useful flags:
 
 ## Build and start from source
 
-Use Go from `go.mod`, Make, Docker and Ollama with `qwen3.5:9b` installed:
+Use Go from `go.mod`, Make and Docker with Compose:
 
 ```sh
-make build helper firewall
-docker pull python:3.13-alpine
-docker pull node:22-alpine
-docker compose up -d --wait
-export KNOTRA_DATABASE_URL='postgres://knotra:knotra-development@127.0.0.1:25432/knotra?sslmode=disable'
-bin/knotra serve --profile examples/local/profile.yaml
+make install
+make infra
+make dev
+```
+
+`make infra` starts PostgreSQL, builds the sandbox helper and firewall image, and pulls the Python
+and Node images used by the local profile. `make dev` builds the CLI and starts it with
+`examples/local/profile.yaml`; it does not download or start a model. For local model examples,
+start Ollama and download the configured model separately:
+
+```sh
+ollama pull qwen3.5:9b
 ```
 
 `make helper` detects the Docker architecture; set `HELPER_ARCH=amd64` or `arm64` if detection is
@@ -56,14 +62,17 @@ unavailable. The helper is written to `.knotra/bin/sandbox-helper`. Pipeline exe
 in their configured images. Model/MCP credentials come from the engine environment through profile
 secret references.
 
-To use existing PostgreSQL, omit Compose and point `KNOTRA_DATABASE_URL` to a dedicated Knotra
-database. The engine creates its tables at startup. Docker uses the current context or `DOCKER_HOST`
-/ `--docker-host` with a local Unix socket or Windows named pipe; remote TCP Docker endpoints are
-unsupported.
+`make dev` defaults `KNOTRA_DATABASE_URL` to the bundled development database on port `25432`.
+Set it explicitly for another database or custom Compose credentials/port. To use existing
+PostgreSQL, skip `make infra` and prepare sandbox helpers and images separately if needed.
+The engine creates its tables at startup. Docker uses the current context or
+`DOCKER_HOST` / `--docker-host` with a local Unix socket or Windows named pipe; remote TCP Docker
+endpoints are unsupported.
 
 Compose starts PostgreSQL 18.6 on loopback port `25432`. `KNOTRA_PG_PORT` overrides the port;
-`KNOTRA_DEV_DB_PASSWORD` changes the initial password. `docker compose stop` and `start` preserve
-data; `down` keeps named volumes, while `down --volumes` deletes the database.
+`KNOTRA_DEV_DB_PASSWORD` changes the initial password. `make stop` preserves the database and local
+`.knotra` data; `make infra` starts it again. `docker compose down` keeps named volumes, while
+`docker compose down --volumes` deletes the database. Use `make help` for the full command list.
 
 ## OpenAI and Anthropic connections
 

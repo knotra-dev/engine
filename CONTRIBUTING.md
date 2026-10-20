@@ -12,14 +12,12 @@ Use the Go version in `go.mod`. The [running guide](docs/running.md) describes l
 PostgreSQL and Ollama setup. River runs inside the engine. For fast development:
 
 ```sh
-go mod download
-make build
+make install
 make check
 ```
 
-Use `make help` to list commands. `make format` formats Go sources, `make test` runs unit tests,
-`make test-race` enables the race detector, and `make build` writes the CLI to `bin/`. `make vet`
-and `make format-check` are available separately.
+Use `make` or `make help` to list commands. `make infra` prepares development infrastructure;
+`make dev` builds the CLI into `bin/` and starts the local engine. `make stop` preserves its data.
 
 `make integration` runs enabled database, Docker and service checks. For the real River disaster
 restore check, also set `KNOTRA_TEST_RECOVERY=1`, `KNOTRA_TEST_HELPER`, and
@@ -95,9 +93,7 @@ manually triggered Go workflow adds PostgreSQL, Docker, process recovery and bac
 Start development infrastructure and build sandbox dependencies:
 
 ```sh
-docker compose up -d --wait
-make helper firewall
-docker pull python:3.13-alpine
+make infra
 export KNOTRA_TEST_DATABASE_URL='postgres://knotra:knotra-development@127.0.0.1:25432/knotra?sslmode=disable'
 export KNOTRA_TEST_HELPER="$PWD/.knotra/bin/sandbox-helper"
 export KNOTRA_TEST_WORKDIR="$PWD/.knotra/test-work"

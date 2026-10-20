@@ -7,13 +7,19 @@ VERSION ?= dev
 EXE_SUFFIX = $(if $(filter windows,$(shell $(GO) env GOOS)),.exe,)
 GO_FORMAT_PATHS = cmd internal examples/starter assets.go schemas/embed.go
 
-.PHONY: build help helper firewall test test-race vet format format-check check lint integration clean generate-sql check-sql
+.DEFAULT_GOAL := help
+
+.PHONY: build help install infra stop dev helper firewall test test-race vet format format-check check lint integration clean generate-sql check-sql
 
 build:
 	$(GO) build -mod=readonly -trimpath -ldflags "-X main.version=$(VERSION)" -o $(BIN_DIR)/knotra$(EXE_SUFFIX) ./cmd/knotra
 
 help:
 	@printf '%s\n' \
+		'make install       Download Go dependencies' \
+		'make infra         Start PostgreSQL and prepare sandbox helpers and images' \
+		'make dev           Build and serve the engine with the local Ollama profile' \
+		'make stop          Stop PostgreSQL, keeping its data' \
 		'make build         Build the CLI into $(BIN_DIR)' \
 		'make test          Run unit tests' \
 		'make test-race     Run tests with the race detector' \
@@ -28,6 +34,22 @@ help:
 		'make helper        Build the Linux sandbox helper' \
 		'make firewall      Build the sandbox firewall image' \
 		'make clean         Remove CLI build output'
+
+install:
+	$(GO) mod download
+
+infra:
+	docker compose up -d --wait
+	$(MAKE) helper firewall
+	docker pull python:3.13-alpine
+	docker pull node:22-alpine
+
+stop:
+	docker compose stop
+
+dev: export KNOTRA_DATABASE_URL ?= postgres://knotra:knotra-development@127.0.0.1:25432/knotra?sslmode=disable
+dev: build
+	$(BIN_DIR)/knotra$(EXE_SUFFIX) serve --profile examples/local/profile.yaml
 
 generate-sql:
 	$(SQLC) generate
