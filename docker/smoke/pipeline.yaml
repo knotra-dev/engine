@@ -1,0 +1,41 @@
+apiVersion: knotra/v1
+kind: Pipeline
+metadata:
+  name: container-smoke
+  title: Container packaging smoke test
+spec:
+  files: [smoke.py]
+  sandboxes:
+    python: { profile: python_box }
+  inputs:
+    number:
+      schema: { type: integer }
+    source:
+      artifact: { mediaTypes: [text/plain] }
+  nodes:
+    report:
+      type: code
+      sandbox: python
+      inputs:
+        number:
+          schema: { type: integer }
+          bind: { from: inputs.number }
+        source:
+          artifact: { mediaTypes: [text/plain] }
+          mount: source.txt
+          bind: { from: inputs.source }
+      code:
+        command: [python3, /package/smoke.py]
+      outputs:
+        answer:
+          schema: { const: 42 }
+        report:
+          artifact: { mediaTypes: [text/plain] }
+          collect: { path: report.txt, mediaType: text/plain }
+  outputs:
+    answer:
+      schema: { const: 42 }
+      bind: { from: nodes.report.outputs.answer }
+    report:
+      artifact: { mediaTypes: [text/plain] }
+      bind: { from: nodes.report.outputs.report }

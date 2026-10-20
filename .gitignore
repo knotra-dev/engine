@@ -1,5 +1,7 @@
 # Local engine state, generated binaries and integration artifacts
 .knotra/
+.knotra-cli/
+.knotra-container/
 bin/
 coverage.out
 .env

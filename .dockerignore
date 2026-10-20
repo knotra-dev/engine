@@ -1,0 +1,10 @@
+.git
+.github
+.knotra
+.knotra-cli
+.knotra-container
+bin
+.env
+.env.*
+**/__pycache__
+**/.DS_Store
