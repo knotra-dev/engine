@@ -11,8 +11,8 @@
     />
     <title>Knotra — движок для процессов с AI-агентами</title>
     <link rel="icon" type="image/svg+xml" href="assets/knotra.svg" />
-    <link rel="stylesheet" href="style.css?v=20261020-workers-v8" />
-    <script src="script.js?v=20261020-workers-v8" defer></script>
+    <link rel="stylesheet" href="style.css?v=20261020-motion-v9" />
+    <script src="script.js?v=20261020-motion-v9" defer></script>
   </head>
   <body>
     <svg class="svg-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -82,13 +82,14 @@
               <span>Execution graph</span><span class="graph-status"><i></i> completed</span>
             </div>
             <svg class="graph-connections" viewBox="0 0 680 560" aria-hidden="true">
-              <path d="M292 176h28v128h28M348 304h-28v128h-28" />
-              <circle cx="292" cy="176" r="5" />
-              <circle cx="348" cy="304" r="5" />
-              <circle cx="348" cy="304" r="5" />
-              <circle cx="292" cy="432" r="5" />
+              <path class="reveal" style="--step: 1" d="M292 176h28v128h28" />
+              <path class="reveal" style="--step: 2" d="M348 304h-28v128h-28" />
+              <circle class="reveal" cx="292" cy="176" r="5" style="--step: 1" />
+              <circle class="reveal" cx="348" cy="304" r="5" style="--step: 1" />
+              <circle class="reveal" cx="348" cy="304" r="5" style="--step: 2" />
+              <circle class="reveal" cx="292" cy="432" r="5" style="--step: 2" />
             </svg>
-            <div class="hero-node hero-model">
+            <div class="hero-node hero-model reveal" style="--step: 0">
               <span class="node-label">llm / agent</span>
               <h3>
                 <svg class="icon"><use href="#i-spark" /></svg>Модель
@@ -96,7 +97,7 @@
               <p>Предлагает результат</p>
               <span class="node-completed">✓ completed</span>
             </div>
-            <div class="hero-node hero-code">
+            <div class="hero-node hero-code reveal" style="--step: 1">
               <span class="node-label">code</span>
               <h3>
                 <svg class="icon"><use href="#i-code" /></svg>Проверка
@@ -104,7 +105,7 @@
               <p>Исполняет тесты</p>
               <span class="node-completed">✓ completed</span>
             </div>
-            <div class="hero-node hero-human">
+            <div class="hero-node hero-human reveal" style="--step: 2">
               <span class="node-label">human</span>
               <h3>
                 <svg class="icon"><use href="#i-person" /></svg>Решение
@@ -135,13 +136,13 @@
           <p class="eyebrow">Когда нужен отдельный движок</p>
           <h2 class="slide-title" id="title-2">Зачем Knotra, если есть Codex?</h2>
           <div class="comparison-layout">
-            <div class="comparison-card panel">
+            <div class="comparison-card panel reveal" style="--step: 0">
               <span class="comparison-label">Разовая задача</span>
               <h3>«Найди и исправь баг»</h3>
               <p>Разработчик работает с агентом,<br />уточняет задачу и проверяет изменения.</p>
               <span class="comparison-choice">Для этого удобно открыть Codex.</span>
             </div>
-            <div class="comparison-card comparison-knotra panel">
+            <div class="comparison-card comparison-knotra panel reveal" style="--step: 2">
               <span class="comparison-label">Повторяющийся процесс</span>
               <h3>«Обработай каждую заявку»</h3>
               <p>
@@ -185,39 +186,39 @@
           </p>
           <div class="workflow panel">
             <div class="flow-nodes">
-              <div class="flow-node">
+              <div class="flow-node reveal" style="--step: 0">
                 <span class="node-icon aqua"
                   ><svg><use href="#i-spark" /></svg></span
                 ><span class="node-kind">agent</span>
                 <h3>Агент</h3>
                 <p>Готовит<br />ответ</p>
               </div>
-              <svg class="flow-arrow"><use href="#i-arrow" /></svg>
-              <div class="flow-node">
+              <svg class="flow-arrow reveal" style="--step: 1"><use href="#i-arrow" /></svg>
+              <div class="flow-node reveal" style="--step: 1">
                 <span class="node-icon lime"
                   ><svg><use href="#i-code" /></svg></span
                 ><span class="node-kind">code</span>
                 <h3>Код</h3>
                 <p>Проверяет<br />результат</p>
               </div>
-              <svg class="flow-arrow"><use href="#i-arrow" /></svg>
-              <div class="flow-node">
+              <svg class="flow-arrow reveal" style="--step: 2"><use href="#i-arrow" /></svg>
+              <div class="flow-node reveal" style="--step: 2">
                 <span class="node-icon aqua"
                   ><svg><use href="#i-split" /></svg></span
                 ><span class="node-kind">switch</span>
                 <h3>Условие</h3>
                 <p>Выбирает<br />дальнейший путь</p>
               </div>
-              <svg class="flow-arrow"><use href="#i-arrow" /></svg>
-              <div class="flow-node">
+              <svg class="flow-arrow reveal" style="--step: 3"><use href="#i-arrow" /></svg>
+              <div class="flow-node reveal" style="--step: 3">
                 <span class="node-icon pearl"
                   ><svg><use href="#i-person" /></svg></span
                 ><span class="node-kind">human</span>
                 <h3>Человек</h3>
                 <p>Принимает<br />решение</p>
               </div>
-              <svg class="flow-arrow"><use href="#i-arrow" /></svg>
-              <div class="flow-node result-node">
+              <svg class="flow-arrow reveal" style="--step: 4"><use href="#i-arrow" /></svg>
+              <div class="flow-node result-node reveal" style="--step: 4">
                 <span class="node-icon lime"
                   ><svg><use href="#i-file" /></svg></span
                 ><span class="node-kind">выход графа</span>
@@ -225,7 +226,7 @@
                 <p>Проверенные<br />файлы</p>
               </div>
             </div>
-            <div class="feedback-path">
+            <div class="feedback-path reveal" style="--step: 5">
               <svg class="feedback-connector" viewBox="0 0 1392 70" aria-hidden="true">
                 <defs>
                   <marker
@@ -303,52 +304,54 @@
                   <path d="m1 1 6 3-6 3" />
                 </marker>
               </defs>
-              <path d="M264 132h52" />
-              <path d="M556 132h52" />
-              <path d="M848 132h52" />
-              <path d="M1140 132h52" />
-              <path d="M1312 204v66" />
-              <path d="M1312 204v30h-292v36" />
-              <path d="M1140 350h52" />
+              <path class="reveal" d="M264 132h52" style="--step: 1" />
+              <path class="reveal" d="M556 132h52" style="--step: 2" />
+              <path class="reveal" d="M848 132h52" style="--step: 3" />
+              <path class="reveal" d="M1140 132h52" style="--step: 4" />
+              <path class="reveal" d="M1312 204v66" style="--step: 6" />
+              <path class="reveal" d="M1312 204v30h-292v36" style="--step: 5" />
+              <path class="reveal" d="M1140 350h52" style="--step: 6" />
             </svg>
-            <div class="support-node support-intake">
+            <div class="support-node support-intake reveal" style="--step: 0">
               <span class="support-kind">code · 1</span>
               <h3>Принять заявку</h3>
               <p>Проверить формат<br />и обязательные поля</p>
             </div>
-            <div class="support-node support-agent support-analyze">
+            <div class="support-node support-agent support-analyze reveal" style="--step: 1">
               <span class="support-kind">agent · 2</span>
               <h3>Разобрать заявку</h3>
               <p>MCP: клиент, заказ<br />и история обращений</p>
             </div>
-            <div class="support-node support-agent support-draft">
+            <div class="support-node support-agent support-draft reveal" style="--step: 2">
               <span class="support-kind">agent · 3</span>
               <h3>Составить ответ</h3>
               <p>MCP: база знаний<br />и правила компании</p>
             </div>
-            <div class="support-node support-check">
+            <div class="support-node support-check reveal" style="--step: 3">
               <span class="support-kind">code · 4</span>
               <h3>Проверить ответ</h3>
               <p>Ссылки на источники<br />и правила компании</p>
             </div>
-            <div class="support-node support-route">
+            <div class="support-node support-route reveal" style="--step: 4">
               <span class="support-kind">switch · 5</span>
               <h3>Выбрать маршрут</h3>
               <p>Можно отправить<br />или нужен оператор?</p>
             </div>
-            <span class="support-branch support-manual-label">Нужно согласование</span>
-            <span class="support-branch support-auto-label">Типовой</span>
-            <div class="support-node support-review">
+            <span class="support-branch support-manual-label reveal" style="--step: 5"
+              >Нужно согласование</span
+            >
+            <span class="support-branch support-auto-label reveal" style="--step: 6">Типовой</span>
+            <div class="support-node support-review reveal" style="--step: 5">
               <span class="support-kind">human · 6</span>
               <h3>Согласовать</h3>
               <p>Исправить текст<br />и разрешить отправку</p>
             </div>
-            <div class="support-node support-send">
+            <div class="support-node support-send reveal" style="--step: 6">
               <span class="support-kind">tool · 7</span>
               <h3>Отправить ответ</h3>
               <p>Через API<br />системы поддержки</p>
             </div>
-            <div class="support-ticket">
+            <div class="support-ticket reveal" style="--step: 0">
               <span class="support-kind">Пример обращения</span>
               <p>«Где мой заказ?»</p>
               <span>У каждого обращения — свой запуск и история.</span>
@@ -386,47 +389,54 @@
           <div class="scale-layout">
             <div class="worker-diagram panel">
               <p class="deployment-label">Целевая схема развёртывания</p>
-              <div class="scale-control">
+              <div class="scale-control reveal" style="--step: 0">
                 <img class="brand-mark" src="assets/knotra.svg" alt="" />
                 <p>
                   <strong>Knotra: API и планировщик</strong
                   ><small>Граф и лимиты · доставка заданий через River</small>
                 </p>
               </div>
-              <svg class="scale-control-link" viewBox="0 0 48 48" aria-hidden="true">
+              <svg
+                class="scale-control-link reveal"
+                viewBox="0 0 48 48"
+                aria-hidden="true"
+                style="--step: 1"
+              >
                 <use href="#i-arrow" transform="rotate(90 24 24)" />
               </svg>
-              <div class="queue-label">
+              <div class="queue-label reveal" style="--step: 1">
                 <svg class="icon"><use href="#i-db" /></svg><strong>PostgreSQL</strong
                 ><span>Состояние и очередь заданий</span>
               </div>
               <div class="worker-branches">
-                <svg viewBox="0 0 48 48" aria-hidden="true">
+                <svg class="reveal" viewBox="0 0 48 48" aria-hidden="true" style="--step: 2">
                   <use href="#i-arrow" transform="rotate(90 24 24)" /></svg
-                ><svg viewBox="0 0 48 48" aria-hidden="true">
+                ><svg class="reveal" viewBox="0 0 48 48" aria-hidden="true" style="--step: 3">
                   <use href="#i-arrow" transform="rotate(90 24 24)" /></svg
-                ><svg viewBox="0 0 48 48" aria-hidden="true">
+                ><svg class="reveal" viewBox="0 0 48 48" aria-hidden="true" style="--step: 4">
                   <use href="#i-arrow" transform="rotate(90 24 24)" />
                 </svg>
               </div>
               <div class="workers">
-                <div>
+                <div class="reveal" style="--step: 2">
                   <span class="node-icon aqua"
                     ><svg><use href="#i-server" /></svg></span
                   ><strong>Нода 1</strong><span class="worker-status">воркер Knotra</span>
                 </div>
-                <div>
+                <div class="reveal" style="--step: 3">
                   <span class="node-icon aqua"
                     ><svg><use href="#i-server" /></svg></span
                   ><strong>Нода 2</strong><span class="worker-status">воркер Knotra</span>
                 </div>
-                <div>
+                <div class="reveal" style="--step: 4">
                   <span class="node-icon aqua"
                     ><svg><use href="#i-server" /></svg></span
                   ><strong>Нода N</strong><span class="worker-status">воркер Knotra</span>
                 </div>
               </div>
-              <p class="worker-outcome">Общее хранилище файлов и результатов</p>
+              <p class="worker-outcome reveal" style="--step: 5">
+                Общее хранилище файлов и результатов
+              </p>
             </div>
             <div class="scale-evidence">
               <strong class="capacity-number">10 000+</strong>
@@ -466,14 +476,14 @@
           <div class="game-layout">
             <div class="game-evidence">
               <div class="game-proof">
-                <div class="proof-row proof-failed">
+                <div class="proof-row proof-failed reveal" style="--step: 0">
                   <span class="proof-status" aria-hidden="true">×</span>
                   <p>
                     <strong>Тест нашёл ошибку в стратегии</strong
                     ><span>Компьютер проигрывал на конкретной последовательности ходов.</span>
                   </p>
                 </div>
-                <div class="proof-row proof-passed">
+                <div class="proof-row proof-passed reveal" style="--step: 2">
                   <span class="proof-status" aria-hidden="true">✓</span>
                   <p>
                     <strong>Исправленная версия прошла тесты</strong
@@ -494,7 +504,7 @@
                 Посмотреть реальный прогон <span>↗</span>
               </button>
             </div>
-            <div class="game-window panel">
+            <div class="game-window panel reveal" style="--step: 1">
               <div class="window-bar">
                 <span class="window-dots"><i></i><i></i><i></i></span><span>index.html</span
                 ><span class="window-ok">✓ проверено</span>
@@ -560,59 +570,94 @@
                   <path d="m1 1 6 3-6 3" />
                 </marker>
               </defs>
-              <path class="arch-package-link" d="M154 108v68" marker-end="url(#arch-arrow)" />
-              <path class="arch-package-link" d="M24 66H2v296h22" marker-end="url(#arch-arrow)" />
-              <path class="arch-both" d="M284 222h64v-78h66" />
-              <path d="M284 362h64V222" marker-start="url(#arch-arrow)" />
-              <circle cx="348" cy="222" r="3" />
-              <path d="M540 192v62" marker-end="url(#arch-arrow)" />
-              <path class="arch-both" d="M666 312h106" />
-              <path d="M1042 302h86M1128 95v336" />
-              <path d="M1128 95h68" marker-end="url(#arch-arrow)" />
-              <path d="M1128 263h68" marker-end="url(#arch-arrow)" />
-              <path d="M1128 431h68" marker-end="url(#arch-arrow)" />
-              <circle cx="1128" cy="302" r="3" />
-              <path class="arch-both" d="M728 406v44" />
+              <path
+                class="arch-package-link reveal"
+                d="M154 108v68"
+                marker-end="url(#arch-arrow)"
+                style="--step: 1"
+              />
+              <path
+                class="arch-package-link reveal"
+                d="M24 66H2v296h22"
+                marker-end="url(#arch-arrow)"
+                style="--step: 1"
+              />
+              <path class="arch-both reveal" d="M284 222h64v-78h66" style="--step: 2" />
+              <path
+                class="reveal"
+                d="M284 362h64V222"
+                marker-start="url(#arch-arrow)"
+                style="--step: 2"
+              />
+              <circle class="reveal" cx="348" cy="222" r="3" style="--step: 2" />
+              <path
+                class="reveal"
+                d="M540 192v62"
+                marker-end="url(#arch-arrow)"
+                style="--step: 3"
+              />
+              <path class="arch-both reveal" d="M666 312h106" style="--step: 4" />
+              <path class="reveal" d="M1042 302h86M1128 95v336" style="--step: 5" />
+              <path
+                class="reveal"
+                d="M1128 95h68"
+                marker-end="url(#arch-arrow)"
+                style="--step: 5"
+              />
+              <path
+                class="reveal"
+                d="M1128 263h68"
+                marker-end="url(#arch-arrow)"
+                style="--step: 5"
+              />
+              <path
+                class="reveal"
+                d="M1128 431h68"
+                marker-end="url(#arch-arrow)"
+                style="--step: 5"
+              />
+              <circle class="reveal" cx="1128" cy="302" r="3" style="--step: 5" />
+              <path class="arch-both reveal" d="M728 406v44" style="--step: 6" />
             </svg>
-            <div class="arch-node arch-package">
+            <div class="arch-node arch-package reveal" style="--step: 0">
               <h3>Пакет процесса</h3>
               <p>YAML + файлы</p>
             </div>
-            <div class="arch-node arch-desktop">
+            <div class="arch-node arch-desktop reveal" style="--step: 1">
               <h3>Desktop</h3>
               <p>React + Tauri / Rust</p>
             </div>
-            <div class="arch-node arch-cli">
+            <div class="arch-node arch-cli reveal" style="--step: 1">
               <h3>CLI</h3>
               <p>Go</p>
             </div>
-            <span class="arch-protocol">HTTP / SSE</span>
-            <div class="arch-node arch-api">
+            <span class="arch-protocol reveal" style="--step: 2">HTTP / SSE</span>
+            <div class="arch-node arch-api reveal" style="--step: 2">
               <h3>Knotra API</h3>
               <p>Запуски и команды</p>
             </div>
-            <div class="arch-node arch-scheduler">
+            <div class="arch-node arch-scheduler reveal" style="--step: 3">
               <h3>Планировщик</h3>
               <p>Граф и лимиты: Knotra<br />Очередь заданий: River</p>
             </div>
-            <span class="arch-jobs">Задания</span>
-            <div class="arch-node arch-workers">
+            <span class="arch-jobs reveal" style="--step: 4">Задания</span>
+            <div class="arch-node arch-workers reveal" style="--step: 4">
               <h3>Воркеры</h3>
               <p>Исполнение шагов<br />Agent runtime и адаптеры</p>
             </div>
-            <div class="arch-node arch-models">
+            <div class="arch-node arch-models reveal" style="--step: 5">
               <h3>Модели</h3>
               <p>Ollama / API</p>
             </div>
-            <div class="arch-node arch-mcp">
+            <div class="arch-node arch-mcp reveal" style="--step: 5">
               <h3>MCP-серверы</h3>
               <p>Внешние инструменты</p>
             </div>
-            <div class="arch-node arch-sandbox">
+            <div class="arch-node arch-sandbox reveal" style="--step: 5">
               <h3>Docker sandbox</h3>
               <p>Изолированный код</p>
             </div>
-            <div class="arch-storage panel">
+            <div class="arch-storage panel reveal" style="--step: 6">
               <p class="arch-storage-label">Общие хранилища API и воркеров</p>
               <div class="arch-stores">
                 <div>
@@ -666,11 +711,12 @@
             <p class="source-note">154 882 подписчика на предоставленном скриншоте.</p>
           </div>
           <button
-            class="community-post panel"
+            class="community-post panel reveal"
             data-image="assets/telegram-community.png"
             data-caption="Публикация Knotra в Telegram-канале GitHub Community — предоставленный скриншот"
             type="button"
             aria-label="Увеличить публикацию в GitHub Community"
+            style="--step: 1"
           >
             <span class="window-bar"
               ><span class="window-dots"><i></i><i></i><i></i></span

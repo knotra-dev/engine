@@ -31,6 +31,10 @@ glyphs.
 Open `index.html` directly or serve this directory with any static HTTP server. All assets and the
 playable game are local; no engine, build step or internet connection is required.
 
+Slides enter with a short transition; diagram cards and their incoming connectors fade in together
+in sequence. The reveal finishes within one second. CSS animations respect reduced-motion
+preferences and do not run when printing.
+
 - Arrow keys, Page Up / Page Down, Space: switch slides.
 - Home / End: first / last slide.
 - **H** or **Hide**: hide or restore the bottom controls. The eye button also restores them.
