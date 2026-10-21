@@ -4,7 +4,7 @@ Go engine and CLI for YAML AI workflows: models, tools, Docker sandboxes and hum
 
 [Wiki](https://github.com/knotra-dev/engine/wiki) · [Getting started](https://github.com/knotra-dev/engine/wiki/Getting-started) · [Examples](https://github.com/knotra-dev/engine/wiki/Examples) · [Architecture](https://github.com/knotra-dev/engine/wiki/Architecture)
 
-Prefer the app? [Knotra Desktop](https://github.com/knotra-dev/desktop) includes a first-launch tour, saved model sources and MCP servers, per-block model/tool selection, and an MCP server for assistants to control the live workspace. See [models and environments](https://github.com/knotra-dev/engine/wiki/Resources) and [MCP setup](https://github.com/knotra-dev/engine/wiki/MCP).
+[Knotra Desktop](https://github.com/knotra-dev/desktop) is the graphical client.
 
 ## Run with Docker
 
@@ -47,6 +47,6 @@ ollama pull qwen3.5:9b
 make dev
 ```
 
-Run `make help` for commands and `make check` before contributing.
+Run `make help` for commands.
 
 [Desktop](https://github.com/knotra-dev/desktop) · [Development workspace](https://github.com/knotra-dev/dev) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [MIT](LICENSE) · [Code of conduct](CODE_OF_CONDUCT.md)
