@@ -34,7 +34,7 @@ docker run --rm ghcr.io/knotra-dev/engine:latest --help
 
 Compose stores engine files in `.knotra-container` and PostgreSQL in a persistent volume. `docker compose -f compose.container.yaml down` stops the stack and keeps both. The engine controls the local Docker socket, so run it as a trusted operator; workflow code still executes in its separate sandboxes.
 
-[Getting started](https://github.com/knotra-dev/engine/wiki/Getting-started) covers results and native CLI archives. [Deployment](https://github.com/knotra-dev/engine/wiki/Deployment) covers image versions, cloud models, workers, storage and backups.
+[Getting started](https://github.com/knotra-dev/engine/wiki/Getting-started) covers running workflows and inspecting results. [Deployment](https://github.com/knotra-dev/engine/wiki/Deployment) covers image versions, cloud models, workers, storage and backups.
 
 ## Develop from source
 
