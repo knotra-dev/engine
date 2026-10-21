@@ -154,7 +154,10 @@ def wait_run(base, run_id, status, timeout=600):
             while cursor:
                 page = request(
                     base,
-                    "/runs/" + run_id + "/instances?cursor=" + urllib.parse.quote(cursor),
+                    "/runs/"
+                    + run_id
+                    + "/instances?cursor="
+                    + urllib.parse.quote(cursor),
                 )
                 run["instances"].extend(page["items"])
                 cursor = page.get("nextCursor")
