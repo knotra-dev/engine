@@ -14,12 +14,33 @@ concurrency:
   group: images-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  IMAGE_VERSION: ${{ github.event.pull_request.base.ref || github.ref_name }}
+
 jobs:
+  select:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      builds: ${{ steps.images.outputs.builds }}
+      engine: ${{ steps.images.outputs.engine }}
+      firewall: ${{ steps.images.outputs.firewall }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Select images with unpublished build inputs
+        id: images
+        run: python3 scripts/select_images.py
+
   build:
+    needs: select
+    if: needs.select.outputs.builds != '[]'
     strategy:
       fail-fast: false
       matrix:
-        image: [engine, firewall]
+        image: ${{ fromJSON(needs.select.outputs.builds) }}
         architecture: [amd64, arm64]
     runs-on: ${{ matrix.architecture == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 25
@@ -43,14 +64,16 @@ jobs:
           file: ${{ matrix.image == 'engine' && 'Dockerfile' || 'internal/adapters/firewall/Dockerfile' }}
           platforms: linux/${{ matrix.architecture }}
           load: true
+          pull: true
+          no-cache: ${{ github.event_name == 'workflow_dispatch' }}
           tags: knotra-smoke:latest
           build-args: |
-            VERSION=${{ github.ref_name }}
+            VERSION=${{ env.IMAGE_VERSION }}
             REVISION=${{ github.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.licenses=MIT
-            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.version=${{ env.IMAGE_VERSION }}
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.architecture }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.architecture }}
@@ -91,8 +114,11 @@ jobs:
           docker push "$tag"
 
   publish:
-    needs: build
-    if: github.event_name != 'pull_request'
+    needs: [select, build]
+    if: >-
+      !cancelled() && github.event_name != 'pull_request' &&
+      needs.select.result == 'success' &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -128,11 +154,19 @@ jobs:
         env:
           IMAGE: ${{ steps.image.outputs.name }}
           TAGS: ${{ steps.metadata.outputs.tags }}
+          SOURCE_IMAGE: ${{ needs.select.outputs[matrix.image] }}
+          BUILT: ${{ contains(fromJSON(needs.select.outputs.builds), matrix.image) }}
         run: |
           args=()
           while IFS= read -r tag; do
             args+=(--tag "$tag")
           done <<< "$TAGS"
-          docker buildx imagetools create "${args[@]}" \
-            "$IMAGE:build-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-amd64" \
-            "$IMAGE:build-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-arm64"
+          sources=("$SOURCE_IMAGE")
+          if [[ "$BUILT" == true ]]; then
+            args+=(--tag "$SOURCE_IMAGE")
+            sources=(
+              "$IMAGE:build-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-amd64"
+              "$IMAGE:build-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-arm64"
+            )
+          fi
+          docker buildx imagetools create "${args[@]}" "${sources[@]}"

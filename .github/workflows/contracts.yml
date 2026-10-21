@@ -31,6 +31,9 @@ jobs:
       - run: /tmp/knotra-contract-venv/bin/python scripts/check_contract.py
       - run:
           PYTHONDONTWRITEBYTECODE=1 /tmp/knotra-contract-venv/bin/python
+          scripts/test_image_selection.py
+      - run:
+          PYTHONDONTWRITEBYTECODE=1 /tmp/knotra-contract-venv/bin/python
           examples/starter/research_test.py
       - run:
           PYTHONDONTWRITEBYTECODE=1 /tmp/knotra-contract-venv/bin/python -m unittest discover -s
