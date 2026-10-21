@@ -38,6 +38,8 @@ func (s *commandState) serveCommand() *cobra.Command {
 			level = slog.LevelDebug
 		}
 		o.Token = s.options.Getenv("KNOTRA_TOKEN")
+		o.ManagedToken = s.options.Getenv("KNOTRA_DESKTOP_CONTROL_TOKEN")
+		o.ManagedHoldAdmission = s.options.Getenv("KNOTRA_DESKTOP_HOLD_ADMISSION") == "1"
 		log := slog.New(slog.NewJSONHandler(s.options.Err, &slog.HandlerOptions{Level: level}))
 		return app.Serve(cmd.Context(), o, log)
 	}}

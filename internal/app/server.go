@@ -29,23 +29,25 @@ import (
 )
 
 type Options struct {
-	Role             execution.Role
-	S3               blob.S3Config
-	HostID           string
-	SharedDataDir    string
-	ExecutionWorkers int
-	Listen           string
-	DatabaseURL      string
-	DataDir          string
-	DockerHost       string
-	HelperPath       string
-	FirewallImage    string
-	Token            string
-	CORSOrigin       string
-	TLSCert          string
-	TLSKey           string
-	Version          string
-	Profiles         []string
+	Role                 execution.Role
+	S3                   blob.S3Config
+	HostID               string
+	SharedDataDir        string
+	ExecutionWorkers     int
+	Listen               string
+	DatabaseURL          string
+	DataDir              string
+	DockerHost           string
+	HelperPath           string
+	FirewallImage        string
+	Token                string
+	ManagedToken         string
+	ManagedHoldAdmission bool
+	CORSOrigin           string
+	TLSCert              string
+	TLSKey               string
+	Version              string
+	Profiles             []string
 }
 
 func (o *Options) validate() error {
@@ -82,6 +84,12 @@ func (o *Options) validate() error {
 	if o.Role != execution.RoleAll && o.S3.Bucket == "" && o.SharedDataDir == "" {
 		return errors.New("split service roles require --s3-bucket or --shared-data-dir for shared durable storage")
 	}
+	if o.ManagedToken != "" && (o.Role != execution.RoleAll || o.S3.Bucket != "" || o.SharedDataDir != "") {
+		return errors.New("managed control requires a single local engine service")
+	}
+	if o.ManagedHoldAdmission && o.ManagedToken == "" {
+		return errors.New("holding admission requires managed control")
+	}
 	if o.Role == execution.RoleAll || o.Role == execution.RoleAPI {
 		host, _, err := net.SplitHostPort(o.Listen)
 		if err != nil {
@@ -89,6 +97,9 @@ func (o *Options) validate() error {
 		}
 		ip := net.ParseIP(host)
 		local := host == "localhost" || (ip != nil && ip.IsLoopback())
+		if o.ManagedToken != "" && !local {
+			return errors.New("managed control requires a loopback listener")
+		}
 		if !local && (o.Token == "" || o.TLSCert == "" || o.TLSKey == "") {
 			return errors.New("remote listeners require bearer authentication and TLS certificate/key")
 		}
@@ -190,11 +201,14 @@ func Serve(ctx context.Context, o Options, log *slog.Logger) (serveErr error) {
 		FirewallImage: o.FirewallImage,
 	}
 	defer func() { _ = runner.Close() }()
-	srv := &api.Server{Store: db, Artifacts: artifacts, Profiles: profiles, Token: o.Token, Version: o.Version, CORSOrigin: o.CORSOrigin, HostID: o.HostID, Log: log, Admit: func(ctx context.Context, p *contract.Plan) error {
+	srv := &api.Server{Store: db, Artifacts: artifacts, Profiles: profiles, Token: o.Token, ManagedToken: o.ManagedToken, Version: o.Version, CORSOrigin: o.CORSOrigin, HostID: o.HostID, Log: log, Admit: func(ctx context.Context, p *contract.Plan) error {
 		ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		defer cancel()
 		return runner.Prepare(ctx, p)
 	}}
+	if o.ManagedHoldAdmission {
+		srv.HoldManagedAdmission()
+	}
 
 	config := queue.Config{Role: o.Role, EngineID: db.EngineID, HostID: o.HostID, Logger: log, ExecutionWorkers: o.ExecutionWorkers}
 	for _, profile := range profiles {

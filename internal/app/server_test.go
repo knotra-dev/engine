@@ -23,6 +23,11 @@ func TestServiceRoleValidation(t *testing.T) {
 		{"conflicting-stores", Options{Role: execution.RoleExecutor, SharedDataDir: "/shared", S3: blob.S3Config{Bucket: "work"}}, false},
 		{"incomplete-s3", Options{Listen: "127.0.0.1:8787", S3: blob.S3Config{Endpoint: "https://storage.example"}}, false},
 		{"region-without-bucket", Options{Listen: "127.0.0.1:8787", S3: blob.S3Config{Region: "auto"}}, false},
+		{"managed-local", Options{Listen: "127.0.0.1:8787", ManagedToken: "control", ManagedHoldAdmission: true}, true},
+		{"managed-remote", Options{Listen: "0.0.0.0:8787", ManagedToken: "control", Token: "token", TLSCert: "cert", TLSKey: "key"}, false},
+		{"managed-split-api", Options{Role: execution.RoleAPI, Listen: "127.0.0.1:8787", ManagedToken: "control", SharedDataDir: "/shared"}, false},
+		{"managed-shared-storage", Options{Listen: "127.0.0.1:8787", ManagedToken: "control", SharedDataDir: "/shared"}, false},
+		{"hold-without-owner", Options{Listen: "127.0.0.1:8787", ManagedHoldAdmission: true}, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			test.o.DatabaseURL = "postgres://test"

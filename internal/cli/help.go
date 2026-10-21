@@ -79,9 +79,11 @@ func addRunShortcuts(root, runs *cobra.Command) {
 func commandExamples(cmd *cobra.Command) {
 	switch cmd.Name() {
 	case "quickstart":
-		cmd.Example = "  knotra quickstart\n  knotra quickstart --provider openai --model MODEL_ID"
+		cmd.Long = cmd.Short + ".\nFor Codex, install the CLI and run 'codex login' with your ChatGPT account.\nFor Claude Code, install the CLI and run 'claude auth login' with your Claude account.\nThese connections use your CLI account login, without API keys.\nFor other model servers, use --provider openai-compatible with --base-url and --model.\nSet OPENAI_API_KEY only if that server requires a key.\nThe openai and anthropic providers remain direct API connections with separate API billing.\nUse a separate --dir and free --postgres-port when changing provider, model or base URL."
+		cmd.Example = "  knotra quickstart\n  knotra quickstart --provider codex --dir ./knotra-codex --no-run\n  knotra quickstart --provider claude --dir ./knotra-claude --no-run\n  knotra quickstart --provider openai-compatible --base-url http://127.0.0.1:1234/v1 --model MODEL_ID --dir ./knotra-compatible --no-run"
 	case "doctor":
-		cmd.Example = "  knotra doctor\n  knotra doctor --provider anthropic --model MODEL_ID"
+		cmd.Long = cmd.Short + ".\nChecks configuration, Codex/Claude account login, required API key environment variables and local dependencies.\nAPI credentials and model access are verified when a workflow runs; this check makes no model calls."
+		cmd.Example = "  knotra doctor\n  knotra doctor --provider claude --model MODEL_ID\n  knotra doctor --provider ollama --base-url http://127.0.0.1:11434"
 	case "validate":
 		cmd.Example = "  knotra validate\n  knotra validate pipeline.yaml --profile-file profile.yaml\n  knotra validate --remote --profile local"
 	case "run":

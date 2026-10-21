@@ -46,6 +46,18 @@ func (q *Queries) ConsumeDueTimers(ctx context.Context, arg ConsumeDueTimersPara
 	return q.db.Exec(ctx, consumeDueTimers, arg.RunID, arg.ConsumedAt)
 }
 
+const countUnfinishedRuns = `-- name: CountUnfinishedRuns :one
+SELECT count(*) FROM knotra_runs
+WHERE COALESCE(document->>'status','') NOT IN ('succeeded','failed','cancelled','skipped')
+`
+
+func (q *Queries) CountUnfinishedRuns(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countUnfinishedRuns)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const insertExecutionTimer = `-- name: InsertExecutionTimer :execresult
 INSERT INTO knotra_execution_timers(run_id,id,generation,instance_id,kind,due_at)
 			VALUES($1,$2,$3,$4,$5,$6)

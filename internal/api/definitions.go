@@ -157,7 +157,12 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, 400, "INPUT_INVALID", e.Error(), nil)
 		return
 	}
+	s.admissionMu.RLock()
+	defer s.admissionMu.RUnlock()
 	s.command(w, r, b, func(tx pgx.Tx) (int, any, error) {
+		if s.restartPrepared {
+			return 0, nil, errRestartPrepared
+		}
 		def, e := store.ReadDefinition(r.Context(), tx, q.DefinitionID)
 		if e != nil {
 			return 0, nil, e

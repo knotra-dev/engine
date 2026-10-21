@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -45,10 +47,13 @@ func TestSetupPreservesEditedFilesAndStableIdentity(t *testing.T) {
 }
 
 func TestBundledProfilesAndPackagesCompileForEveryProvider(t *testing.T) {
-	for _, provider := range []string{"ollama", "openai", "anthropic"} {
+	for _, provider := range []string{"ollama", "openai", "anthropic", "codex", "claude", "openai-compatible"} {
 		t.Run(provider, func(t *testing.T) {
 			s := testSetup(t)
 			s.Config.Provider = provider
+			if provider == "openai-compatible" {
+				s.Config.BaseURL = "http://127.0.0.1:1234/v1"
+			}
 			if _, err := s.WriteOnce(); err != nil {
 				t.Fatal(err)
 			}
@@ -100,8 +105,8 @@ func TestDoctorChecksCredentialsAndHelperArchitectureBeforeStartup(t *testing.T)
 	if err := s.Doctor(context.Background()); err == nil || !strings.Contains(err.Error(), "OPENAI_API_KEY") {
 		t.Fatalf("missing key accepted: %v", err)
 	}
-	if calls != 2 {
-		t.Fatal("doctor started infrastructure")
+	if calls != 0 {
+		t.Fatal("doctor checked infrastructure before reporting the missing key")
 	}
 	s.Getenv = func(string) string { return "fixture-key" }
 	if err := s.Doctor(context.Background()); err != nil {
@@ -113,6 +118,166 @@ func TestDoctorChecksCredentialsAndHelperArchitectureBeforeStartup(t *testing.T)
 	}
 	if err := s.Doctor(context.Background()); err == nil {
 		t.Fatal("wrong helper architecture accepted")
+	}
+}
+
+func TestSetupNormalizesProvidersAndValidatesConnection(t *testing.T) {
+	for _, test := range []struct {
+		provider, model, baseURL, wantProvider, wantModel, wantError string
+	}{
+		{" Claude ", "", "", "claude", "default", ""},
+		{"codex", "", "", "codex", "default", ""},
+		{"codex", "default", "https://example.com", "", "", "--base-url"},
+		{"openai-compatible", "org/model", "https://gateway.example/v1/", "openai_compatible", "org/model", ""},
+		{"openai-compatible", "model", "", "", "", "--base-url"},
+		{"OLLAMA", "", "http://127.0.0.1:11434", "ollama", "qwen3.5:9b", ""},
+		{"unknown", "fixture-model", "", "", "", "--provider"},
+		{"openai", "", "", "", "", "--model"},
+		{"openai", "Model display name", "", "", "", "--model"},
+		{"openai", "https://example.com/model", "", "", "", "--model"},
+		{"openai", "fixture-model", "/relative", "", "", "--base-url"},
+		{"openai", "fixture-model", "ftp://example.com", "", "", "--base-url"},
+		{"openai", "fixture-model", "https://key@example.com", "", "", "--base-url"},
+		{"openai", "fixture-model", "https://example.com?key=secret", "", "", "--base-url"},
+		{"openai", "fixture-model", "https://example.com?", "", "", "--base-url"},
+		{"openai", "fixture-model", "https://example.com#", "", "", "--base-url"},
+	} {
+		t.Run(test.provider+"/"+test.model+"/"+test.baseURL, func(t *testing.T) {
+			s := testSetup(t)
+			s.Config.Provider, s.Config.Model, s.Config.BaseURL = test.provider, test.model, test.baseURL
+			err := s.Validate()
+			if test.wantError != "" {
+				if err == nil || !strings.Contains(err.Error(), test.wantError) {
+					t.Fatalf("err=%v, want %s", err, test.wantError)
+				}
+				return
+			}
+			if err != nil || s.Config.Provider != test.wantProvider || s.Config.Model != test.wantModel || s.Config.BaseURL != strings.TrimRight(test.baseURL, "/") {
+				t.Fatalf("config=%+v err=%v", s.Config, err)
+			}
+		})
+	}
+}
+
+func TestDoctorExplainsMissingCloudKeysBeforeCheckingDocker(t *testing.T) {
+	for _, test := range []struct{ provider, key, keyURL string }{
+		{"openai", "OPENAI_API_KEY", "https://platform.openai.com/api-keys"},
+		{"anthropic", "ANTHROPIC_API_KEY", "https://platform.claude.com/settings/keys"},
+	} {
+		t.Run(test.provider, func(t *testing.T) {
+			s := testSetup(t)
+			s.Config.Provider = test.provider
+			s.Getenv = func(string) string { return " \n" }
+			s.Command = func(context.Context, string, []string, []string) ([]byte, error) {
+				t.Fatal("missing credential must be reported before Docker checks")
+				return nil, nil
+			}
+			err := s.Doctor(context.Background())
+			for _, want := range []string{test.key, test.keyURL, "export " + test.key, "$env:" + test.key} {
+				if err == nil || !strings.Contains(err.Error(), want) {
+					t.Fatalf("err=%v, want %s", err, want)
+				}
+			}
+		})
+	}
+}
+
+func TestCLIProfilesUseAccountLoginWithoutAPIConfiguration(t *testing.T) {
+	for _, provider := range []string{"codex", "claude"} {
+		t.Run(provider, func(t *testing.T) {
+			s := testSetup(t)
+			s.Config.Provider, s.Config.Model = provider, ""
+			if _, err := s.WriteOnce(); err != nil {
+				t.Fatal(err)
+			}
+			p := s.profile()
+			m := p.Spec.Models["model_main"]
+			if m.Provider != provider || m.Model != "default" || m.BaseURL != "" || len(m.Auth) != 0 || len(m.Parameters) != 0 || len(p.Spec.Secrets) != 0 {
+				t.Fatalf("account connection acquired API configuration: %+v", p.Spec)
+			}
+		})
+	}
+}
+
+func TestCompatibleProfileAllowsServersWithoutKeys(t *testing.T) {
+	for _, key := range []string{"", "fixture-key"} {
+		s := testSetup(t)
+		s.Config.Provider, s.Config.Model, s.Config.BaseURL = "openai-compatible", "org/model", "http://127.0.0.1:1234/v1"
+		s.Getenv = func(string) string { return key }
+		if _, err := s.WriteOnce(); err != nil {
+			t.Fatal(err)
+		}
+		p := s.profile()
+		m := p.Spec.Models["model_main"]
+		if m.Provider != "openai_compatible" || len(m.Parameters) != 0 || (len(m.Auth) > 0) != (key != "") {
+			t.Fatalf("incorrect compatible connection: %+v", m)
+		}
+		if key != "" && p.Spec.Secrets["model_key"].Env != "OPENAI_API_KEY" {
+			t.Fatal("compatible API key does not use the engine environment")
+		}
+	}
+}
+
+func TestSetupPreservesCustomEndpointAndRejectsChangingIt(t *testing.T) {
+	s := testSetup(t)
+	s.Config.Provider = "anthropic"
+	s.Config.BaseURL = "https://gateway.example/v1/"
+	if _, err := s.WriteOnce(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(s.Config.Dir, "profile.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, diagnostics := contract.ParseProfile(data)
+	if contract.HasErrors(diagnostics) {
+		t.Fatal(diagnostics)
+	}
+	model := profile.Spec.Models["model_main"]
+	if model.Provider != "anthropic" || model.BaseURL != "https://gateway.example/v1" || profile.Spec.Secrets["model_key"].Env != "ANTHROPIC_API_KEY" || strings.Contains(string(data), "fixture-key") {
+		t.Fatalf("incorrect saved connection: %s", data)
+	}
+	s.Config.BaseURL = "https://different.example/v1"
+	if _, err := s.WriteOnce(); err == nil || !strings.Contains(err.Error(), "another --dir") {
+		t.Fatalf("different endpoint reused the same profile: %v", err)
+	}
+}
+
+func TestDoctorAndPullUseConfiguredOllamaEndpoint(t *testing.T) {
+	s := testSetup(t)
+	s.Config.Provider = "ollama"
+	s.Config.Model = "fixture-model"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tags" {
+			t.Errorf("wrong catalog path: %s", r.URL.Path)
+		}
+		_, _ = fmt.Fprint(w, `{"models":[{"name":"fixture-model"}]}`)
+	}))
+	defer server.Close()
+	s.Config.BaseURL = server.URL
+	helper := make([]byte, 20)
+	copy(helper, "\x7fELF")
+	helper[18] = 183
+	s.Config.HelperPath = filepath.Join(t.TempDir(), "helper")
+	if err := os.WriteFile(s.Config.HelperPath, helper, 0600); err != nil {
+		t.Fatal(err)
+	}
+	pulled := false
+	s.Command = func(_ context.Context, command string, args, env []string) ([]byte, error) {
+		if command == "ollama" {
+			pulled = true
+			if strings.Join(args, " ") != "pull fixture-model" || len(env) != 1 || env[0] != "OLLAMA_HOST="+server.URL {
+				t.Fatalf("wrong pull target: %v %v", args, env)
+			}
+		}
+		return []byte("linux aarch64"), nil
+	}
+	if err := s.Doctor(context.Background()); err != nil || !s.modelInstalled {
+		t.Fatalf("custom model catalog was not used: installed=%v err=%v", s.modelInstalled, err)
+	}
+	s.modelInstalled = false
+	if _, _, err := s.StartInfrastructure(context.Background()); err != nil || !pulled {
+		t.Fatalf("custom endpoint pull failed: pulled=%v err=%v", pulled, err)
 	}
 }
 

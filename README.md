@@ -4,6 +4,8 @@ Go engine and CLI for YAML AI workflows: models, tools, Docker sandboxes and hum
 
 [Wiki](https://github.com/knotra-dev/engine/wiki) · [Getting started](https://github.com/knotra-dev/engine/wiki/Getting-started) · [Examples](https://github.com/knotra-dev/engine/wiki/Examples) · [Architecture](https://github.com/knotra-dev/engine/wiki/Architecture)
 
+Prefer the app? [Knotra Desktop](https://github.com/knotra-dev/desktop) includes a first-launch tour, saved model sources and MCP servers, per-block model/tool selection, and an MCP server for assistants to control the live workspace. See [models and environments](https://github.com/knotra-dev/engine/wiki/Resources) and [MCP setup](https://github.com/knotra-dev/engine/wiki/MCP).
+
 ## Run with Docker
 
 Use the prebuilt engine and CLI without Go, Make or a source checkout. Install Docker with Compose and start Ollama. This setup uses host networking: Linux Docker Engine supports it; in Docker Desktop 4.34+, enable **Settings → Resources → Network → Enable host networking**. See [Docker's platform requirements](https://docs.docker.com/engine/network/drivers/host/).

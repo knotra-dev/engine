@@ -13,6 +13,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,12 +21,14 @@ import (
 
 	assets "github.com/knotra-dev/engine"
 	"github.com/knotra-dev/engine/examples/starter"
+	"github.com/knotra-dev/engine/internal/adapters"
 	"github.com/knotra-dev/engine/internal/contract"
 )
 
 type Config struct {
-	Dir, Provider, Model, HelperPath string
-	PostgresPort                     int
+	Dir, Provider, Model, BaseURL, HelperPath string
+	ConnectionsFile                           string
+	PostgresPort                              int
 }
 
 type Setup struct {
@@ -38,6 +41,7 @@ type Setup struct {
 	arch           string
 	helper         []byte
 	modelInstalled bool
+	connections    *Connections
 }
 
 type settings struct {
@@ -81,17 +85,50 @@ func (b *commandOutput) Write(data []byte) (int, error) {
 }
 
 func (s *Setup) Validate() error {
+	s.connections = nil
 	if s.Out == nil {
 		s.Out = io.Discard
 	}
 	if s.Getenv == nil {
 		s.Getenv = os.Getenv
 	}
-	if s.Config.Provider != "ollama" && s.Config.Provider != "openai" && s.Config.Provider != "anthropic" {
-		return fmt.Errorf("--provider must be ollama, openai or anthropic")
-	}
-	if s.Config.Model == "" {
-		return fmt.Errorf("--model is required for cloud providers")
+	if s.Config.ConnectionsFile == "" {
+		s.Config.Provider = strings.ToLower(strings.TrimSpace(s.Config.Provider))
+		if s.Config.Provider == "openai-compatible" {
+			s.Config.Provider = "openai_compatible"
+		}
+		switch s.Config.Provider {
+		case "codex", "claude", "ollama", "openai", "anthropic", "openai_compatible":
+		default:
+			return fmt.Errorf("--provider must be codex, claude, ollama, openai-compatible, openai or anthropic")
+		}
+		s.Config.Model = strings.TrimSpace(s.Config.Model)
+		if s.Config.Model == "" && s.Config.Provider == "ollama" {
+			s.Config.Model = "qwen3.5:9b"
+		}
+		cli := s.Config.Provider == "codex" || s.Config.Provider == "claude"
+		if s.Config.Model == "" && cli {
+			s.Config.Model = "default"
+		}
+		if s.Config.Model == "" {
+			return fmt.Errorf("--model is required for %s; copy a model ID from your provider's model catalog and pass --model MODEL_ID", s.Config.Provider)
+		}
+		if strings.ContainsAny(s.Config.Model, " \t\r\n?#") || strings.HasPrefix(s.Config.Model, "-") || (s.Config.Provider != "ollama" && s.Config.Provider != "openai_compatible" && strings.Contains(s.Config.Model, "/")) {
+			return fmt.Errorf("--model must be a model ID, not a URL or display name")
+		}
+		if s.Config.BaseURL != "" {
+			if cli {
+				return fmt.Errorf("--base-url is not used by %s; sign in through its CLI instead", s.Config.Provider)
+			}
+			u, err := url.Parse(s.Config.BaseURL)
+			if err != nil || u.Hostname() == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || strings.ContainsAny(s.Config.BaseURL, "?#") {
+				return fmt.Errorf("--base-url must be an absolute HTTP(S) URL without credentials, query or fragment")
+			}
+			s.Config.BaseURL = strings.TrimRight(s.Config.BaseURL, "/")
+		}
+		if s.Config.Provider == "openai_compatible" && s.Config.BaseURL == "" {
+			return fmt.Errorf("--base-url is required for openai-compatible; use your provider's API base URL, usually ending in /v1")
+		}
 	}
 	if s.Config.PostgresPort < 1 || s.Config.PostgresPort > 65535 {
 		return fmt.Errorf("PostgreSQL port must be from 1 to 65535")
@@ -104,6 +141,20 @@ func (s *Setup) Validate() error {
 		return err
 	}
 	s.Config.Dir = dir
+	if s.Config.ConnectionsFile != "" {
+		connections, err := readConnections(s.Config.ConnectionsFile)
+		if err != nil {
+			return err
+		}
+		s.connections = &connections
+		profile := s.profile()
+		profile.Spec.Models = connections.Models
+		profile.Spec.MCP = connections.MCP
+		profile.Spec.Secrets = connections.Secrets
+		if _, err := checkedProfile(profile); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -112,6 +163,21 @@ func (s *Setup) Validate() error {
 func (s *Setup) Doctor(ctx context.Context) error {
 	if err := s.Validate(); err != nil {
 		return err
+	}
+	if s.connections == nil && (s.Config.Provider == "codex" || s.Config.Provider == "claude") {
+		if err := adapters.CheckCLIProvider(ctx, s.Config.Provider); err != nil {
+			return err
+		}
+	}
+	if s.connections == nil && (s.Config.Provider == "openai" || s.Config.Provider == "anthropic") {
+		key := strings.ToUpper(s.Config.Provider) + "_API_KEY"
+		if strings.TrimSpace(s.Getenv(key)) == "" {
+			keyURL := "https://platform.openai.com/api-keys"
+			if s.Config.Provider == "anthropic" {
+				keyURL = "https://platform.claude.com/settings/keys"
+			}
+			return fmt.Errorf("%s is missing; create an API key at %s, set %s in the same terminal, then rerun this command (macOS/Linux: export %s='YOUR_API_KEY'; PowerShell: $env:%s='YOUR_API_KEY')", key, keyURL, key, key, key)
+		}
 	}
 	data, err := s.run(ctx, "docker", []string{"info", "--format", "{{.OSType}} {{.Architecture}}"}, nil)
 	if err != nil {
@@ -161,18 +227,26 @@ func (s *Setup) Doctor(ctx context.Context) error {
 		return fmt.Errorf("sandbox helper architecture does not match Docker (%s)", s.arch)
 	}
 	s.helper = helper
+	if s.connections != nil {
+		_, _ = fmt.Fprintf(s.Out, "Ready: Docker %s, Compose, sandbox helper and saved model/MCP connections.\n", s.arch)
+		return nil
+	}
 	s.Config.HelperPath, err = filepath.Abs(s.Config.HelperPath)
 	if err != nil {
 		return err
 	}
 	if s.Config.Provider == "ollama" {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://127.0.0.1:11434/api/tags", nil)
+		base := s.Config.BaseURL
+		if base == "" {
+			base = "http://127.0.0.1:11434"
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/tags", nil)
 		if err != nil {
 			return err
 		}
 		res, err := (&http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}).Do(req)
 		if err != nil {
-			return fmt.Errorf("start Ollama first (ollama serve)")
+			return fmt.Errorf("cannot reach Ollama at %s; start Ollama (ollama serve) or check --base-url", base)
 		}
 		defer func() { _ = res.Body.Close() }()
 		if res.StatusCode != http.StatusOK {
@@ -197,22 +271,23 @@ func (s *Setup) Doctor(ctx context.Context) error {
 				return fmt.Errorf("install the Ollama CLI to download %s, or select an installed --model", s.Config.Model)
 			}
 		}
-	} else {
-		key := strings.ToUpper(s.Config.Provider) + "_API_KEY"
-		if s.Getenv(key) == "" {
-			return fmt.Errorf("set %s in the engine environment before starting", key)
-		}
 	}
-	_, _ = fmt.Fprintf(s.Out, "Ready: Docker %s, Compose, sandbox helper and %s.\n", s.arch, s.Config.Provider)
+	_, _ = fmt.Fprintf(s.Out, "Ready: Docker %s, Compose, sandbox helper and %s configuration.\n", s.arch, s.Config.Provider)
+	if s.Config.Provider == "codex" || s.Config.Provider == "claude" {
+		_, _ = fmt.Fprintln(s.Out, "CLI account login is ready. Workflows use the signed-in account and its usage limits.")
+	} else if s.Config.Provider != "ollama" {
+		_, _ = fmt.Fprintln(s.Out, "API model access and any required credentials are checked when a workflow runs.")
+	}
 	return nil
 }
 
 func (s *Setup) profile() contract.Profile {
-	c := contract.ModelConnection{Provider: s.Config.Provider, Model: s.Config.Model}
+	c := contract.ModelConnection{Provider: s.Config.Provider, Model: s.Config.Model, BaseURL: s.Config.BaseURL}
 	secrets := map[string]contract.SecretSource{}
-	if c.Provider == "ollama" {
+	switch c.Provider {
+	case "ollama":
 		c.Parameters = map[string]any{"think": false, "temperature": 0, "num_predict": 4096}
-	} else {
+	case "openai", "anthropic":
 		secrets["model_key"] = contract.SecretSource{Env: strings.ToUpper(c.Provider) + "_API_KEY"}
 		c.Auth = map[string]contract.Credential{"key": {SecretRef: "model_key"}}
 		if c.Provider == "openai" {
@@ -220,14 +295,24 @@ func (s *Setup) profile() contract.Profile {
 		} else {
 			c.Parameters = map[string]any{"max_tokens": 4096}
 		}
+	case "openai_compatible":
+		if strings.TrimSpace(s.Getenv("OPENAI_API_KEY")) != "" {
+			secrets["model_key"] = contract.SecretSource{Env: "OPENAI_API_KEY"}
+			c.Auth = map[string]contract.Credential{"key": {SecretRef: "model_key"}}
+		}
 	}
-	return contract.Profile{APIVersion: "knotra/v1", Kind: "EngineProfile", Metadata: contract.Metadata{Name: "local"}, Spec: contract.ProfileSpec{
+	profile := contract.Profile{APIVersion: "knotra/v1", Kind: "EngineProfile", Metadata: contract.Metadata{Name: "local"}, Spec: contract.ProfileSpec{
 		Models: map[string]contract.ModelConnection{"model_main": c}, Secrets: secrets,
 		Sandboxes: map[string]contract.SandboxProfile{
 			"python_box": {Image: "python:3.13-alpine", Resources: contract.Resources{CPU: 1, MemoryMiB: 512, DiskMiB: 128, Pids: 64}, Network: contract.Network{Mode: "none"}, AllowedTools: []string{"files.read", "files.write", "process.exec"}},
 			"node_box":   {Image: "node:22-alpine", Resources: contract.Resources{CPU: 1, MemoryMiB: 512, DiskMiB: 128, Pids: 64}, Network: contract.Network{Mode: "none"}, AllowedTools: []string{"files.read", "files.write", "process.exec"}},
 		}, Limits: contract.Limits{Timeout: "30m", MaxConcurrentNodes: 8, MaxNodeInstances: 10000, MaxModelCalls: 200, MaxToolCalls: 1000},
 	}}
+	if s.connections != nil {
+		profile.Spec.Models = nil
+		profile.Spec.Secrets = nil
+	}
+	return profile
 }
 
 // WriteOnce preserves editable packages, profiles and durable identifiers across
@@ -261,8 +346,8 @@ func (s *Setup) WriteOnce() (settings, error) {
 	if err = json.Unmarshal(data, &state); err != nil {
 		return state, fmt.Errorf("invalid quickstart settings: %w", err)
 	}
-	if state.Config.Provider != s.Config.Provider || state.Config.Model != s.Config.Model || state.Config.PostgresPort != s.Config.PostgresPort {
-		return state, fmt.Errorf("this directory uses a different provider, model or ports; reuse its flags or choose another --dir")
+	if (s.connections == nil && (state.Config.Provider != s.Config.Provider || state.Config.Model != s.Config.Model || state.Config.BaseURL != s.Config.BaseURL)) || state.Config.PostgresPort != s.Config.PostgresPort {
+		return state, fmt.Errorf("this directory uses a different provider, model, base URL or ports; reuse its flags or choose another --dir (for example --dir ./knotra-%s)", s.Config.Provider)
 	}
 	if state.Password == "" || state.OperationID == "" {
 		return state, fmt.Errorf("quickstart settings have no password or operation identity")
@@ -374,9 +459,13 @@ func (s *Setup) StartInfrastructure(ctx context.Context) (string, string, error)
 			}
 		}
 	}
-	if s.Config.Provider == "ollama" && !s.modelInstalled {
+	if s.connections == nil && s.Config.Provider == "ollama" && !s.modelInstalled {
 		_, _ = fmt.Fprintf(s.Out, "Ensuring model %s is installed…\n", s.Config.Model)
-		if _, err = s.run(ctx, "ollama", []string{"pull", s.Config.Model}, nil); err != nil {
+		base := s.Config.BaseURL
+		if base == "" {
+			base = "http://127.0.0.1:11434"
+		}
+		if _, err = s.run(ctx, "ollama", []string{"pull", s.Config.Model}, []string{"OLLAMA_HOST=" + base}); err != nil {
 			return "", "", err
 		}
 	}

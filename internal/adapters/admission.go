@@ -62,6 +62,15 @@ func (r *Runner) modelInfo(ctx context.Context, profile contract.Profile, c cont
 }
 
 func (r *Runner) modelDigest(ctx context.Context, profile contract.Profile, c contract.ModelConnection) (string, error) {
+	if cliModelProvider(c.Provider) {
+		if err := CheckCLIProvider(ctx, c.Provider); err != nil {
+			return "", err
+		}
+		return "cli-id:" + c.Provider + "/" + c.Model, nil
+	}
+	if c.Provider == "openai_compatible" {
+		return "declared-id:" + c.Model, nil
+	}
 	if c.Provider != "ollama" {
 		var model struct {
 			ID string `json:"id"`
@@ -124,9 +133,11 @@ func (r *Runner) prepareModels(ctx context.Context, req Request) error {
 			// Cloud catalogs expose accessible model IDs, not a weight digest or
 			// a portable capability contract. Only text and tool protocols are supported.
 			details.Capabilities = []string{"completion", "tools"}
-			resource.Model = strings.TrimPrefix(digest, "remote-id:")
-			pipeline(req).Spec.Models[alias] = resource
-			key = resource.Connection + "/" + resource.Model
+			if strings.HasPrefix(digest, "remote-id:") {
+				resource.Model = strings.TrimPrefix(digest, "remote-id:")
+				pipeline(req).Spec.Models[alias] = resource
+				key = resource.Connection + "/" + resource.Model
+			}
 		}
 		requirements := append([]string(nil), resource.Requires...)
 		requirements = append(requirements, "structuredOutput")

@@ -134,6 +134,7 @@ func newCommand(options Options) (*cobra.Command, *commandState) {
 		s.catalogCommand("profiles"),
 		s.catalogCommand("resources"),
 		s.catalogCommand("info"),
+		s.mcpCommand(),
 	)
 	configureCommands(root)
 	return root, s

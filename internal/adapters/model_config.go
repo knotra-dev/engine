@@ -35,17 +35,27 @@ func modelConfig(req Request, alias string) (contract.ModelConnection, error) {
 		params[name] = value
 	}
 	c.Parameters = params
+	if cliModelProvider(c.Provider) {
+		if c.Model == "" || strings.ContainsAny(c.Model, " \t\r\n?#") {
+			return c, fmt.Errorf("invalid %s model identifier", c.Provider)
+		}
+		if c.BaseURL != "" || len(c.Auth) > 0 || len(params) > 0 {
+			return c, fmt.Errorf("%s uses its CLI account login; baseUrl, auth and API parameters are not supported", c.Provider)
+		}
+		return c, nil
+	}
 
 	defaults := map[string]string{
-		"ollama":    "http://127.0.0.1:11434",
-		"openai":    "https://api.openai.com/v1",
-		"anthropic": "https://api.anthropic.com/v1",
+		"ollama":            "http://127.0.0.1:11434",
+		"openai":            "https://api.openai.com/v1",
+		"anthropic":         "https://api.anthropic.com/v1",
+		"openai_compatible": "",
 	}
 	base, ok := defaults[c.Provider]
 	if !ok {
 		return c, fmt.Errorf("unsupported model adapter %q", c.Provider)
 	}
-	if c.Model == "" || (c.Provider != "ollama" && strings.ContainsAny(c.Model, "/?#")) {
+	if c.Model == "" || strings.ContainsAny(c.Model, " \t\r\n?#") || (c.Provider != "ollama" && c.Provider != "openai_compatible" && strings.Contains(c.Model, "/")) {
 		return c, fmt.Errorf("invalid %s model identifier", c.Provider)
 	}
 	for name := range c.Auth {
@@ -53,7 +63,7 @@ func modelConfig(req Request, alias string) (contract.ModelConnection, error) {
 			return c, fmt.Errorf("unsupported %s auth field %q", c.Provider, name)
 		}
 	}
-	if c.Provider != "ollama" {
+	if c.Provider != "ollama" && c.Provider != "openai_compatible" {
 		if _, ok := c.Auth["key"]; !ok {
 			return c, fmt.Errorf("%s requires auth.key", c.Provider)
 		}
@@ -89,7 +99,7 @@ func modelConfig(req Request, alias string) (contract.ModelConnection, error) {
 
 func validateCloudOption(provider, name string, value any) error {
 	invalid := func() error { return fmt.Errorf("invalid %s parameter %q", provider, name) }
-	if provider == "openai" && name == "reasoning_effort" {
+	if (provider == "openai" || provider == "openai_compatible") && name == "reasoning_effort" {
 		s, ok := value.(string)
 		if ok {
 			for _, allowed := range []string{"none", "minimal", "low", "medium", "high", "xhigh"} {
@@ -116,6 +126,12 @@ func validateCloudOption(provider, name string, value any) error {
 	maximum := "max_output_tokens"
 	if provider == "anthropic" {
 		maximum = "max_tokens"
+	}
+	if provider == "openai_compatible" {
+		maximum = "max_tokens"
+		if name == "max_completion_tokens" {
+			name = maximum
+		}
 	}
 	if name != "temperature" && name != "top_p" && name != maximum && (provider != "anthropic" || name != "top_k") {
 		return fmt.Errorf("unsupported %s parameter %q", provider, name)
@@ -197,6 +213,10 @@ func modelRequest(c contract.ModelConnection, messages []message, tools []functi
 		body, err := openAIRequest(c, messages, tools, len(format) > 0)
 		return "/responses", body, err
 	}
+	if c.Provider == "openai_compatible" {
+		body, err := compatibleRequest(c, messages, tools, len(format) > 0)
+		return "/chat/completions", body, err
+	}
 	body, err := anthropicRequest(c, messages, tools, len(format) > 0)
 	return "/messages", body, err
 }
@@ -207,6 +227,9 @@ func readModelResponse(ctx context.Context, provider string, res *http.Response,
 	}
 	if provider == "openai" {
 		return readOpenAIResponse(ctx, res, started, observation, id, step)
+	}
+	if provider == "openai_compatible" {
+		return readCompatibleResponse(ctx, res, started, observation, id, step)
 	}
 	return readAnthropicResponse(ctx, res, started, observation, id, step)
 }

@@ -3,6 +3,9 @@ package api
 import (
 	"encoding/json"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -20,6 +23,8 @@ func TestResourceCatalogRecognizesCloudProvidersAndRequiresCredentials(t *testin
 			"missing":         {Provider: "openai", Auth: map[string]contract.Credential{"key": {SecretRef: "missing"}}},
 			"unauthenticated": {Provider: "anthropic"},
 			"unknown":         {Provider: "unknown"},
+			"compatible":      {Provider: "openai_compatible", BaseURL: "http://127.0.0.1:1234/v1"},
+			"no_endpoint":     {Provider: "openai_compatible"},
 		},
 	}}
 	t.Setenv("KNOTRA_CATALOG_MISSING", "")
@@ -31,7 +36,7 @@ func TestResourceCatalogRecognizesCloudProvidersAndRequiresCredentials(t *testin
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	expected := map[string]string{"local": "available", "openai": "available", "anthropic": "available", "missing": "unavailable", "unauthenticated": "unavailable", "unknown": "unavailable"}
+	expected := map[string]string{"local": "available", "openai": "available", "anthropic": "available", "missing": "unavailable", "unauthenticated": "unavailable", "unknown": "unavailable", "compatible": "available", "no_endpoint": "unavailable"}
 	seen := map[string]bool{}
 	for _, item := range body.Items {
 		if item.Kind == "model" {
@@ -46,5 +51,37 @@ func TestResourceCatalogRecognizesCloudProvidersAndRequiresCredentials(t *testin
 	}
 	if strings.Contains(response.Body.String(), "private-catalog-key") {
 		t.Fatal("catalog exposed credentials")
+	}
+}
+
+func TestCLICatalogChecksExecutableWithoutAPIKeys(t *testing.T) {
+	dir := t.TempDir()
+	name := "codex"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), nil, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	profile := contract.Profile{Spec: contract.ProfileSpec{Models: map[string]contract.ModelConnection{
+		"installed": {Provider: "codex", Model: "default"},
+		"missing":   {Provider: "claude", Model: "default"},
+		"api_auth":  {Provider: "codex", Model: "default", Auth: map[string]contract.Credential{"key": {}}},
+	}}}
+	response := httptest.NewRecorder()
+	(&Server{Profiles: map[string]contract.Profile{"local": profile}}).resources(response, httptest.NewRequestWithContext(t.Context(), "GET", "/v1/resources", nil))
+	var body struct{ Items []struct{ ID, Status string } }
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range body.Items {
+		want := "unavailable"
+		if item.ID == "installed" {
+			want = "available"
+		}
+		if item.Status != want {
+			t.Errorf("%s: got %s, want %s", item.ID, item.Status, want)
+		}
 	}
 }

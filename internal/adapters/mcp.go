@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os/exec"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -144,6 +145,8 @@ func (call *mcpCallEvidence) beforeSend(request *http.Request) error {
 }
 
 const maxMCPResponseBytes = 32 << 20
+
+var mcpToolName = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,128}$`)
 
 type boundedResponse struct {
 	io.ReadCloser
@@ -762,7 +765,7 @@ func (r *Runner) Prepare(ctx context.Context, plan *contract.Plan) error {
 				continue
 			}
 			connection := plan.Profile.Spec.MCP[resource.Connection]
-			snapshots, err := r.discoverMCP(ctx, req, resource.Connection, connection)
+			snapshots, err := r.discoverMCP(ctx, req, resource.Connection, connection, false)
 			if err != nil {
 				return err
 			}
@@ -787,7 +790,16 @@ func (c *sessionCache) closeDiscovery() error {
 	return nil
 }
 
-func (r *Runner) discoverMCP(ctx context.Context, req Request, name string, connection contract.MCPConnection) (snapshots map[string]contract.ToolSnapshot, err error) {
+// DiscoverMCPHTTP lists a parsed profile's HTTP server tools without executing tools.
+// The caller must close the runner even when discovery fails.
+func (r *Runner) DiscoverMCPHTTP(ctx context.Context, profile contract.Profile, connection contract.MCPConnection) (map[string]contract.ToolSnapshot, error) {
+	if connection.Transport != "streamable_http" {
+		return nil, fmt.Errorf("MCP settings discovery requires HTTP transport")
+	}
+	return r.discoverMCP(ctx, Request{Plan: &contract.Plan{Profile: profile}}, "discovery", connection, true)
+}
+
+func (r *Runner) discoverMCP(ctx context.Context, req Request, name string, connection contract.MCPConnection, all bool) (snapshots map[string]contract.ToolSnapshot, err error) {
 	cache := r.cache()
 	select {
 	case cache.discoveryGate <- struct{}{}:
@@ -824,6 +836,19 @@ func (r *Runner) discoverMCP(ctx context.Context, req Request, name string, conn
 		if seen[tool.Name] {
 			return nil, fmt.Errorf("MCP catalog contains duplicate tool %q", tool.Name)
 		}
+		if all && !mcpToolName.MatchString(tool.Name) {
+			return nil, fmt.Errorf("MCP catalog contains an unsupported tool name")
+		}
+		if all {
+			if _, ok := tool.InputSchema.(map[string]any); !ok {
+				return nil, fmt.Errorf("MCP tool input schema must be an object")
+			}
+			if tool.OutputSchema != nil {
+				if _, ok := tool.OutputSchema.(map[string]any); !ok {
+					return nil, fmt.Errorf("MCP tool output schema must be an object")
+				}
+			}
+		}
 		seen[tool.Name] = true
 		if len(seen) > 4096 {
 			return nil, fmt.Errorf("MCP catalog exceeds discovery limits")
@@ -836,11 +861,15 @@ func (r *Runner) discoverMCP(ctx context.Context, req Request, name string, conn
 		if err != nil {
 			return nil, err
 		}
-		totalBytes += len(input) + len(output) + len(tool.Description) + len(tool.Name)
+		title := tool.Title
+		if title == "" && tool.Annotations != nil {
+			title = tool.Annotations.Title
+		}
+		totalBytes += len(input) + len(output) + len(tool.Description) + len(tool.Name) + len(title)
 		if len(input) > 1<<20 || len(output) > 1<<20 || totalBytes > 8<<20 {
 			return nil, fmt.Errorf("MCP discovery exceeds capability snapshot limits")
 		}
-		if !slices.Contains(connection.AllowedTools, tool.Name) {
+		if !all && !slices.Contains(connection.AllowedTools, tool.Name) {
 			continue
 		}
 		if len(snapshots) >= 1024 {
@@ -851,7 +880,7 @@ func (r *Runner) discoverMCP(ctx context.Context, req Request, name string, conn
 				return nil, err
 			}
 		}
-		snapshots[tool.Name] = contract.ToolSnapshot{InputSchema: input, OutputSchema: output, Description: tool.Description}
+		snapshots[tool.Name] = contract.ToolSnapshot{Title: title, InputSchema: input, OutputSchema: output, Description: tool.Description}
 	}
 
 	for _, name := range connection.AllowedTools {

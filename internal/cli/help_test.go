@@ -35,6 +35,25 @@ func TestHelpExplainsWorkflowAndResourceDefaults(t *testing.T) {
 	}
 }
 
+func TestProviderSetupHelpAndEarlyValidation(t *testing.T) {
+	for _, command := range []string{"quickstart", "doctor"} {
+		out, _, err := invoke(t, []string{command, "--help"}, "")
+		for _, want := range []string{"--base-url", "--model", "--provider", "codex", "claude", "openai-compatible", "API key"} {
+			if err != nil || !strings.Contains(out, want) {
+				t.Fatalf("%s help missing %q: %s %v", command, want, out, err)
+			}
+		}
+		_, _, err = invoke(t, []string{command, "--provider", "claude", "--model", "fixture-model", "--base-url", "https://gateway.example/v1"}, "")
+		if err == nil || !strings.Contains(err.Error(), "not used by claude") {
+			t.Fatalf("%s allowed an API endpoint for the Claude account connection: %v", command, err)
+		}
+		_, _, err = invoke(t, []string{command, "--provider", "openai-compatible", "--model", "org/model"}, "")
+		if err == nil || !strings.Contains(err.Error(), "--base-url is required") {
+			t.Fatalf("%s did not explain compatible server setup: %v", command, err)
+		}
+	}
+}
+
 func TestResourceDefaultsAndListAliases(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("cursor") != "next" {

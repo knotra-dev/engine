@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"os/exec"
 	"slices"
 
 	"github.com/knotra-dev/engine/internal/contract"
@@ -67,10 +68,17 @@ func (s *Server) resources(w http.ResponseWriter, _ *http.Request) {
 				switch kind {
 				case "model":
 					m := p.Spec.Models[id]
-					available = slices.Contains([]string{"ollama", "openai", "anthropic"}, m.Provider) && credentialsReady(m.Auth)
-					if m.Provider != "ollama" {
+					available = slices.Contains([]string{"ollama", "openai", "anthropic", "openai_compatible", "codex", "claude"}, m.Provider) && credentialsReady(m.Auth)
+					if m.Provider == "openai" || m.Provider == "anthropic" {
 						_, hasKey := m.Auth["key"]
 						available = available && hasKey
+					}
+					if m.Provider == "openai_compatible" {
+						available = available && m.BaseURL != ""
+					}
+					if m.Provider == "codex" || m.Provider == "claude" {
+						_, err := exec.LookPath(m.Provider)
+						available = err == nil && len(m.Auth) == 0 && m.BaseURL == "" && len(m.Parameters) == 0
 					}
 				case "mcp":
 					m := p.Spec.MCP[id]

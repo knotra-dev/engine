@@ -34,9 +34,6 @@ func (s *commandState) bootstrapCommand(checkOnly bool) *cobra.Command {
 		if s.json {
 			return fmt.Errorf("%s prints setup progress; omit --json", name)
 		}
-		if config.Model == "" && config.Provider == "ollama" {
-			config.Model = "qwen3.5:9b"
-		}
 		setup := &bootstrap.Setup{Config: config, Out: s.options.Out, Getenv: s.options.Getenv}
 		checkCtx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
 		err := setup.Doctor(checkCtx)
@@ -48,8 +45,10 @@ func (s *commandState) bootstrapCommand(checkOnly bool) *cobra.Command {
 	}}
 	f := cmd.Flags()
 	f.StringVar(&config.Dir, "dir", config.Dir, "Persistent quickstart directory (keep it to retain runs and artifacts)")
-	f.StringVar(&config.Provider, "provider", config.Provider, "Model provider: ollama, openai or anthropic")
-	f.StringVar(&config.Model, "model", "", "Model ID; defaults to qwen3.5:9b for Ollama, required for cloud providers")
+	f.StringVar(&config.Provider, "provider", config.Provider, "Connection: codex, claude, ollama, openai-compatible, openai or anthropic")
+	f.StringVar(&config.Model, "model", "", "Model ID; CLI account default for Codex/Claude, qwen3.5:9b for Ollama, required for API providers")
+	f.StringVar(&config.BaseURL, "base-url", "", "API base URL; required for openai-compatible Chat Completions servers, usually ending in /v1")
+	f.StringVar(&config.ConnectionsFile, "connections-file", "", "Saved model sources and MCP servers with environment credential references; starts infrastructure independently of model availability")
 	f.StringVar(&config.HelperPath, "sandbox-helper", s.env("KNOTRA_SANDBOX_HELPER", ""), "Linux helper; otherwise select it from the release bundle")
 	f.IntVar(&config.PostgresPort, "postgres-port", config.PostgresPort, "Local PostgreSQL port")
 	if !checkOnly {
@@ -79,6 +78,10 @@ func (s *commandState) quickstart(ctx context.Context, setup *bootstrap.Setup, l
 		return err
 	}
 	config := setup.Config
+	profilePath, err := setup.ProfilePath()
+	if err != nil {
+		return err
+	}
 	logfile, err := os.OpenFile(filepath.Join(config.Dir, "engine.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
 		return err
@@ -90,8 +93,10 @@ func (s *commandState) quickstart(ctx context.Context, setup *bootstrap.Setup, l
 		done <- app.Serve(serviceCtx, app.Options{
 			Listen: listen, DatabaseURL: dsn,
 			DataDir:    filepath.Join(config.Dir, "engine"),
-			HelperPath: config.HelperPath, Profiles: []string{filepath.Join(config.Dir, "profile.json")},
+			HelperPath: config.HelperPath, Profiles: []string{profilePath},
 			Version: s.options.Version, CORSOrigin: cors,
+			ManagedToken:         s.options.Getenv("KNOTRA_DESKTOP_CONTROL_TOKEN"),
+			ManagedHoldAdmission: s.options.Getenv("KNOTRA_DESKTOP_HOLD_ADMISSION") == "1",
 		}, slog.New(slog.NewJSONHandler(logfile, nil)))
 		close(done)
 	}()

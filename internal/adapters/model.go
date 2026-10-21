@@ -66,13 +66,18 @@ func (r *Runner) chat(
 	if err != nil {
 		return message{}, err
 	}
-	path, body, err := modelRequest(c, messages, tools, format)
-	if err != nil {
-		return message{}, err
-	}
-	data, err := json.Marshal(body)
-	if err != nil {
-		return message{}, err
+	var path string
+	var data []byte
+	if !cliModelProvider(c.Provider) {
+		var body any
+		path, body, err = modelRequest(c, messages, tools, format)
+		if err != nil {
+			return message{}, err
+		}
+		data, err = json.Marshal(body)
+		if err != nil {
+			return message{}, err
+		}
 	}
 	op := Operation{ID: operationID(req, fmt.Sprintf("model/%d", step), true), Kind: "model", Effect: "read"}
 	var duration, firstToken time.Duration
@@ -97,13 +102,16 @@ func (r *Runner) chat(
 				return nil, failure("RESOURCE_CHANGED", fmt.Errorf("model digest changed after admission"))
 			}
 		}
-		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.BaseURL, "/")+path, bytes.NewReader(data))
-		if err != nil {
-			return nil, err
-		}
-		httpReq.Header.Set("Content-Type", "application/json")
-		if err := r.modelAuth(req.Plan.Profile, c, httpReq); err != nil {
-			return nil, err
+		var httpReq *http.Request
+		if !cliModelProvider(c.Provider) {
+			httpReq, err = http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.BaseURL, "/")+path, bytes.NewReader(data))
+			if err != nil {
+				return nil, err
+			}
+			httpReq.Header.Set("Content-Type", "application/json")
+			if err := r.modelAuth(req.Plan.Profile, c, httpReq); err != nil {
+				return nil, err
+			}
 		}
 		visibleMessages := make([]map[string]string, 0, len(messages))
 		for _, msg := range messages {
@@ -118,20 +126,28 @@ func (r *Runner) chat(
 		started := time.Now()
 		startedAt = started
 		executed = true
-		client := r.httpClient()
-		res, err := client.Do(httpReq)
-		if err != nil {
-			return nil, fmt.Errorf("model request failed: %w", err)
-		}
-		defer func() { _ = res.Body.Close() }()
-		if res.StatusCode != http.StatusOK {
-			if c.Provider == "ollama" {
-				return nil, fmt.Errorf("model returned HTTP %d", res.StatusCode)
+		var result chatResponse
+		if cliModelProvider(c.Provider) {
+			result, err = r.cliResponse(ctx, c, messages, tools, format)
+			for i := range result.Message.ToolCalls {
+				result.Message.ToolCalls[i].ID = fmt.Sprintf("cli_%d_%d", step, i)
 			}
-			return nil, modelHTTPFailure(res.StatusCode)
+			duration = time.Since(started)
+		} else {
+			res, requestErr := r.httpClient().Do(httpReq)
+			if requestErr != nil {
+				return nil, fmt.Errorf("model request failed: %w", requestErr)
+			}
+			defer func() { _ = res.Body.Close() }()
+			if res.StatusCode != http.StatusOK {
+				if c.Provider == "ollama" {
+					return nil, fmt.Errorf("model returned HTTP %d", res.StatusCode)
+				}
+				return nil, modelHTTPFailure(res.StatusCode)
+			}
+			result, firstToken, err = readModelResponse(ctx, c.Provider, res, started, req.observation, op.ID, step+1)
+			duration = time.Since(started)
 		}
-		result, first, err := readModelResponse(ctx, c.Provider, res, started, req.observation, op.ID, step+1)
-		duration, firstToken = time.Since(started), first
 		if err != nil {
 			var invalid *Failure
 			if errors.As(err, &invalid) && invalid.Code == "OUTPUT_INVALID" {
@@ -153,7 +169,7 @@ func (r *Runner) chat(
 	if !result.Done || result.DoneReason == "length" || result.Error != "" {
 		return message{}, failure("OUTPUT_INVALID", fmt.Errorf("model did not return a complete response"))
 	}
-	if len(format) > 0 && c.Provider != "ollama" {
+	if len(format) > 0 && c.Provider != "ollama" && !cliModelProvider(c.Provider) {
 		if len(result.Message.ToolCalls) != 1 || result.Message.ToolCalls[0].Function.Name != structuredOutputTool {
 			return message{}, failure("OUTPUT_INVALID", fmt.Errorf("model did not call the structured output tool"))
 		}

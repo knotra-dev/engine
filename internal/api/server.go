@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -34,6 +35,7 @@ type Server struct {
 	Artifacts        store.Artifacts
 	Profiles         map[string]contract.Profile
 	Token            string
+	ManagedToken     string
 	Version          string
 	CORSOrigin       string
 	Admit            func(context.Context, *contract.Plan) error
@@ -41,6 +43,8 @@ type Server struct {
 	ExecutionTimeout time.Duration
 	Wake             store.EnqueueWake
 	Log              *slog.Logger
+	admissionMu      sync.RWMutex
+	restartPrepared  bool
 }
 
 func (s *Server) Handler() http.Handler {
@@ -67,6 +71,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/artifacts", s.artifacts)
 	mux.HandleFunc("GET /v1/artifacts/{id}", s.artifact)
 	mux.HandleFunc("GET /v1/artifacts/{id}/content", s.content)
+	if s.ManagedToken != "" {
+		mux.HandleFunc("POST /v1/managed/prepare-restart", s.prepareRestart)
+		mux.HandleFunc("POST /v1/managed/cancel-restart", s.cancelRestart)
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		if origin := r.Header.Get("Origin"); origin != "" {
@@ -81,6 +89,19 @@ func (s *Server) Handler() http.Handler {
 		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/v1/managed/") {
+			if s.ManagedToken == "" {
+				http.NotFound(w, r)
+				return
+			}
+			token, bearer := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+			if !bearer || subtle.ConstantTimeCompare([]byte(token), []byte(s.ManagedToken)) != 1 {
+				s.fail(w, 401, "UNAUTHENTICATED", "valid managed control token required", nil)
+				return
+			}
+			mux.ServeHTTP(w, r)
 			return
 		}
 		if s.Token != "" {
@@ -119,6 +140,8 @@ func (s *Server) fail(w http.ResponseWriter, status int, code, message string, d
 
 func (s *Server) err(w http.ResponseWriter, e error) {
 	switch {
+	case errors.Is(e, errRestartPrepared):
+		s.fail(w, 503, "UNAVAILABLE", "the local engine is applying saved model sources; retry shortly", nil)
 	case errors.Is(e, store.ErrNotFound):
 		s.fail(w, 404, "NOT_FOUND", "object not found", nil)
 	case errors.Is(e, store.ErrConflict):

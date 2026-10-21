@@ -338,6 +338,7 @@ type RuntimeSnapshot struct {
 }
 
 type ToolSnapshot struct {
+	Title        string          `json:"title,omitempty"`
 	InputSchema  json.RawMessage `json:"inputSchema"`
 	OutputSchema json.RawMessage `json:"outputSchema,omitempty"`
 	Description  string          `json:"description,omitempty"`

@@ -55,3 +55,7 @@ SELECT run_id,instance_id,number,outcome_key,owner,ownership_generation,state FR
 -- name: MaximumActiveExecutionDurationMicros :one
 SELECT COALESCE(max((extract(epoch FROM (execution_deadline-admitted_at))*1000000)::bigint),0)::bigint
 FROM knotra_runs WHERE backend='river' AND document->>'status' NOT IN ('succeeded','failed','cancelled','skipped');
+
+-- name: CountUnfinishedRuns :one
+SELECT count(*) FROM knotra_runs
+WHERE COALESCE(document->>'status','') NOT IN ('succeeded','failed','cancelled','skipped');
