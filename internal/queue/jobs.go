@@ -96,7 +96,13 @@ func (a CleanupArgs) Validate() error {
 		return err
 	}
 	id, err := uuid.Parse(a.ResourceID)
-	if err != nil || id.String() != a.ResourceID || a.HostID == "" || a.WorkerID == "" || a.OwnershipGeneration < 1 || a.DispatchGeneration < 1 || a.RoutingVersion != RoutingVersion {
+	if err != nil ||
+		id.String() != a.ResourceID ||
+		a.HostID == "" ||
+		a.WorkerID == "" ||
+		a.OwnershipGeneration < 1 ||
+		a.DispatchGeneration < 1 ||
+		a.RoutingVersion != RoutingVersion {
 		return errors.New("invalid cleanup identity or routing version")
 	}
 	return nil

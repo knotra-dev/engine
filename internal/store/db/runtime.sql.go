@@ -14,7 +14,7 @@ import (
 
 const clearAttemptDispatch = `-- name: ClearAttemptDispatch :execresult
 UPDATE knotra_execution_attempts SET dispatch_pending=false
-			WHERE run_id=$1 AND instance_id=$2 AND number=$3
+WHERE run_id=$1 AND instance_id=$2 AND number=$3
 `
 
 type ClearAttemptDispatchParams struct {
@@ -60,7 +60,7 @@ func (q *Queries) CountUnfinishedRuns(ctx context.Context) (int64, error) {
 
 const insertExecutionTimer = `-- name: InsertExecutionTimer :execresult
 INSERT INTO knotra_execution_timers(run_id,id,generation,instance_id,kind,due_at)
-			VALUES($1,$2,$3,$4,$5,$6)
+VALUES($1,$2,$3,$4,$5,$6)
 `
 
 type InsertExecutionTimerParams struct {
@@ -85,7 +85,7 @@ func (q *Queries) InsertExecutionTimer(ctx context.Context, arg InsertExecutionT
 
 const insertNodeDeadline = `-- name: InsertNodeDeadline :execresult
 INSERT INTO knotra_execution_timers(run_id,id,generation,instance_id,kind,due_at)
-				VALUES($1,$2,1,$3,'node_deadline',$4) ON CONFLICT DO NOTHING
+VALUES($1,$2,1,$3,'node_deadline',$4) ON CONFLICT DO NOTHING
 `
 
 type InsertNodeDeadlineParams struct {
@@ -133,8 +133,8 @@ func (q *Queries) ListDueTimerRuns(ctx context.Context, runID string) ([]string,
 
 const listExpiredOutcomeAttempts = `-- name: ListExpiredOutcomeAttempts :many
 SELECT run_id,instance_id,number,outcome_key,owner,ownership_generation,state FROM knotra_execution_attempts
-		WHERE outcome IS NULL AND owner IS NOT NULL AND lease_expires_at<=clock_timestamp()
-		AND outcome_key>$1 ORDER BY outcome_key LIMIT 64
+WHERE outcome IS NULL AND owner IS NOT NULL AND lease_expires_at<=clock_timestamp()
+    AND outcome_key>$1 ORDER BY outcome_key LIMIT 64
 `
 
 type ListExpiredOutcomeAttemptsRow struct {
@@ -199,7 +199,7 @@ func (q *Queries) PauseRunAdmission(ctx context.Context, id string) (pgconn.Comm
 
 const reserveNodeInstances = `-- name: ReserveNodeInstances :execresult
 UPDATE knotra_execution_scopes SET materialized_instances=materialized_instances+$3
-				WHERE run_id=$1 AND id=$2 AND materialized_instances+$3<=(limits->>'maxNodeInstances')::integer
+WHERE run_id=$1 AND id=$2 AND materialized_instances+$3<=(limits->>'maxNodeInstances')::integer
 `
 
 type ReserveNodeInstancesParams struct {
@@ -222,7 +222,7 @@ func (q *Queries) ResumeRunAdmission(ctx context.Context, id string) (pgconn.Com
 
 const setAttemptDispatchGeneration = `-- name: SetAttemptDispatchGeneration :execresult
 UPDATE knotra_execution_attempts SET dispatch_generation=$4,dispatch_pending=false
-			WHERE run_id=$1 AND instance_id=$2 AND number=$3
+WHERE run_id=$1 AND instance_id=$2 AND number=$3
 `
 
 type SetAttemptDispatchGenerationParams struct {

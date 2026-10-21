@@ -28,6 +28,7 @@ func (r *Runtime) cleanup(ctx context.Context, job *river.Job[CleanupArgs]) (err
 	if !args.Portable && args.HostID != r.HostID {
 		return river.JobCancel(errors.New("cleanup delivery belongs to another host"))
 	}
+
 	var resource *execution.ResourceRecord
 	err = pgx.BeginFunc(ctx, r.Store.Pool, func(tx pgx.Tx) error {
 		var err error
@@ -44,7 +45,13 @@ func (r *Runtime) cleanup(ctx context.Context, job *river.Job[CleanupArgs]) (err
 		trace.SpanFromContext(ctx).SetAttributes(telemetry.OwnershipAttributes(resource.Ownership)...)
 		trace.SpanFromContext(ctx).SetAttributes(attribute.String("knotra.actor.id", r.WorkerID))
 		defer func() {
-			telemetry.Event(ctx, telemetry.OwnershipLogger(r.Host.Log, resource.Ownership), "resource.cleanup", err, attribute.String("knotra.resource.id", resource.ID))
+			telemetry.Event(
+				ctx,
+				telemetry.OwnershipLogger(r.Host.Log, resource.Ownership),
+				"resource.cleanup",
+				err,
+				attribute.String("knotra.resource.id", resource.ID),
+			)
 		}()
 		if resource.Kind == "mcp_http" {
 			if resource.MCP == nil {
@@ -71,7 +78,17 @@ func (r *Runtime) cleanup(ctx context.Context, job *river.Job[CleanupArgs]) (err
 	}
 	return pgx.BeginFunc(ctx, r.Store.Pool, func(tx pgx.Tx) error {
 		if resource != nil {
-			if _, err := db.New(tx).CloseCleanedResource(ctx, db.CloseCleanedResourceParams{ID: resource.ID, EngineID: resource.EngineID, HostID: resource.HostID, WorkerID: resource.Ownership.WorkerID, OwnershipGeneration: resource.Ownership.Generation, CleanupGeneration: resource.DispatchGeneration}); err != nil {
+			if _, err := db.New(tx).CloseCleanedResource(
+				ctx,
+				db.CloseCleanedResourceParams{
+					ID:                  resource.ID,
+					EngineID:            resource.EngineID,
+					HostID:              resource.HostID,
+					WorkerID:            resource.Ownership.WorkerID,
+					OwnershipGeneration: resource.Ownership.Generation,
+					CleanupGeneration:   resource.DispatchGeneration,
+				},
+			); err != nil {
 				return err
 			}
 		}
@@ -83,10 +100,14 @@ func (r *Runtime) cleanup(ctx context.Context, job *river.Job[CleanupArgs]) (err
 // The cursor bounds each scan even when live resources fill earlier pages.
 // Native delivery repair changes only cleanup generation, never resource ownership.
 func (r *Runtime) reconcileResources(ctx context.Context) error {
-	rows, err := db.New(r.Store.Pool).ReadResourceCleanupCandidates(ctx, db.ReadResourceCleanupCandidatesParams{EngineID: r.Store.EngineID, HostID: r.HostID, Cursor: r.resourceCursor})
+	rows, err := db.New(r.Store.Pool).ReadResourceCleanupCandidates(
+		ctx,
+		db.ReadResourceCleanupCandidatesParams{EngineID: r.Store.EngineID, HostID: r.HostID, Cursor: r.resourceCursor},
+	)
 	if err != nil {
 		return err
 	}
+
 	for _, row := range rows {
 		err := pgx.BeginFunc(ctx, r.Store.Pool, func(tx pgx.Tx) error {
 			resource, err := r.Store.ClaimResourceCleanupTx(ctx, tx, row.ID, row.HostID, row.WorkerID, row.OwnershipGeneration, 0)
@@ -128,7 +149,15 @@ func (r *Runtime) reconcilePhysicalResources(ctx context.Context) error {
 }
 
 func (r *Runtime) enqueueResourceCleanup(ctx context.Context, tx pgx.Tx, resource execution.ResourceRecord) error {
-	args := CleanupArgs{HostID: resource.HostID, Portable: resource.Kind == "mcp_http", WorkerID: resource.Ownership.WorkerID, ResourceID: resource.ID, OwnershipGeneration: resource.Ownership.Generation, DispatchGeneration: resource.DispatchGeneration, RoutingVersion: RoutingVersion}
+	args := CleanupArgs{
+		HostID:              resource.HostID,
+		Portable:            resource.Kind == "mcp_http",
+		WorkerID:            resource.Ownership.WorkerID,
+		ResourceID:          resource.ID,
+		OwnershipGeneration: resource.Ownership.Generation,
+		DispatchGeneration:  resource.DispatchGeneration,
+		RoutingVersion:      RoutingVersion,
+	}
 	now, err := db.New(tx).DatabaseTime(ctx)
 	if err != nil {
 		return err
@@ -154,6 +183,7 @@ func (r *Runtime) reconcileSessions(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
+
 	for _, key := range keys {
 		r.sessionCursor = key
 		runID, _, _ := strings.Cut(key, "/")

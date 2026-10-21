@@ -33,6 +33,7 @@ func TestCommandsSurviveRestart(t *testing.T) {
 	t.Setenv("KNOTRA_COMMAND_FIXTURE_KEY", "fixture-key")
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
+
 	var calls atomic.Int32
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodGet {
@@ -41,14 +42,23 @@ func TestCommandsSurviveRestart(t *testing.T) {
 		}
 		calls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprint(w, `{"status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"knotra_output","arguments":"{\"answer\":42}"}]}`)
+		_, _ = fmt.Fprint(
+			w,
+			`{"status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"knotra_output","arguments":"{\"answer\":42}"}]}`,
+		)
 	}))
 	defer provider.Close()
+
 	work := t.TempDir()
 	profile := recoveryProfile()
 	profile.Spec.Sandboxes = nil
 	profile.Spec.Secrets = map[string]contract.SecretSource{"fixture": {Env: "KNOTRA_COMMAND_FIXTURE_KEY"}}
-	profile.Spec.Models = map[string]contract.ModelConnection{"cloud": {Provider: "openai", Model: "fixture-model", BaseURL: provider.URL, Auth: map[string]contract.Credential{"key": {SecretRef: "fixture"}}}}
+	profile.Spec.Models = map[string]contract.ModelConnection{"cloud": {
+		Provider: "openai",
+		Model:    "fixture-model",
+		BaseURL:  provider.URL,
+		Auth:     map[string]contract.Credential{"key": {SecretRef: "fixture"}},
+	}}
 	profilePath := filepath.Join(work, "profile.json")
 	writeJSON(t, profilePath, profile)
 	options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx),
@@ -62,6 +72,7 @@ func TestCommandsSurviveRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer admin.Close()
+
 	// A provider reply reaches the host but its journal commit fails. The
 	// resulting open resolution must survive the process restart.
 	if _, err := admin.Pool.Exec(ctx, `CREATE FUNCTION lose_routing_reply() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
@@ -71,7 +82,11 @@ func TestCommandsSurviveRestart(t *testing.T) {
 	}
 	define := func(source string) string {
 		var result struct{ Definition protocol.Definition }
-		pkg := contract.Package{Entrypoint: "pipeline.yaml", Source: source, Files: []contract.File{{Path: "pipeline.yaml", Content: []byte(source)}}}
+		pkg := contract.Package{
+			Entrypoint: "pipeline.yaml",
+			Source:     source,
+			Files:      []contract.File{{Path: "pipeline.yaml", Content: []byte(source)}},
+		}
 		if err := api.Command(ctx, "/definitions", map[string]any{"package": pkg}, uuid.NewString(), &result); err != nil {
 			t.Fatal(err)
 		}
@@ -81,7 +96,13 @@ func TestCommandsSurviveRestart(t *testing.T) {
 	modelDefinition := define(routingModelPipeline)
 	start := func(definition string) protocol.HumanRequest {
 		var accepted struct{ Run protocol.Run }
-		if err := api.Command(ctx, "/runs", map[string]any{"definitionId": definition, "profile": profile.Metadata.Name}, uuid.NewString(), &accepted); err != nil {
+		if err := api.Command(
+			ctx,
+			"/runs",
+			map[string]any{"definitionId": definition, "profile": profile.Metadata.Name},
+			uuid.NewString(),
+			&accepted,
+		); err != nil {
 			t.Fatal(err)
 		}
 		if definition == modelDefinition {
@@ -100,7 +121,11 @@ func TestCommandsSurviveRestart(t *testing.T) {
 				}
 			}
 			var requestID string
-			if err := admin.Pool.QueryRow(ctx, "SELECT id FROM knotra_requests WHERE run_id=$1 AND kind='resolution' AND status='open'", accepted.Run.ID).Scan(&requestID); err != nil {
+			if err := admin.Pool.QueryRow(
+				ctx,
+				"SELECT id FROM knotra_requests WHERE run_id=$1 AND kind='resolution' AND status='open'",
+				accepted.Run.ID,
+			).Scan(&requestID); err != nil {
 				t.Fatal(err)
 			}
 			request, err := admin.Request(ctx, requestID)
@@ -110,7 +135,13 @@ func TestCommandsSurviveRestart(t *testing.T) {
 			if request.Kind != "resolution" || request.Failure == nil || !request.Failure.Unknown {
 				t.Fatalf("provider reply was not retained as uncertain: %+v", request)
 			}
-			return protocol.HumanRequest{ID: request.ID, RunID: request.RunID, InstanceID: request.InstanceID, Deadline: request.Deadline, Status: request.Status}
+			return protocol.HumanRequest{
+				ID:         request.ID,
+				RunID:      request.RunID,
+				InstanceID: request.InstanceID,
+				Deadline:   request.Deadline,
+				Status:     request.Status,
+			}
 		}
 		return awaitHuman(t, ctx, api, accepted.Run.ID)
 	}
@@ -124,7 +155,9 @@ func TestCommandsSurviveRestart(t *testing.T) {
 		Backend        string
 		WorkerBackends []string
 	}
-	if err := api.Get(ctx, "/info", &info); err != nil || info.Backend != execution.BackendRiver || !reflect.DeepEqual(info.WorkerBackends, []string{execution.BackendRiver}) {
+	if err := api.Get(ctx, "/info", &info); err != nil ||
+		info.Backend != execution.BackendRiver ||
+		!reflect.DeepEqual(info.WorkerBackends, []string{execution.BackendRiver}) {
 		t.Fatalf("workers=%+v error=%v", info, err)
 	}
 	for _, request := range first {
@@ -133,7 +166,14 @@ func TestCommandsSurviveRestart(t *testing.T) {
 			t.Fatalf("recovered request=%+v error=%v", recovered, err)
 		}
 	}
-	replayed := readEventsUntil(t, ctx, api, first[0].RunID, "", func(event protocol.Event) bool { return event.ID == prefix[len(prefix)-1].ID })
+	replayed := readEventsUntil(
+		t,
+		ctx,
+		api,
+		first[0].RunID,
+		"",
+		func(event protocol.Event) bool { return event.ID == prefix[len(prefix)-1].ID },
+	)
 	if !reflect.DeepEqual(prefix, replayed) {
 		t.Fatal("SSE prefix changed after restart")
 	}
@@ -147,7 +187,11 @@ func TestCommandsSurviveRestart(t *testing.T) {
 				path, kind, expectedStatus, body = "/runs/"+request.RunID+"/cancel", "cancel", "cancelled", map[string]any{}
 			case 2:
 				path, kind = "/runs/"+request.RunID+"/instances/"+request.InstanceID+"/resolve", "resolve"
-				body = map[string]any{"outcome": "succeeded", "evidence": "fixture confirmed one physical generation", "outputs": map[string]any{"answer": 42}}
+				body = map[string]any{
+					"outcome":  "succeeded",
+					"evidence": "fixture confirmed one physical generation",
+					"outputs":  map[string]any{"answer": 42},
+				}
 			}
 			key := uuid.NewString()
 			var receipt, replay json.RawMessage
@@ -159,15 +203,21 @@ func TestCommandsSurviveRestart(t *testing.T) {
 				t.Fatalf("receipt replay changed: %s / %s error=%v", receipt, replay, err)
 			}
 			final := awaitTerminal(t, ctx, api, request.RunID)
-			if final.Status != expectedStatus || (index == 0 && string(final.Outputs["approved"]) != "true") || (index == 2 && string(final.Outputs["answer"]) != "42") {
+			if final.Status != expectedStatus ||
+				(index == 0 && string(final.Outputs["approved"]) != "true") ||
+				(index == 2 && string(final.Outputs["answer"]) != "42") {
 				t.Fatalf("command %s result=%+v", kind, final)
 			}
 			if index == 2 {
 				var debits, intents, attempts int
-				if err := admin.Pool.QueryRow(ctx, `SELECT
+				if err := admin.Pool.QueryRow(
+					ctx,
+					`SELECT
 					(SELECT COALESCE(sum(used),0) FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='model'),
 					(SELECT count(*) FROM knotra_operations WHERE run_id=$1 AND kind='model' AND NOT completed),
-					(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1 AND number=1)`, request.RunID).Scan(&debits, &intents, &attempts); err != nil {
+					(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1 AND number=1)`,
+					request.RunID,
+				).Scan(&debits, &intents, &attempts); err != nil {
 					t.Fatal(err)
 				}
 				if debits != 1 || intents != 1 || attempts != 1 {
@@ -175,7 +225,13 @@ func TestCommandsSurviveRestart(t *testing.T) {
 				}
 			}
 			if index == 1 {
-				err := api.Command(ctx, "/requests/"+request.ID+"/response", map[string]any{"outputs": map[string]any{"approved": true}}, uuid.NewString(), new(any))
+				err := api.Command(
+					ctx,
+					"/requests/"+request.ID+"/response",
+					map[string]any{"outputs": map[string]any{"approved": true}},
+					uuid.NewString(),
+					new(any),
+				)
 				var rejected *client.HTTPError
 				if !errors.As(err, &rejected) || rejected.Status != http.StatusConflict {
 					t.Fatalf("answer resurrected cancelled run: %v", err)

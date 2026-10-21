@@ -39,10 +39,12 @@ func (s *Store) RegisterWorker(ctx context.Context, id, hostID string, roles ...
 	if id == "" || hostID == "" {
 		return errors.New("worker requires an incarnation and host identity")
 	}
+
 	capabilities, err := json.Marshal(map[string]execution.Role{"role": role})
 	if err != nil {
 		return err
 	}
+
 	tag, err := db.New(s.Pool).RegisterWorker(ctx, db.RegisterWorkerParams{
 		ID:           id,
 		EngineID:     s.EngineID,
@@ -54,6 +56,7 @@ func (s *Store) RegisterWorker(ctx context.Context, id, hostID string, roles ...
 	if err == nil && tag.RowsAffected() != 1 {
 		return ErrConflict
 	}
+
 	return err
 }
 
@@ -81,6 +84,7 @@ func (s *Store) HeartbeatWorker(ctx context.Context, id string) error {
 		if !heartbeat.Add(execution.LeaseDuration).After(now) {
 			return ErrExecutionOwnership
 		}
+
 		_, err = db.New(tx).UpdateWorkerHeartbeat(ctx, db.UpdateWorkerHeartbeatParams{ID: id, HeartbeatAt: now})
 		return err
 	})
@@ -104,10 +108,12 @@ func (s *Store) ClaimAttempt(ctx context.Context, tx pgx.Tx, id execution.Attemp
 	if dispatchGeneration < 1 || workerID == "" {
 		return nil, errors.New("claim requires dispatch generation and worker incarnation")
 	}
+
 	inner, err := tx.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	defer func() { _ = inner.Rollback(ctx) }()
 	run, err := LockExecutionRun(ctx, inner, id.RunID)
 	if err != nil {
@@ -162,17 +168,27 @@ func (s *Store) ClaimAttempt(ctx context.Context, tx pgx.Tx, id execution.Attemp
 	if storedClaimAttempt.State != "ready" || storedClaimAttempt.DispatchGeneration != dispatchGeneration {
 		return nil, nil
 	}
+
 	var request execution.ExecuteRequest
 	if err := json.Unmarshal(storedClaimNode.ExecutionRequest, &request); err != nil {
 		return nil, err
 	}
-	if request.RunID != id.RunID || request.InstanceID != id.InstanceID || request.Attempt != id.Number || request.NodeID != storedClaimNode.NodeID || request.Pipeline != storedClaimNode.Pipeline || request.Ownership != nil || storedClaimNode.Deadline == nil || !request.Deadline.Equal(*storedClaimNode.Deadline) {
+	if request.RunID != id.RunID ||
+		request.InstanceID != id.InstanceID ||
+		request.Attempt != id.Number ||
+		request.NodeID != storedClaimNode.NodeID ||
+		request.Pipeline != storedClaimNode.Pipeline ||
+		request.Ownership != nil ||
+		storedClaimNode.Deadline == nil ||
+		!request.Deadline.Equal(*storedClaimNode.Deadline) {
 		return nil, fmt.Errorf("stored execution request does not match attempt %v", id)
 	}
+
 	var scopes []execution.BudgetScope
 	if err := json.Unmarshal(storedClaimNode.Scopes, &scopes); err != nil {
 		return nil, err
 	}
+
 	ids := make([]string, 0, len(scopes))
 	for _, scope := range scopes {
 		ids = append(ids, scope.ID)
@@ -180,6 +196,7 @@ func (s *Store) ClaimAttempt(ctx context.Context, tx pgx.Tx, id execution.Attemp
 	if len(ids) != len(request.Scopes) || !slices.Contains(ids, id.RunID) {
 		return nil, errors.New("attempt must reserve all enclosing scopes, including the root")
 	}
+
 	for i, scope := range request.Scopes {
 		if scope.ID != ids[i] || scope.ID == "" {
 			return nil, errors.New("attempt scope identity mismatch")
@@ -210,6 +227,7 @@ func (s *Store) ClaimAttempt(ctx context.Context, tx pgx.Tx, id execution.Attemp
 	if (storedClaimWorker.Draining && (run.SessionWorkerID == nil || *run.SessionWorkerID != workerID)) || !compatible {
 		return nil, nil
 	}
+
 	var sessionHeartbeat *time.Time
 	if run.SessionAffinity && run.SessionWorkerID != nil && *run.SessionWorkerID != workerID {
 		heartbeat, err := db.New(inner).ReadSessionWorker(ctx, *run.SessionWorkerID)
@@ -222,6 +240,7 @@ func (s *Store) ClaimAttempt(ctx context.Context, tx pgx.Tx, id execution.Attemp
 	if err != nil {
 		return nil, err
 	}
+
 	var found int
 	var full bool
 	for _, record := range rows {
@@ -250,6 +269,7 @@ func (s *Store) ClaimAttempt(ctx context.Context, tx pgx.Tx, id execution.Attemp
 	if found != len(ids) {
 		return nil, errors.New("missing enclosing execution scope")
 	}
+
 	storedDatabaseTime2, err := db.New(inner).DatabaseTime(ctx)
 	if err != nil {
 		return nil, err
@@ -257,7 +277,9 @@ func (s *Store) ClaimAttempt(ctx context.Context, tx pgx.Tx, id execution.Attemp
 
 	run.Now = storedDatabaseTime2
 
-	if !storedClaimWorker.HeartbeatAt.Add(execution.LeaseDuration).After(run.Now) || !storedClaimNode.Deadline.After(run.Now) || executionStopped(run) {
+	if !storedClaimWorker.HeartbeatAt.Add(execution.LeaseDuration).After(run.Now) ||
+		!storedClaimNode.Deadline.After(run.Now) ||
+		executionStopped(run) {
 		return nil, nil
 	}
 	if full {
@@ -266,7 +288,15 @@ func (s *Store) ClaimAttempt(ctx context.Context, tx pgx.Tx, id execution.Attemp
 		}
 		return nil, inner.Commit(ctx)
 	}
-	claim := &execution.Claim{Ownership: execution.Ownership{AttemptID: id, WorkerID: workerID, Generation: storedClaimAttempt.OwnershipGeneration + 1}, Request: request}
+
+	claim := &execution.Claim{
+		Ownership: execution.Ownership{
+			AttemptID:  id,
+			WorkerID:   workerID,
+			Generation: storedClaimAttempt.OwnershipGeneration + 1,
+		},
+		Request: request,
+	}
 	if run.SessionAffinity {
 		if run.SessionWorkerID == nil {
 			if _, err := db.New(inner).PinRunSessionWorker(ctx, db.PinRunSessionWorkerParams{ID: id.RunID, SessionWorkerID: new(workerID)}); err != nil {
@@ -284,6 +314,7 @@ func (s *Store) ClaimAttempt(ctx context.Context, tx pgx.Tx, id execution.Attemp
 	if err != nil {
 		return nil, err
 	}
+
 	claim.LeaseExpiresAt = minTime(run.Now.Add(execution.LeaseDuration), minTime(*storedClaimNode.Deadline, run.Deadline))
 	claim.Request.Ownership = &claim.Ownership
 	for _, scopeID := range ids {
@@ -320,9 +351,22 @@ func (s *Store) ClaimAttempt(ctx context.Context, tx pgx.Tx, id execution.Attemp
 	if _, err := db.New(inner).IncrementRunRevision(ctx, id.RunID); err != nil {
 		return nil, err
 	}
-	projection := execution.Projection{RunID: id.RunID, Kind: "node", InstanceID: id.InstanceID, NodeID: storedClaimNode.NodeID,
-		Pipeline: storedClaimNode.Pipeline, GraphPath: storedClaimNode.GraphPath + "/nodes/" + storedClaimNode.NodeID, IterationIndex: storedClaimNode.IterationIndex, NodeType: request.Node.Type,
-		Status: "running", Attempt: id.Number, Inputs: request.Inputs, Time: run.Now, StartedAt: startedAt}
+
+	projection := execution.Projection{
+		RunID:          id.RunID,
+		Kind:           "node",
+		InstanceID:     id.InstanceID,
+		NodeID:         storedClaimNode.NodeID,
+		Pipeline:       storedClaimNode.Pipeline,
+		GraphPath:      storedClaimNode.GraphPath + "/nodes/" + storedClaimNode.NodeID,
+		IterationIndex: storedClaimNode.IterationIndex,
+		NodeType:       request.Node.Type,
+		Status:         "running",
+		Attempt:        id.Number,
+		Inputs:         request.Inputs,
+		Time:           run.Now,
+		StartedAt:      startedAt,
+	}
 	if storedClaimNode.ParentInstanceID != nil {
 		projection.ParentInstanceID = *storedClaimNode.ParentInstanceID
 	}
@@ -332,6 +376,7 @@ func (s *Store) ClaimAttempt(ctx context.Context, tx pgx.Tx, id execution.Attemp
 	if err := inner.Commit(ctx); err != nil {
 		return nil, err
 	}
+
 	return claim, nil
 }
 
@@ -353,6 +398,7 @@ func (s *Store) LockOwnedAttempt(ctx context.Context, tx pgx.Tx, token execution
 	if err := token.Validate(); err != nil {
 		return execution.RunState{}, err
 	}
+
 	run, err := LockExecutionRun(ctx, tx, token.RunID)
 	if err != nil {
 		return run, err
@@ -373,6 +419,7 @@ func (s *Store) LockOwnedAttempt(ctx context.Context, tx pgx.Tx, token execution
 	if storedOwnedNode.State != "running" || storedOwnedNode.AttemptNumber != token.Number || storedOwnedNode.Deadline == nil {
 		return run, ErrExecutionOwnership
 	}
+
 	lease, err := db.New(tx).LockAttemptLease(ctx, db.LockAttemptLeaseParams{
 		RunID:               token.RunID,
 		InstanceID:          token.InstanceID,
@@ -389,6 +436,7 @@ func (s *Store) LockOwnedAttempt(ctx context.Context, tx pgx.Tx, token execution
 	if lease == nil {
 		return run, ErrExecutionOwnership
 	}
+
 	heartbeat, err := db.New(tx).ReadOwnedWorkerHeartbeat(ctx, db.ReadOwnedWorkerHeartbeatParams{
 		ID:                 token.WorkerID,
 		EngineID:           s.EngineID,
@@ -401,6 +449,7 @@ func (s *Store) LockOwnedAttempt(ctx context.Context, tx pgx.Tx, token execution
 	if err != nil {
 		return run, err
 	}
+
 	storedDatabaseTime3, err := db.New(tx).DatabaseTime(ctx)
 	if err != nil {
 		return run, err
@@ -408,9 +457,13 @@ func (s *Store) LockOwnedAttempt(ctx context.Context, tx pgx.Tx, token execution
 
 	run.Now = storedDatabaseTime3
 
-	if executionStopped(run) || !storedOwnedNode.Deadline.After(run.Now) || !lease.After(run.Now) || !heartbeat.Add(execution.LeaseDuration).After(run.Now) {
+	if executionStopped(run) ||
+		!storedOwnedNode.Deadline.After(run.Now) ||
+		!lease.After(run.Now) ||
+		!heartbeat.Add(execution.LeaseDuration).After(run.Now) {
 		return run, ErrExecutionOwnership
 	}
+
 	return run, nil
 }
 
@@ -445,10 +498,12 @@ func ReleaseAttemptSlots(ctx context.Context, tx pgx.Tx, token execution.Ownersh
 	if enqueue == nil {
 		return false, errors.New("slot release requires transactional wakeup")
 	}
+
 	inner, err := tx.Begin(ctx)
 	if err != nil {
 		return false, err
 	}
+
 	defer func() { _ = inner.Rollback(ctx) }()
 	run, err := LockExecutionRun(ctx, inner, token.RunID)
 	if err != nil {
@@ -457,6 +512,7 @@ func ReleaseAttemptSlots(ctx context.Context, tx pgx.Tx, token execution.Ownersh
 	if err := checkExecutionVersion(run); err != nil {
 		return false, err
 	}
+
 	var state string
 	state, err = db.New(inner).LockCompletedAttempt(ctx, db.LockCompletedAttemptParams{
 		RunID:               token.RunID,
@@ -474,6 +530,7 @@ func ReleaseAttemptSlots(ctx context.Context, tx pgx.Tx, token execution.Ownersh
 	if state == "claimed" || state == "ready" {
 		return false, ErrConflict
 	}
+
 	rows, err := db.New(inner).LockReservedScopeIDs(ctx, db.LockReservedScopeIDsParams{
 		RunID:               token.RunID,
 		InstanceID:          token.InstanceID,
@@ -483,6 +540,7 @@ func ReleaseAttemptSlots(ctx context.Context, tx pgx.Tx, token execution.Ownersh
 	if err != nil {
 		return false, err
 	}
+
 	var ids []string
 	for _, record := range rows {
 		id := record
@@ -492,6 +550,7 @@ func ReleaseAttemptSlots(ctx context.Context, tx pgx.Tx, token execution.Ownersh
 	if err != nil || len(ids) == 0 {
 		return false, err
 	}
+
 	for _, id := range ids {
 		if _, err := db.New(inner).DecreaseActiveAttempts(ctx, db.DecreaseActiveAttemptsParams{RunID: token.RunID, ID: id}); err != nil {
 			return false, err
@@ -508,5 +567,6 @@ func ReleaseAttemptSlots(ctx context.Context, tx pgx.Tx, token execution.Ownersh
 	if _, err := WakeExecution(ctx, inner, token.RunID, enqueue); err != nil {
 		return false, err
 	}
+
 	return true, inner.Commit(ctx)
 }

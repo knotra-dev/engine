@@ -26,6 +26,7 @@ def read_yaml(path):
 def main():
     manifest = json.loads((FIXTURES / "manifest.json").read_text(encoding="utf-8"))
     schema = json.loads((FIXTURES / manifest["schema"]).read_text(encoding="utf-8"))
+
     Draft202012Validator.check_schema(schema)
     validator = Draft202012Validator(schema)
     data_schema_validator = Draft202012Validator(
@@ -41,6 +42,7 @@ def main():
             failures.append(f"{case_id}: duplicate manifest ID")
         ids.add(case_id)
         expected = case["expected"]
+
         try:
             document = read_yaml(FIXTURES / case["document"])
             parsed = "accept"
@@ -73,6 +75,7 @@ def main():
                 failures.append(f"{case_id}: engine profile file is missing")
             if "packageRoot" not in case:
                 continue
+
             package_root = FIXTURES / case["packageRoot"]
             for filename in document["spec"].get("files", []):
                 if not (package_root / filename).is_file():
@@ -98,10 +101,12 @@ def main():
     )
     print("Semantic: NOT RUN (manifest expectations only)")
     print("Runtime/CEL/providers/MCP/commands: NOT RUN")
+
     if failures:
         for failure in failures:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
+
     print("PASS: all checked fixture expectations match")
     return 0
 

@@ -14,9 +14,21 @@ func TestMutationPresentation(t *testing.T) {
 		result map[string]any
 		want   []string
 	}{
-		{"pipeline", map[string]any{"definition": map[string]any{"id": "pipeline", "name": "Example\x1b[2J", "packageDigest": "digest"}}, []string{"Pipeline:", "pipeline", "Name:", "Example", "digest"}},
-		{"artifact", map[string]any{"artifact": map[string]any{"id": "artifact", "name": "report.txt", "mediaType": "text/plain", "size": float64(12)}}, []string{"Artifact:", "artifact", "report.txt", "text/plain", "12"}},
-		{"run", map[string]any{"run": map[string]any{"id": "run", "status": "succeeded", "profile": "local"}}, []string{"Run:", "run", "Status:", "succeeded", "local"}},
+		{
+			"pipeline",
+			map[string]any{"definition": map[string]any{"id": "pipeline", "name": "Example\x1b[2J", "packageDigest": "digest"}},
+			[]string{"Pipeline:", "pipeline", "Name:", "Example", "digest"},
+		},
+		{
+			"artifact",
+			map[string]any{"artifact": map[string]any{"id": "artifact", "name": "report.txt", "mediaType": "text/plain", "size": float64(12)}},
+			[]string{"Artifact:", "artifact", "report.txt", "text/plain", "12"},
+		},
+		{
+			"run",
+			map[string]any{"run": map[string]any{"id": "run", "status": "succeeded", "profile": "local"}},
+			[]string{"Run:", "run", "Status:", "succeeded", "local"},
+		},
 		{"action", map[string]any{"accepted": true, "runId": "run"}, []string{"Accepted:", "true", "Run:", "run"}},
 		{"response", map[string]any{"accepted": true, "requestId": "request"}, []string{"Accepted:", "true", "Request:", "request"}},
 	} {

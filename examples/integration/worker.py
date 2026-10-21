@@ -30,8 +30,10 @@ def execute(mode, values, artifacts):
         assert values["approved"] is True
         assert values["doubled"] == [4, 8, 12]
         assert values["iterations"] == 2
+
         report = Path(artifacts["report"]["path"]).read_text(encoding="utf-8")
         assert "12" in report and "3" in report
+
         total = sum(values["doubled"])
         report += f"\nDoubled total: {total}\nIterations: 2\nApproved: true\nRun marker: {values['marker']}\n"
         Path("final.md").write_text(report, encoding="utf-8")
@@ -51,6 +53,7 @@ if __name__ == "__main__":
         Path(os.environ["KNOTRA_INPUT_JSON"]).read_text(encoding="utf-8")
     )
     result = execute(sys.argv[1], context["values"], context["artifacts"])
+
     Path(os.environ["KNOTRA_OUTPUT_JSON"]).write_text(
         json.dumps(result), encoding="utf-8"
     )

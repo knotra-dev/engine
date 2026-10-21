@@ -37,7 +37,10 @@ func (q *Queries) EventSequenceExists(ctx context.Context, arg EventSequenceExis
 }
 
 const incrementBudget = `-- name: IncrementBudget :execresult
-INSERT INTO knotra_budgets(run_id,scope,kind,used) VALUES($1,$2,$3,1) ON CONFLICT(run_id,scope,kind) DO UPDATE SET used=knotra_budgets.used+1
+INSERT INTO knotra_budgets(run_id,scope,kind,used)
+VALUES($1,$2,$3,1)
+ON CONFLICT(run_id,scope,kind) DO UPDATE
+SET used=knotra_budgets.used+1
 `
 
 type IncrementBudgetParams struct {
@@ -139,7 +142,10 @@ func (q *Queries) LockTransactionKey(ctx context.Context, hashtextextended strin
 }
 
 const publishArtifact = `-- name: PublishArtifact :execresult
-UPDATE knotra_artifacts SET published=true WHERE id=$1 AND document->'origin'->>'runId'=$2::text
+UPDATE knotra_artifacts
+SET published=true
+WHERE id=$1
+    AND document->'origin'->>'runId'=$2::text
 `
 
 type PublishArtifactParams struct {
@@ -199,7 +205,11 @@ func (q *Queries) UpdateRunProjection(ctx context.Context, arg UpdateRunProjecti
 }
 
 const upsertInstanceProjection = `-- name: UpsertInstanceProjection :execresult
-INSERT INTO knotra_instances(run_id,id,sequence,document) VALUES($1,$2,$3,$4) ON CONFLICT(run_id,id) DO UPDATE SET sequence=EXCLUDED.sequence,document=EXCLUDED.document WHERE knotra_instances.sequence<EXCLUDED.sequence
+INSERT INTO knotra_instances(run_id,id,sequence,document)
+VALUES($1,$2,$3,$4)
+ON CONFLICT(run_id,id) DO UPDATE
+SET sequence=EXCLUDED.sequence,document=EXCLUDED.document
+WHERE knotra_instances.sequence<EXCLUDED.sequence
 `
 
 type UpsertInstanceProjectionParams struct {

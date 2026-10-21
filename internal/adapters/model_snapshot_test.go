@@ -75,7 +75,12 @@ spec:
 	}}
 	for _, id := range []string{"first", "second"} {
 		if id == "second" {
-			profile.Spec.Models["source"] = contract.ModelConnection{Provider: "anthropic", Model: "replacement-model", BaseURL: replacement.URL, Auth: map[string]contract.Credential{"key": {SecretRef: "source_key"}}}
+			profile.Spec.Models["source"] = contract.ModelConnection{
+				Provider: "anthropic",
+				Model:    "replacement-model",
+				BaseURL:  replacement.URL,
+				Auth:     map[string]contract.Credential{"key": {SecretRef: "source_key"}},
+			}
 			profile.Spec.Secrets["source_key"] = contract.SecretSource{Env: "REPLACEMENT_MODEL_KEY"}
 			// Later deliveries restore the saved plan, never the current profile.
 			data, err := json.Marshal(plan)
@@ -87,7 +92,16 @@ spec:
 				t.Fatal(err)
 			}
 		}
-		req := Request{RunID: "frozen-models", InstanceID: id, Attempt: 1, Pipeline: plan.Root, ScopeID: "root", Plan: plan, Node: plan.Pipelines[plan.Root].Spec.Nodes[id], Inputs: contract.Values{}}
+		req := Request{
+			RunID:      "frozen-models",
+			InstanceID: id,
+			Attempt:    1,
+			Pipeline:   plan.Root,
+			ScopeID:    "root",
+			Plan:       plan,
+			Node:       plan.Pipelines[plan.Root].Spec.Nodes[id],
+			Inputs:     contract.Values{},
+		}
 		values, err := runner.Execute(t.Context(), req)
 		if err != nil || string(values["answer"].JSON) != "42" {
 			t.Fatalf("%s delivery: %v %v", id, values, err)

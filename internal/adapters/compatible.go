@@ -97,8 +97,12 @@ func normalizeCompatible(response compatibleResponse) (chatResponse, error) {
 	if compatibleHasError(response.Error) || len(response.Choices) != 1 || response.Choices[0].Index != 0 {
 		return chatResponse{}, invalidModelResponse()
 	}
+
 	choice := response.Choices[0]
-	if choice.FinishReason == nil || choice.Message.Role != "assistant" || choice.Message.Refusal != "" || compatibleHasError(choice.Message.FunctionCall) {
+	if choice.FinishReason == nil ||
+		choice.Message.Role != "assistant" ||
+		choice.Message.Refusal != "" ||
+		compatibleHasError(choice.Message.FunctionCall) {
 		return chatResponse{}, invalidModelResponse()
 	}
 	if *choice.FinishReason != "stop" && *choice.FinishReason != "tool_calls" {
@@ -107,6 +111,7 @@ func normalizeCompatible(response compatibleResponse) (chatResponse, error) {
 	if (*choice.FinishReason == "tool_calls") != (len(choice.Message.ToolCalls) > 0) {
 		return chatResponse{}, invalidModelResponse()
 	}
+
 	result := chatResponse{Done: true, DoneReason: *choice.FinishReason, Message: message{Role: "assistant", Content: choice.Message.Content}}
 	ids := map[string]bool{}
 	for _, wire := range choice.Message.ToolCalls {
@@ -139,6 +144,7 @@ func readCompatibleResponse(ctx context.Context, res *http.Response, started tim
 		result, err := normalizeCompatible(response)
 		return result, 0, err
 	}
+
 	type streamTool struct {
 		id, kind        string
 		name, arguments strings.Builder
@@ -168,6 +174,7 @@ func readCompatibleResponse(ctx context.Context, res *http.Response, started tim
 			result, err := normalizeCompatible(response)
 			return "", &result, err
 		}
+
 		var event compatibleResponse
 		if json.Unmarshal(data, &event) != nil || compatibleHasError(event.Error) {
 			return "", nil, invalidModelResponse()
@@ -184,17 +191,20 @@ func readCompatibleResponse(ctx context.Context, res *http.Response, started tim
 		if finished || len(event.Choices) != 1 || event.Choices[0].Index != 0 {
 			return "", nil, invalidModelResponse()
 		}
+
 		choice := event.Choices[0]
 		delta := choice.Delta
 		if (delta.Role != "" && delta.Role != "assistant") || delta.Refusal != "" || compatibleHasError(delta.FunctionCall) {
 			return "", nil, invalidModelResponse()
 		}
+
 		_, _ = text.WriteString(delta.Content)
 		visible := delta.Content
 		for _, fragment := range delta.ToolCalls {
 			if fragment.Index == nil || *fragment.Index < 0 || (fragment.Type != "" && fragment.Type != "function") {
 				return "", nil, invalidModelResponse()
 			}
+
 			tool := tools[*fragment.Index]
 			if tool == nil {
 				tool = &streamTool{}

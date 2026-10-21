@@ -138,7 +138,13 @@ func (q *Queries) ListDefinitions(ctx context.Context, arg ListDefinitionsParams
 }
 
 const listEvents = `-- name: ListEvents :many
-SELECT id,document FROM knotra_events WHERE run_id=$1 AND id>$2 AND ($3::text='' OR document->>'instanceId'=$3) ORDER BY id LIMIT 100
+SELECT id,document
+FROM knotra_events
+WHERE run_id=$1
+    AND id>$2
+    AND ($3::text='' OR document->>'instanceId'=$3)
+ORDER BY id
+LIMIT 100
 `
 
 type ListEventsParams struct {
@@ -269,7 +275,11 @@ func (q *Queries) LockStoreSchema(ctx context.Context) (pgconn.CommandTag, error
 }
 
 const putDefinition = `-- name: PutDefinition :one
-INSERT INTO knotra_definitions(id,digest,document) VALUES($1,$2,$3) ON CONFLICT(digest) DO UPDATE SET digest=EXCLUDED.digest RETURNING document
+INSERT INTO knotra_definitions(id,digest,document)
+VALUES($1,$2,$3)
+ON CONFLICT(digest) DO UPDATE
+SET digest=EXCLUDED.digest
+RETURNING document
 `
 
 type PutDefinitionParams struct {

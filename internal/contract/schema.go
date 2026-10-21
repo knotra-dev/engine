@@ -144,6 +144,7 @@ func compileDataSchema(raw json.RawMessage) (*jsonschema.Schema, error) {
 	if len(raw) > 256<<10 {
 		return nil, fmt.Errorf("schema exceeds 256 KiB")
 	}
+
 	value, err := DecodeJSON(raw)
 	if err != nil {
 		return nil, err
@@ -151,6 +152,7 @@ func compileDataSchema(raw json.RawMessage) (*jsonschema.Schema, error) {
 	if _, err := validateDataProfile(value, value, map[string]int{}, 0); err != nil {
 		return nil, err
 	}
+
 	c := jsonschema.NewCompiler()
 	c.DefaultDraft(jsonschema.Draft2020)
 	c.UseLoader(forbiddenLoader{})
@@ -158,10 +160,12 @@ func compileDataSchema(raw json.RawMessage) (*jsonschema.Schema, error) {
 	if err := c.AddResource("urn:knotra:data", value); err != nil {
 		return nil, err
 	}
+
 	schema, err := c.Compile("urn:knotra:data")
 	if err != nil {
 		return nil, err
 	}
+
 	return dataSchemas.store(key, schema), nil
 }
 
@@ -198,10 +202,12 @@ func validateDataProfile(value, root any, refs map[string]int, depth int) (int, 
 	if _, ok := value.(bool); ok {
 		return 0, nil
 	}
+
 	m, ok := value.(map[string]any)
 	if !ok {
 		return 0, fmt.Errorf("schema must be boolean or object")
 	}
+
 	height := 0
 
 	for _, k := range sortedKeys(m) {
@@ -336,14 +342,17 @@ func ValidateValue(p Port, v Value) error {
 	if len(v.JSON) == 0 || len(v.Artifacts) != 0 || v.Collection {
 		return fmt.Errorf("expected JSON value")
 	}
+
 	data, err := DecodeJSON(v.JSON)
 	if err != nil {
 		return err
 	}
+
 	schema, err := compileDataSchema(p.Schema)
 	if err != nil {
 		return err
 	}
+
 	return schema.Validate(data)
 }
 
@@ -412,6 +421,7 @@ func ValidatePorts(ports map[string]Port, values Values, applyDefaults bool) (Va
 	if len(encoded) > MaxValueBytes {
 		return nil, fmt.Errorf("port values exceed 16 MiB")
 	}
+
 	return out, nil
 }
 

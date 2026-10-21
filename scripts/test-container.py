@@ -19,6 +19,7 @@ def docker(*args, check=True, timeout=180):
     )
     if check and result.returncode:
         raise RuntimeError(result.stderr.strip() or result.stdout.strip())
+
     return result
 
 
@@ -33,6 +34,7 @@ def wait_for(probe, timeout=60):
         except (RuntimeError, json.JSONDecodeError) as error:
             last_error = error
         time.sleep(0.5)
+
     raise TimeoutError(f"Container readiness timed out: {last_error}")
 
 
@@ -42,6 +44,7 @@ def check_entrypoint(image, work, name):
     cli_state = work / "cli-only"
     docker(*run, "--env", f"KNOTRA_DATA_DIR={cli_state}", image, "--version")
     assert not cli_state.exists(), "CLI-only commands created engine state"
+
     relative = docker(
         *run, "--env", "KNOTRA_DATA_DIR=relative", image, "serve", "--help", check=False
     )
@@ -59,8 +62,10 @@ def check_entrypoint(image, work, name):
     assert helper.name == "sandbox-helper-" + hashlib.sha256(original).hexdigest()
     assert helper.stat().st_mode & 0o111 == 0o111, "Sandbox UID cannot execute helper"
     modified = helper.stat().st_mtime_ns
+
     docker(*stage)
     assert helper.read_bytes() == original and helper.stat().st_mtime_ns == modified
+
     docker(
         *run,
         "--entrypoint",
@@ -74,6 +79,7 @@ def check_entrypoint(image, work, name):
     altered = docker(*stage, check=False)
     assert altered.returncode != 0 and "helper is altered" in altered.stderr, altered
     assert helper.read_bytes() == b"altered", "Altered helper was silently replaced"
+
     docker(
         *run,
         "--env",
@@ -265,13 +271,16 @@ def main():
         restored = cli("status", run["id"])["run"]
         assert restored["status"] == "succeeded", restored
         assert restored["outputs"] == run["outputs"], restored
+
         cli("artifacts", "download", artifact["id"], "--output", work / "restored.txt")
         assert (work / "restored.txt").read_bytes() == expected
+
         receipts = cli("operations", "list")["items"]
         assert any(
             item["id"] == result["operationId"] and item["status"] == "completed"
             for item in receipts
         ), receipts
+
         print(
             "Container smoke passed: mounts, execution, artifacts, cleanup and persistence.",
             flush=True,

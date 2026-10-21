@@ -16,81 +16,90 @@ func (s *commandState) runCommand() *cobra.Command {
 	var root, profile, definition, inputsFile, artifactsFile, key string
 	var inputs, artifacts []string
 	var wait, watch bool
-	cmd := &cobra.Command{Use: "run [PIPELINE.yaml]", Short: "Run a pipeline (defaults to pipeline.yaml)", Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		if len(args) > 0 && definition != "" {
-			return fmt.Errorf("a pipeline file and --definition cannot be combined")
-		}
-		if definition != "" && root != "" {
-			return fmt.Errorf("--package-root applies to pipeline files; omit it with --definition")
-		}
-		if profile == "" {
-			return fmt.Errorf("--profile or KNOTRA_PROFILE is required")
-		}
-		if wait && watch {
-			return fmt.Errorf("choose --wait or --watch")
-		}
-		in, err := s.object(inputsFile, inputs)
-		if err != nil {
-			return err
-		}
-		art, err := s.artifactBindings(artifactsFile, artifacts)
-		if err != nil {
-			return err
-		}
-		id := operationKey(key)
-		engine := s.client()
-		definitionID := definition
-		if definition == "" {
-			file := "pipeline.yaml"
-			if len(args) > 0 {
-				file = args[0]
+	cmd := &cobra.Command{
+		Use:   "run [PIPELINE.yaml]",
+		Short: "Run a pipeline (defaults to pipeline.yaml)",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 && definition != "" {
+				return fmt.Errorf("a pipeline file and --definition cannot be combined")
 			}
-			pkg, err := loadPackage(file, root)
+			if definition != "" && root != "" {
+				return fmt.Errorf("--package-root applies to pipeline files; omit it with --definition")
+			}
+			if profile == "" {
+				return fmt.Errorf("--profile or KNOTRA_PROFILE is required")
+			}
+			if wait && watch {
+				return fmt.Errorf("choose --wait or --watch")
+			}
+
+			in, err := s.object(inputsFile, inputs)
 			if err != nil {
 				return err
 			}
+
+			art, err := s.artifactBindings(artifactsFile, artifacts)
+			if err != nil {
+				return err
+			}
+
+			id := operationKey(key)
+			engine := s.client()
+			definitionID := definition
+			if definition == "" {
+				file := "pipeline.yaml"
+				if len(args) > 0 {
+					file = args[0]
+				}
+				pkg, err := loadPackage(file, root)
+				if err != nil {
+					return err
+				}
+				var result struct {
+					Definition protocol.Definition `json:"definition"`
+				}
+				if err = engine.Command(cmd.Context(), "/definitions", map[string]any{"package": pkg}, definitionKey(id), &result); err != nil {
+					return err
+				}
+				definitionID = result.Definition.ID
+			}
 			var result struct {
-				Definition protocol.Definition `json:"definition"`
+				Run protocol.Run `json:"run"`
 			}
-			if err = engine.Command(cmd.Context(), "/definitions", map[string]any{"package": pkg}, definitionKey(id), &result); err != nil {
+			if err = engine.Command(
+				cmd.Context(),
+				"/runs",
+				map[string]any{"definitionId": definitionID, "profile": profile, "inputs": in, "artifacts": art},
+				id,
+				&result,
+			); err != nil {
 				return err
 			}
-			definitionID = result.Definition.ID
-		}
-		var result struct {
-			Run protocol.Run `json:"run"`
-		}
-		if err = engine.Command(
-			cmd.Context(),
-			"/runs",
-			map[string]any{"definitionId": definitionID, "profile": profile, "inputs": in, "artifacts": art},
-			id,
-			&result,
-		); err != nil {
-			return err
-		}
-		if !wait && !watch {
-			return s.printRun(result.Run, id)
-		}
-		if !s.json {
-			if _, err = fmt.Fprintf(s.options.Out, "Accepted run %s (operation %s).\n", safeText(result.Run.ID), safeText(id)); err != nil {
+			if !wait && !watch {
+				return s.printRun(result.Run, id)
+			}
+			if !s.json {
+				if _, err = fmt.Fprintf(s.options.Out, "Accepted run %s (operation %s).\n", safeText(result.Run.ID), safeText(id)); err != nil {
+					return err
+				}
+			}
+			if watch {
+				if err = s.watchRun(cmd.Context(), result.Run.ID, "", false); err != nil {
+					return err
+				}
+			}
+			final, err := s.waitRun(cmd.Context(), result.Run.ID)
+			if err != nil {
 				return err
 			}
-		}
-		if watch {
-			if err = s.watchRun(cmd.Context(), result.Run.ID, "", false); err != nil {
+			if err = s.printRun(final, id); err != nil {
 				return err
 			}
-		}
-		final, err := s.waitRun(cmd.Context(), result.Run.ID)
-		if err != nil {
-			return err
-		}
-		if err = s.printRun(final, id); err != nil {
-			return err
-		}
-		return runExit(final)
-	}}
+
+			return runExit(final)
+		},
+	}
 	f := cmd.Flags()
 	f.StringVar(&root, "package-root", "", "Root of package-relative paths")
 	f.StringVarP(&profile, "profile", "p", s.env("KNOTRA_PROFILE", ""), "Engine profile ID (KNOTRA_PROFILE)")
@@ -128,68 +137,89 @@ func (s *commandState) runsCommand() *cobra.Command {
 	pageFlags(list, &cursor, &all)
 	var instanceCursor string
 	var allInstances bool
-	instances := &cobra.Command{Use: "instances RUN_ID", Short: "List run instances", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		page, err := fetchPages[protocol.Instance](cmd.Context(), s, "/runs/"+url.PathEscape(args[0])+"/instances", instanceCursor, allInstances)
-		if err != nil {
-			return err
-		}
-		if s.json {
-			return s.printJSON(page)
-		}
-		rows := [][]string{}
-		for _, item := range page.Items {
-			rows = append(rows, []string{item.ID, item.NodeID, item.Status, item.AttemptID})
-		}
-		if err := s.table([]string{"INSTANCE", "NODE", "STATUS", "ATTEMPT"}, rows); err != nil {
-			return err
-		}
-		return s.nextCursor(page.NextCursor)
-	}}
+	instances := &cobra.Command{
+		Use:   "instances RUN_ID",
+		Short: "List run instances",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			page, err := fetchPages[protocol.Instance](cmd.Context(), s, "/runs/"+url.PathEscape(args[0])+"/instances", instanceCursor, allInstances)
+			if err != nil {
+				return err
+			}
+			if s.json {
+				return s.printJSON(page)
+			}
+			rows := [][]string{}
+			for _, item := range page.Items {
+				rows = append(rows, []string{item.ID, item.NodeID, item.Status, item.AttemptID})
+			}
+			if err := s.table([]string{"INSTANCE", "NODE", "STATUS", "ATTEMPT"}, rows); err != nil {
+				return err
+			}
+			return s.nextCursor(page.NextCursor)
+		},
+	}
 	pageFlags(instances, &instanceCursor, &allInstances)
-	get := &cobra.Command{Use: "show RUN_ID", Aliases: []string{"get"}, Short: "Show run status, inputs, outputs and diagnostics", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		run, err := s.getRun(cmd.Context(), args[0])
-		if err != nil {
-			return err
-		}
-		return s.printRun(run, "")
-	}}
+	get := &cobra.Command{
+		Use:     "show RUN_ID",
+		Aliases: []string{"get"},
+		Short:   "Show run status, inputs, outputs and diagnostics",
+		Args:    cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			run, err := s.getRun(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			return s.printRun(run, "")
+		},
+	}
 	var fromStart bool
 	var eventCursor string
-	watch := &cobra.Command{Use: "watch RUN_ID", Short: "Follow durable events; Ctrl-C stops observation only", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		if fromStart && eventCursor != "" {
-			return fmt.Errorf("--from-start and --cursor are mutually exclusive")
-		}
-		if err := s.watchRun(cmd.Context(), args[0], eventCursor, fromStart); err != nil {
-			return err
-		}
-		run, err := s.getRun(cmd.Context(), args[0])
-		if err != nil {
-			return err
-		}
-		return runExit(run)
-	}}
+	watch := &cobra.Command{
+		Use:   "watch RUN_ID",
+		Short: "Follow durable events; Ctrl-C stops observation only",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if fromStart && eventCursor != "" {
+				return fmt.Errorf("--from-start and --cursor are mutually exclusive")
+			}
+			if err := s.watchRun(cmd.Context(), args[0], eventCursor, fromStart); err != nil {
+				return err
+			}
+			run, err := s.getRun(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			return runExit(run)
+		},
+	}
 	watch.Flags().BoolVar(&fromStart, "from-start", false, "Replay from the first retained event instead of saved cursor")
 	watch.Flags().StringVar(&eventCursor, "cursor", "", "Resume after this explicit event ID")
 	var timeout time.Duration
-	wait := &cobra.Command{Use: "wait RUN_ID", Short: "Wait for terminal status and print the final run", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		if timeout < 0 {
-			return fmt.Errorf("--timeout must be zero or a positive duration")
-		}
-		ctx := cmd.Context()
-		if timeout > 0 {
-			var cancel context.CancelFunc
-			ctx, cancel = context.WithTimeout(ctx, timeout)
-			defer cancel()
-		}
-		run, err := s.waitRun(ctx, args[0])
-		if err != nil {
-			return err
-		}
-		if err = s.printRun(run, ""); err != nil {
-			return err
-		}
-		return runExit(run)
-	}}
+	wait := &cobra.Command{
+		Use:   "wait RUN_ID",
+		Short: "Wait for terminal status and print the final run",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if timeout < 0 {
+				return fmt.Errorf("--timeout must be zero or a positive duration")
+			}
+			ctx := cmd.Context()
+			if timeout > 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, timeout)
+				defer cancel()
+			}
+			run, err := s.waitRun(ctx, args[0])
+			if err != nil {
+				return err
+			}
+			if err = s.printRun(run, ""); err != nil {
+				return err
+			}
+			return runExit(run)
+		},
+	}
 	wait.Flags().DurationVar(&timeout, "timeout", 0, "Maximum observation time; zero waits until interrupted")
 	root.AddCommand(list, get, instances, watch, wait, s.runAction("cancel"), s.runAction("resume"), s.resolveCommand())
 	return root
@@ -197,9 +227,14 @@ func (s *commandState) runsCommand() *cobra.Command {
 
 func (s *commandState) runAction(action string) *cobra.Command {
 	var key string
-	cmd := &cobra.Command{Use: action + " RUN_ID", Short: "Request engine action: " + action, Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		return s.mutation(cmd.Context(), "/runs/"+url.PathEscape(args[0])+"/"+action, map[string]any{}, key)
-	}}
+	cmd := &cobra.Command{
+		Use:   action + " RUN_ID",
+		Short: "Request engine action: " + action,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return s.mutation(cmd.Context(), "/runs/"+url.PathEscape(args[0])+"/"+action, map[string]any{}, key)
+		},
+	}
 	cmd.Flags().StringVar(&key, "idempotency-key", "", "Stable operation ID for this exact command")
 	return cmd
 }
@@ -207,24 +242,29 @@ func (s *commandState) runAction(action string) *cobra.Command {
 func (s *commandState) resolveCommand() *cobra.Command {
 	var outcome, evidence, file, key string
 	var outputs []string
-	cmd := &cobra.Command{Use: "resolve RUN_ID INSTANCE_ID", Short: "Record verified evidence for an uncertain execution", Args: cobra.ExactArgs(2), RunE: func(cmd *cobra.Command, args []string) error {
-		if outcome != "succeeded" && outcome != "not_started" && outcome != "failed" {
-			return fmt.Errorf("--outcome must be succeeded, not_started or failed")
-		}
-		if evidence == "" {
-			return fmt.Errorf("--evidence is required")
-		}
-		values, err := s.object(file, outputs)
-		if err != nil {
-			return err
-		}
-		return s.mutation(
-			cmd.Context(),
-			"/runs/"+url.PathEscape(args[0])+"/instances/"+url.PathEscape(args[1])+"/resolve",
-			map[string]any{"outcome": outcome, "evidence": evidence, "outputs": values},
-			key,
-		)
-	}}
+	cmd := &cobra.Command{
+		Use:   "resolve RUN_ID INSTANCE_ID",
+		Short: "Record verified evidence for an uncertain execution",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if outcome != "succeeded" && outcome != "not_started" && outcome != "failed" {
+				return fmt.Errorf("--outcome must be succeeded, not_started or failed")
+			}
+			if evidence == "" {
+				return fmt.Errorf("--evidence is required")
+			}
+			values, err := s.object(file, outputs)
+			if err != nil {
+				return err
+			}
+			return s.mutation(
+				cmd.Context(),
+				"/runs/"+url.PathEscape(args[0])+"/instances/"+url.PathEscape(args[1])+"/resolve",
+				map[string]any{"outcome": outcome, "evidence": evidence, "outputs": values},
+				key,
+			)
+		},
+	}
 	cmd.Flags().StringVar(&outcome, "outcome", "", "Verified outcome: succeeded, not_started, failed")
 	cmd.Flags().StringVar(&evidence, "evidence", "", "Evidence supporting the outcome")
 	cmd.Flags().StringVar(&file, "outputs", "", "Verified JSON output object file; - reads stdin")
@@ -276,6 +316,7 @@ func (s *commandState) printRun(run protocol.Run, operation string) error {
 		}
 		return s.printJSON(result)
 	}
+
 	fields := [][]string{{"Run", run.ID}, {"Title", run.Title}, {"Status", run.Status}, {"Profile", run.Profile}, {"Pipeline", run.DefinitionID}}
 	if !run.CreatedAt.IsZero() {
 		fields = append(fields, []string{"Created", run.CreatedAt.Format(time.RFC3339)})
@@ -312,7 +353,12 @@ func (s *commandState) printRun(run protocol.Run, operation string) error {
 		}
 	}
 	if run.InstancesNextCursor != nil {
-		if _, err := fmt.Fprintf(s.options.Out, "More instances: knotra runs instances %s --cursor %s\n", safeText(run.ID), safeText(*run.InstancesNextCursor)); err != nil {
+		if _, err := fmt.Fprintf(
+			s.options.Out,
+			"More instances: knotra runs instances %s --cursor %s\n",
+			safeText(run.ID),
+			safeText(*run.InstancesNextCursor),
+		); err != nil {
 			return err
 		}
 	}

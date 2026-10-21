@@ -19,8 +19,15 @@ import (
 
 func TestEventEndpointsDoNotHydrateRuns(t *testing.T) {
 	db := apiStore(t)
-	plan := contract.Plan{Version: "knotra/v1", CompilerVersion: contract.CompilerVersion, CELVersion: contract.CELVersion, Root: "pipeline.yaml", Digest: "events",
-		Pipelines: map[string]*contract.Pipeline{"pipeline.yaml": {}}, Profile: contract.Profile{Spec: contract.ProfileSpec{Limits: contract.Limits{Timeout: "1h"}}}}
+	plan := contract.Plan{
+		Version:         "knotra/v1",
+		CompilerVersion: contract.CompilerVersion,
+		CELVersion:      contract.CELVersion,
+		Root:            "pipeline.yaml",
+		Digest:          "events",
+		Pipelines:       map[string]*contract.Pipeline{"pipeline.yaml": {}},
+		Profile:         contract.Profile{Spec: contract.ProfileSpec{Limits: contract.Limits{Timeout: "1h"}}},
+	}
 	if err := pgx.BeginFunc(t.Context(), db.Pool, func(tx pgx.Tx) error {
 		definition := protocol.Definition{ID: "events", PackageDigest: "events"}
 		if _, err := store.PutDefinition(t.Context(), tx, definition); err != nil {
@@ -32,7 +39,15 @@ func TestEventEndpointsDoNotHydrateRuns(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Observe(t.Context(), protocol.Event{RunID: "run", InstanceID: "node", Type: "model.delta", Data: map[string]any{"content": "hello"}}); err != nil {
+	if err := db.Observe(
+		t.Context(),
+		protocol.Event{
+			RunID:      "run",
+			InstanceID: "node",
+			Type:       "model.delta",
+			Data:       map[string]any{"content": "hello"},
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 	lock, err := db.Pool.Begin(t.Context())

@@ -37,7 +37,13 @@ func TestRiverServiceStopsWithOpenEventStream(t *testing.T) {
 				t.Fatal(err)
 			}
 			var accepted struct{ Run protocol.Run }
-			if err := api.Command(ctx, "/runs", map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name}, uuid.NewString(), &accepted); err != nil {
+			if err := api.Command(
+				ctx,
+				"/runs",
+				map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name},
+				uuid.NewString(),
+				&accepted,
+			); err != nil {
 				t.Fatal(err)
 			}
 			if mode == "slow-reader" {
@@ -47,7 +53,15 @@ func TestRiverServiceStopsWithOpenEventStream(t *testing.T) {
 				}
 				defer db.Close()
 				for range 100 {
-					if err := db.Observe(ctx, protocol.Event{RunID: accepted.Run.ID, InstanceID: "work", Type: "model.delta", Data: map[string]any{"content": strings.Repeat("x", 60<<10)}}); err != nil {
+					if err := db.Observe(
+						ctx,
+						protocol.Event{
+							RunID:      accepted.Run.ID,
+							InstanceID: "work",
+							Type:       "model.delta",
+							Data:       map[string]any{"content": strings.Repeat("x", 60<<10)},
+						},
+					); err != nil {
 						t.Fatal(err)
 					}
 				}

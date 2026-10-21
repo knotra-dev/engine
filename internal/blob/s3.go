@@ -29,8 +29,10 @@ var ErrTooLarge = errors.New("durable object exceeds byte limit")
 type Store interface {
 	// A zero limit permits complete contract-valid outcome records.
 	Get(ctx context.Context, key string, limit int64) ([]byte, error)
+
 	// With replace=false, identical bytes are idempotent and different bytes conflict.
 	Put(ctx context.Context, key string, data []byte, replace bool) error
+
 	SavedAt(ctx context.Context, key string) (time.Time, error)
 }
 
@@ -60,6 +62,7 @@ func NewS3(ctx context.Context, settings S3Config) (*s3Store, error) {
 	if _, err := normalizeEndpoint(settings.Endpoint); err != nil {
 		return nil, err
 	}
+
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
 	var options []func(*config.LoadOptions) error
@@ -88,6 +91,7 @@ func NewS3(ctx context.Context, settings S3Config) (*s3Store, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	prefix := strings.Trim(settings.Prefix, "/")
 	identity, _ := json.Marshal([]string{endpoint, cfg.Region, settings.Bucket, prefix})
 	sum := sha256.Sum256(identity)
@@ -102,7 +106,12 @@ func normalizeEndpoint(value string) (string, error) {
 		return "", nil
 	}
 	endpoint, err := url.Parse(value)
-	if err != nil || endpoint.Host == "" || (endpoint.Scheme != "https" && endpoint.Scheme != "http") || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" {
+	if err != nil ||
+		endpoint.Host == "" ||
+		(endpoint.Scheme != "https" && endpoint.Scheme != "http") ||
+		endpoint.User != nil ||
+		endpoint.RawQuery != "" ||
+		endpoint.Fragment != "" {
 		return "", errors.New("invalid S3 endpoint")
 	}
 	endpoint.Host = strings.ToLower(endpoint.Host)
@@ -127,10 +136,12 @@ func (s *s3Store) get(ctx context.Context, key string, limit int64) ([]byte, err
 	if err != nil {
 		return nil, storageError(ctx, "read", err)
 	}
+
 	defer func() { _ = result.Body.Close() }()
 	if limit > 0 && result.ContentLength != nil && *result.ContentLength > limit {
 		return nil, ErrTooLarge
 	}
+
 	var reader io.Reader = result.Body
 	if limit > 0 {
 		reader = io.LimitReader(reader, limit+1)
@@ -142,13 +153,19 @@ func (s *s3Store) get(ctx context.Context, key string, limit int64) ([]byte, err
 	if limit > 0 && int64(len(data)) > limit {
 		return nil, ErrTooLarge
 	}
+
 	return data, nil
 }
 
 func (s *s3Store) Put(ctx context.Context, key string, data []byte, replace bool) error {
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
-	input := &s3.PutObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(s.key(key)), Body: bytes.NewReader(data), ContentLength: aws.Int64(int64(len(data)))}
+	input := &s3.PutObjectInput{
+		Bucket:        aws.String(s.bucket),
+		Key:           aws.String(s.key(key)),
+		Body:          bytes.NewReader(data),
+		ContentLength: aws.Int64(int64(len(data))),
+	}
 	if replace {
 		previous, err := s.head(ctx, key)
 		if err != nil {
@@ -178,6 +195,7 @@ func (s *s3Store) Put(ctx context.Context, key string, data []byte, replace bool
 		}
 		return readErr
 	}
+
 	return storageError(ctx, "write", err)
 }
 

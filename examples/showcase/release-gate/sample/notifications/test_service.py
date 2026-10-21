@@ -3,7 +3,6 @@ import service
 
 
 class RegressionTests(unittest.TestCase):
-
     def test_repeated_delivery(self):
         self.assertEqual(len(service.deduplicate([{"idempotency_key": "a"}] * 3)), 1)
 
@@ -43,6 +42,7 @@ class RegressionTests(unittest.TestCase):
         events = [{"idempotency_key": "a", "body": 1}]
         result = service.deduplicate(events)
         result[0]["body"] = 2
+
         self.assertEqual(events[0]["body"], 1)
 
     def test_empty_key(self):

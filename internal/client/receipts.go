@@ -39,6 +39,7 @@ func validateReceipt(route string, data []byte) error {
 	if err := json.Unmarshal(data, &receipt); err != nil {
 		return err
 	}
+
 	valid := false
 
 	switch route {
@@ -55,7 +56,16 @@ func validateReceipt(route string, data []byte) error {
 		if a := receipt.Artifact; a != nil {
 			_, _, mediaErr := mime.ParseMediaType(a.MediaType)
 			digest, digestErr := hex.DecodeString(a.SHA256)
-			valid = opaqueID(a.ID) && a.Name != "" && mediaErr == nil && strings.Contains(a.MediaType, "/") && a.Size != nil && *a.Size >= 0 && *a.Size <= 64<<20 && digestErr == nil && len(digest) == sha256.Size && a.Path == ""
+			valid = opaqueID(a.ID) &&
+				a.Name != "" &&
+				mediaErr == nil &&
+				strings.Contains(a.MediaType, "/") &&
+				a.Size != nil &&
+				*a.Size >= 0 &&
+				*a.Size <= 64<<20 &&
+				digestErr == nil &&
+				len(digest) == sha256.Size &&
+				a.Path == ""
 		}
 	default:
 		parts := strings.Split(strings.TrimPrefix(route, "/"), "/")
@@ -64,7 +74,9 @@ func validateReceipt(route string, data []byte) error {
 			if err == nil && opaqueID(id) && receipt.Accepted {
 				if parts[0] == "requests" && len(parts) == 3 && parts[2] == "response" {
 					valid = receipt.RequestID == id
-				} else if parts[0] == "runs" && ((len(parts) == 3 && (parts[2] == "cancel" || parts[2] == "resume")) || (len(parts) == 5 && parts[2] == "instances" && parts[4] == "resolve")) {
+				} else if parts[0] == "runs" &&
+					((len(parts) == 3 && (parts[2] == "cancel" || parts[2] == "resume")) ||
+						(len(parts) == 5 && parts[2] == "instances" && parts[4] == "resolve")) {
 					valid = receipt.RunID == id
 				}
 			}
@@ -74,6 +86,7 @@ func validateReceipt(route string, data []byte) error {
 	if !valid {
 		return errors.New("receipt does not identify the accepted command result")
 	}
+
 	return nil
 }
 

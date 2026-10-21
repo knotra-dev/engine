@@ -15,34 +15,40 @@ func (s *commandState) serveCommand() *cobra.Command {
 	o := app.Options{Version: s.options.Version}
 	var role string
 	var debug bool
-	cmd := &cobra.Command{Use: "serve", Short: "Run an engine API, scheduler, executor, or combined service", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
-		o.Role = execution.Role(role)
-		if err := o.Role.Validate(); err != nil {
-			return err
-		}
-		if value := s.options.Getenv("KNOTRA_S3_PATH_STYLE"); value != "" && !cmd.Flags().Changed("s3-path-style") {
-			var err error
-			o.S3.PathStyle, err = strconv.ParseBool(value)
-			if err != nil {
-				return fmt.Errorf("KNOTRA_S3_PATH_STYLE must be a boolean")
+	cmd := &cobra.Command{
+		Use:   "serve",
+		Short: "Run an engine API, scheduler, executor, or combined service",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			o.Role = execution.Role(role)
+			if err := o.Role.Validate(); err != nil {
+				return err
 			}
-		}
-		if o.DatabaseURL == "" {
-			return fmt.Errorf("--database-url or KNOTRA_DATABASE_URL is required")
-		}
-		if len(o.Profiles) == 0 {
-			return fmt.Errorf("at least one --profile EngineProfile.yaml is required")
-		}
-		level := slog.LevelInfo
-		if debug {
-			level = slog.LevelDebug
-		}
-		o.Token = s.options.Getenv("KNOTRA_TOKEN")
-		o.ManagedToken = s.options.Getenv("KNOTRA_DESKTOP_CONTROL_TOKEN")
-		o.ManagedHoldAdmission = s.options.Getenv("KNOTRA_DESKTOP_HOLD_ADMISSION") == "1"
-		log := slog.New(slog.NewJSONHandler(s.options.Err, &slog.HandlerOptions{Level: level}))
-		return app.Serve(cmd.Context(), o, log)
-	}}
+			if value := s.options.Getenv("KNOTRA_S3_PATH_STYLE"); value != "" && !cmd.Flags().Changed("s3-path-style") {
+				var err error
+				o.S3.PathStyle, err = strconv.ParseBool(value)
+				if err != nil {
+					return fmt.Errorf("KNOTRA_S3_PATH_STYLE must be a boolean")
+				}
+			}
+			if o.DatabaseURL == "" {
+				return fmt.Errorf("--database-url or KNOTRA_DATABASE_URL is required")
+			}
+			if len(o.Profiles) == 0 {
+				return fmt.Errorf("at least one --profile EngineProfile.yaml is required")
+			}
+
+			level := slog.LevelInfo
+			if debug {
+				level = slog.LevelDebug
+			}
+			o.Token = s.options.Getenv("KNOTRA_TOKEN")
+			o.ManagedToken = s.options.Getenv("KNOTRA_DESKTOP_CONTROL_TOKEN")
+			o.ManagedHoldAdmission = s.options.Getenv("KNOTRA_DESKTOP_HOLD_ADMISSION") == "1"
+			log := slog.New(slog.NewJSONHandler(s.options.Err, &slog.HandlerOptions{Level: level}))
+			return app.Serve(cmd.Context(), o, log)
+		},
+	}
 	f := cmd.Flags()
 	f.StringVar(&role, "role", s.env("KNOTRA_ROLE", "all"), "Service role: all, api, scheduler, executor")
 	f.StringVar(&o.S3.Bucket, "s3-bucket", s.env("KNOTRA_S3_BUCKET", ""), "Existing S3-compatible bucket for durable artifacts and recovery evidence")

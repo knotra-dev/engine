@@ -238,7 +238,10 @@ func TestKubernetesWorkersShareS3AndRecoverPodLoss(t *testing.T) {
 		defer stop()
 		connection, err := pgx.Connect(cleanup, os.Getenv("KNOTRA_TEST_DATABASE_URL"))
 		if err == nil {
-			_, _ = connection.Exec(cleanup, "DROP TRIGGER IF EXISTS kubernetes_outcome_barrier ON knotra_execution_attempts; DROP FUNCTION IF EXISTS kubernetes_outcome_barrier()")
+			_, _ = connection.Exec(
+				cleanup,
+				"DROP TRIGGER IF EXISTS kubernetes_outcome_barrier ON knotra_execution_attempts; DROP FUNCTION IF EXISTS kubernetes_outcome_barrier()",
+			)
 			_ = connection.Close(cleanup)
 		}
 	})
@@ -250,8 +253,12 @@ func TestKubernetesWorkersShareS3AndRecoverPodLoss(t *testing.T) {
 		return blocked, err
 	})
 	var owner, host, key string
-	if err := admin.QueryRow(ctx, `SELECT a.owner,w.host_id,a.outcome_key FROM knotra_execution_attempts a
-		JOIN knotra_workers w ON w.id=a.owner WHERE a.run_id=$1 AND a.state='claimed' AND a.outcome IS NULL`, run).Scan(&owner, &host, &key); err != nil {
+	if err := admin.QueryRow(
+		ctx,
+		`SELECT a.owner,w.host_id,a.outcome_key FROM knotra_execution_attempts a
+		JOIN knotra_workers w ON w.id=a.owner WHERE a.run_id=$1 AND a.state='claimed' AND a.outcome IS NULL`,
+		run,
+	).Scan(&owner, &host, &key); err != nil {
 		t.Fatal(err)
 	}
 	if outcome, err := outcomes.GetContext(ctx, key); err != nil || outcome.Failure != nil || string(outcome.Outputs["answer"].JSON) != `"shared remote result"` {
@@ -271,7 +278,10 @@ func TestKubernetesWorkersShareS3AndRecoverPodLoss(t *testing.T) {
 	if _, err := barrier.Exec(ctx, "SELECT pg_advisory_unlock(918273659)"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := admin.Exec(ctx, "DROP TRIGGER kubernetes_outcome_barrier ON knotra_execution_attempts; DROP FUNCTION kubernetes_outcome_barrier()"); err != nil {
+	if _, err := admin.Exec(
+		ctx,
+		"DROP TRIGGER kubernetes_outcome_barrier ON knotra_execution_attempts; DROP FUNCTION kubernetes_outcome_barrier()",
+	); err != nil {
 		t.Fatal(err)
 	}
 	checkRun(run)
@@ -288,10 +298,20 @@ func TestKubernetesWorkersShareS3AndRecoverPodLoss(t *testing.T) {
 		t.Fatal(err)
 	}
 	if attempts != 33 || invalid != 0 || used != 33 || slots != 0 || control(nil)-initialCalls != 33 {
-		t.Fatalf("Kubernetes totals: attempts=%d invalid=%d budget=%d slots=%d calls=%d", attempts, invalid, used, slots, control(nil)-initialCalls)
+		t.Fatalf(
+			"Kubernetes totals: attempts=%d invalid=%d budget=%d slots=%d calls=%d",
+			attempts,
+			invalid,
+			used,
+			slots,
+			control(nil)-initialCalls,
+		)
 	}
 	kube.command("rollout", "status", "deployment/executor", "--timeout=90s")
-	t.Logf("11 workflows, 33 calls/debits: three executor pods, scale to two, API replacement artifact and recovery after forced deletion of %s", host)
+	t.Logf(
+		"11 workflows, 33 calls/debits: three executor pods, scale to two, API replacement artifact and recovery after forced deletion of %s",
+		host,
+	)
 }
 
 type kubernetesPod struct {

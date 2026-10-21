@@ -60,8 +60,16 @@ func attemptFixture(t *testing.T) (*Store, []execution.AttemptID, []string, Enqu
 				if err != nil {
 					return err
 				}
-				if _, err := tx.Exec(ctx, `INSERT INTO knotra_execution_nodes(run_id,id,graph_id,node_id,address,state,execution_request,deadline,attempt_number)
-					VALUES($1,$2,$3,$2,$2,'ready',$4,$5,1)`, run.ID, id.InstanceID, graph, b, state.Deadline); err != nil {
+				if _, err := tx.Exec(
+					ctx,
+					`INSERT INTO knotra_execution_nodes(run_id,id,graph_id,node_id,address,state,execution_request,deadline,attempt_number)
+					VALUES($1,$2,$3,$2,$2,'ready',$4,$5,1)`,
+					run.ID,
+					id.InstanceID,
+					graph,
+					b,
+					state.Deadline,
+				); err != nil {
 					return err
 				}
 				if _, err := tx.Exec(ctx, `INSERT INTO knotra_execution_attempts(run_id,instance_id,number,dispatch_generation,state)
@@ -154,13 +162,26 @@ func TestAttemptClaimsReserveAncestorCapacityAndReleaseOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	if rootActive != 2 || childActive != 2 || slots != 4 || ready != 4 || pending != 4 {
-		t.Fatalf("capacity miss mutated business work: root=%d child=%d slots=%d ready=%d pending=%d", rootActive, childActive, slots, ready, pending)
+		t.Fatalf(
+			"capacity miss mutated business work: root=%d child=%d slots=%d ready=%d pending=%d",
+			rootActive,
+			childActive,
+			slots,
+			ready,
+			pending,
+		)
 	}
 	err = pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		if _, err := ReleaseAttemptSlots(ctx, tx, first.Ownership, enqueue); !errors.Is(err, ErrConflict) {
 			return fmt.Errorf("released active execution: %w", err)
 		}
-		_, err := tx.Exec(ctx, "UPDATE knotra_execution_attempts SET state='completed' WHERE run_id=$1 AND instance_id=$2 AND number=$3", first.RunID, first.InstanceID, first.Number)
+		_, err := tx.Exec(
+			ctx,
+			"UPDATE knotra_execution_attempts SET state='completed' WHERE run_id=$1 AND instance_id=$2 AND number=$3",
+			first.RunID,
+			first.InstanceID,
+			first.Number,
+		)
 		return err
 	})
 	if err != nil {
@@ -236,7 +257,11 @@ func TestAttemptClaimsReserveAncestorCapacityAndReleaseOnce(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := s.Pool.QueryRow(ctx, `SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1 AND state='ready' AND dispatch_pending`, first.RunID).Scan(&pending); err != nil {
+	if err := s.Pool.QueryRow(
+		ctx,
+		`SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1 AND state='ready' AND dispatch_pending`,
+		first.RunID,
+	).Scan(&pending); err != nil {
 		t.Fatal(err)
 	}
 	if pending != 3 {
@@ -259,7 +284,12 @@ func TestAttemptOwnershipRejectsExpiryCancellationAndStaleWorkers(t *testing.T) 
 	if err := s.DrainWorker(ctx, workers[1]); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Pool.Exec(ctx, "UPDATE knotra_workers SET scheduler_versions=ARRAY[$2]::integer[] WHERE id=$1", workers[1], execution.SchedulerVersion); err != nil {
+	if _, err := s.Pool.Exec(
+		ctx,
+		"UPDATE knotra_workers SET scheduler_versions=ARRAY[$2]::integer[] WHERE id=$1",
+		workers[1],
+		execution.SchedulerVersion,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if claim, err := claimFixtureAttempt(ctx, s, ids[0], 1, workers[1]); err != nil || claim != nil {
@@ -316,7 +346,11 @@ func TestAttemptOwnershipRejectsExpiryCancellationAndStaleWorkers(t *testing.T) 
 			t.Fatalf("ownership survived %s: %v", mutation, err)
 		}
 	}
-	if _, err := s.Pool.Exec(ctx, "UPDATE knotra_workers SET heartbeat_at=clock_timestamp()-interval '21 seconds' WHERE id=$1", workers[0]); err != nil {
+	if _, err := s.Pool.Exec(
+		ctx,
+		"UPDATE knotra_workers SET heartbeat_at=clock_timestamp()-interval '21 seconds' WHERE id=$1",
+		workers[0],
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.HeartbeatWorker(ctx, workers[0]); !errors.Is(err, ErrExecutionOwnership) {
@@ -348,7 +382,11 @@ func TestAttemptClaimRechecksDeadlineAfterLockWait(t *testing.T) {
 		t.Fatal(err)
 	}
 	var deadline time.Time
-	if err := owner.QueryRow(ctx, "UPDATE knotra_runs SET execution_deadline=clock_timestamp()+interval '100 milliseconds' WHERE id=$1 RETURNING execution_deadline", ids[0].RunID).Scan(&deadline); err != nil {
+	if err := owner.QueryRow(
+		ctx,
+		"UPDATE knotra_runs SET execution_deadline=clock_timestamp()+interval '100 milliseconds' WHERE id=$1 RETURNING execution_deadline",
+		ids[0].RunID,
+	).Scan(&deadline); err != nil {
 		t.Fatal(err)
 	}
 	ready := make(chan struct{})

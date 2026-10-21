@@ -61,12 +61,25 @@ CREATE TABLE knotra_execution_attempts (
     failure jsonb,
     evidence_key text,
     outcome jsonb,
-    CONSTRAINT knotra_execution_attempts_check CHECK (((state <> 'claimed'::text) OR ((owner IS NOT NULL) AND (ownership_generation > 0) AND (lease_expires_at IS NOT NULL) AND (outcome_key IS NOT NULL)))),
+    CONSTRAINT knotra_execution_attempts_check CHECK (
+        ((state <> 'claimed'::text) OR (
+            (owner IS NOT NULL)
+            AND (ownership_generation > 0)
+            AND (lease_expires_at IS NOT NULL)
+            AND (outcome_key IS NOT NULL)
+        ))
+    ),
     CONSTRAINT knotra_execution_attempts_dispatch_generation_check CHECK ((dispatch_generation > 0)),
     CONSTRAINT knotra_execution_attempts_number_check CHECK ((number > 0)),
     CONSTRAINT knotra_execution_attempts_outcome_key_check CHECK (((outcome_key IS NULL) OR (outcome_key ~ '^[0-9a-f]{64}$'::text))),
     CONSTRAINT knotra_execution_attempts_ownership_generation_check CHECK ((ownership_generation >= 0)),
-    CONSTRAINT knotra_execution_attempts_state_check CHECK ((state = ANY (ARRAY['ready'::text, 'claimed'::text, 'completed'::text, 'waiting_resolution'::text, 'cancelled'::text])))
+    CONSTRAINT knotra_execution_attempts_state_check CHECK ((state = ANY (ARRAY[
+        'ready'::text,
+        'claimed'::text,
+        'completed'::text,
+        'waiting_resolution'::text,
+        'cancelled'::text
+    ])))
 );
 
 CREATE TABLE knotra_execution_controls (
@@ -86,7 +99,9 @@ CREATE TABLE knotra_execution_controls (
     child_graph_id text,
     revision bigint DEFAULT 0 NOT NULL,
     CONSTRAINT knotra_execution_controls_iteration_check CHECK ((iteration >= 0)),
-    CONSTRAINT knotra_execution_controls_elements_check CHECK (kind <> 'foreach' OR (elements IS NOT NULL AND jsonb_typeof(elements)='array')),
+    CONSTRAINT knotra_execution_controls_elements_check CHECK (
+        kind <> 'foreach' OR (elements IS NOT NULL AND jsonb_typeof(elements)='array')
+    ),
     CONSTRAINT knotra_execution_controls_kind_check CHECK ((kind = ANY (ARRAY['foreach'::text, 'loop'::text, 'pipeline'::text]))),
     CONSTRAINT knotra_execution_controls_next_position_check CHECK ((next_position >= 0)),
     CONSTRAINT knotra_execution_controls_revision_check CHECK ((revision >= 0))
@@ -112,7 +127,13 @@ CREATE TABLE knotra_execution_graphs (
     CONSTRAINT knotra_execution_graphs_iteration_index_check CHECK ((iteration_index >= 0)),
     CONSTRAINT knotra_execution_graphs_materialization_cursor_check CHECK ((materialization_cursor >= 0)),
     CONSTRAINT knotra_execution_graphs_revision_check CHECK ((revision >= 0)),
-    CONSTRAINT knotra_execution_graphs_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'running'::text, 'succeeded'::text, 'failed'::text, 'cancelled'::text])))
+    CONSTRAINT knotra_execution_graphs_state_check CHECK ((state = ANY (ARRAY[
+        'pending'::text,
+        'running'::text,
+        'succeeded'::text,
+        'failed'::text,
+        'cancelled'::text
+    ])))
 );
 
 CREATE TABLE knotra_execution_nodes (
@@ -138,7 +159,18 @@ CREATE TABLE knotra_execution_nodes (
     reason text DEFAULT ''::text NOT NULL,
     CONSTRAINT knotra_execution_nodes_attempt_number_check CHECK ((attempt_number >= 0)),
     CONSTRAINT knotra_execution_nodes_revision_check CHECK ((revision >= 0)),
-    CONSTRAINT knotra_execution_nodes_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'ready'::text, 'running'::text, 'waiting_human'::text, 'waiting_resolution'::text, 'retry_wait'::text, 'succeeded'::text, 'skipped'::text, 'failed'::text, 'cancelled'::text])))
+    CONSTRAINT knotra_execution_nodes_state_check CHECK ((state = ANY (ARRAY[
+        'pending'::text,
+        'ready'::text,
+        'running'::text,
+        'waiting_human'::text,
+        'waiting_resolution'::text,
+        'retry_wait'::text,
+        'succeeded'::text,
+        'skipped'::text,
+        'failed'::text,
+        'cancelled'::text
+    ])))
 );
 
 CREATE TABLE knotra_execution_scopes (
@@ -193,7 +225,14 @@ CREATE TABLE knotra_operations (
     worker_id text,
     ownership_generation bigint,
     admitted_at timestamptz DEFAULT clock_timestamp(),
-    CONSTRAINT knotra_operations_ownership CHECK (instance_id IS NOT NULL AND attempt_number IS NOT NULL AND attempt_number > 0 AND worker_id IS NOT NULL AND ownership_generation IS NOT NULL AND ownership_generation > 0)
+    CONSTRAINT knotra_operations_ownership CHECK (
+        instance_id IS NOT NULL
+        AND attempt_number IS NOT NULL
+        AND attempt_number > 0
+        AND worker_id IS NOT NULL
+        AND ownership_generation IS NOT NULL
+        AND ownership_generation > 0
+    )
 );
 
 CREATE TABLE knotra_requests (

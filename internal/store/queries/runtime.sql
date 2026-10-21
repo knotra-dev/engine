@@ -1,14 +1,14 @@
 -- name: ReserveNodeInstances :execresult
 UPDATE knotra_execution_scopes SET materialized_instances=materialized_instances+$3
-				WHERE run_id=$1 AND id=$2 AND materialized_instances+$3<=(limits->>'maxNodeInstances')::integer;
+WHERE run_id=$1 AND id=$2 AND materialized_instances+$3<=(limits->>'maxNodeInstances')::integer;
 
 -- name: InsertNodeDeadline :execresult
 INSERT INTO knotra_execution_timers(run_id,id,generation,instance_id,kind,due_at)
-				VALUES($1,$2,1,$3,'node_deadline',$4) ON CONFLICT DO NOTHING;
+VALUES($1,$2,1,$3,'node_deadline',$4) ON CONFLICT DO NOTHING;
 
 -- name: InsertExecutionTimer :execresult
 INSERT INTO knotra_execution_timers(run_id,id,generation,instance_id,kind,due_at)
-			VALUES($1,$2,$3,$4,$5,$6);
+VALUES($1,$2,$3,$4,$5,$6);
 
 -- name: PauseRunAdmission :execresult
 UPDATE knotra_runs SET admission_paused=true WHERE id=$1;
@@ -21,11 +21,11 @@ UPDATE knotra_runs SET stop_cause=$2 WHERE id=$1;
 
 -- name: ClearAttemptDispatch :execresult
 UPDATE knotra_execution_attempts SET dispatch_pending=false
-			WHERE run_id=$1 AND instance_id=$2 AND number=$3;
+WHERE run_id=$1 AND instance_id=$2 AND number=$3;
 
 -- name: SetAttemptDispatchGeneration :execresult
 UPDATE knotra_execution_attempts SET dispatch_generation=$4,dispatch_pending=false
-			WHERE run_id=$1 AND instance_id=$2 AND number=$3;
+WHERE run_id=$1 AND instance_id=$2 AND number=$3;
 
 -- name: ListDueTimerRuns :many
 -- Wrap within the page so one run can drain a batch on every poll.
@@ -49,8 +49,8 @@ WHERE t.run_id=$1 AND t.id=due.id AND t.generation=due.generation;
 -- Fenced attempts can receive an envelope after their unknown/stop decision.
 -- Import evidence without reopening their already decided graph transition.
 SELECT run_id,instance_id,number,outcome_key,owner,ownership_generation,state FROM knotra_execution_attempts
-		WHERE outcome IS NULL AND owner IS NOT NULL AND lease_expires_at<=clock_timestamp()
-		AND outcome_key>$1 ORDER BY outcome_key LIMIT 64;
+WHERE outcome IS NULL AND owner IS NOT NULL AND lease_expires_at<=clock_timestamp()
+    AND outcome_key>$1 ORDER BY outcome_key LIMIT 64;
 
 -- name: MaximumActiveExecutionDurationMicros :one
 SELECT COALESCE(max((extract(epoch FROM (execution_deadline-admitted_at))*1000000)::bigint),0)::bigint

@@ -35,10 +35,12 @@ func (r *Runner) modelInfo(ctx context.Context, profile contract.Profile, c cont
 	if err != nil {
 		return err
 	}
+
 	req.Header.Set("Content-Type", "application/json")
 	if err := r.modelAuth(profile, c, req); err != nil {
 		return err
 	}
+
 	client := r.httpClient()
 	res, err := client.Do(req)
 	if err == nil {
@@ -58,6 +60,7 @@ func (r *Runner) modelInfo(ctx context.Context, profile contract.Profile, c cont
 		}
 		return &Failure{Code: "EXTERNAL_CALL_FAILED", Message: "model discovery request failed", Retryable: true}
 	}
+
 	return nil
 }
 
@@ -117,11 +120,13 @@ func (r *Runner) prepareModels(ctx context.Context, req Request) error {
 		if err != nil {
 			return err
 		}
+
 		key := resource.Connection + "/" + c.Model
 		digest, err := r.modelDigest(ctx, req.Plan.Profile, c)
 		if err != nil {
 			return err
 		}
+
 		var details struct {
 			Capabilities []string `json:"capabilities"`
 		}
@@ -215,6 +220,7 @@ func (r *Runner) prepareSandboxes(ctx context.Context, plan *contract.Plan) erro
 	if len(used) == 0 {
 		return nil
 	}
+
 	helper, err := os.ReadFile(r.HelperPath)
 	if err != nil {
 		return fmt.Errorf("sandbox helper is unavailable")
@@ -222,12 +228,14 @@ func (r *Runner) prepareSandboxes(ctx context.Context, plan *contract.Plan) erro
 	if _, err = elf.NewFile(bytes.NewReader(helper)); err != nil {
 		return fmt.Errorf("sandbox helper must be a Linux ELF executable")
 	}
+
 	sum := sha256.Sum256(helper)
 	plan.Runtime.HelperSHA256 = hex.EncodeToString(sum[:])
 	d, err := r.docker(ctx)
 	if err != nil {
 		return err
 	}
+
 	defer d.client.CloseIdleConnections()
 
 	for name := range used {
@@ -235,12 +243,14 @@ func (r *Runner) prepareSandboxes(ctx context.Context, plan *contract.Plan) erro
 		if !ok {
 			return fmt.Errorf("sandbox profile %q missing", name)
 		}
+
 		var image struct {
 			ID string `json:"Id"`
 		}
 		if err = d.json(ctx, "GET", "/images/"+urlPath(p.Image)+"/json", nil, &image); err != nil {
 			return fmt.Errorf("sandbox %s: image must be pulled before admission: %w", name, err)
 		}
+
 		p.Image = image.ID
 		if p.Network.Mode == "allowlist" {
 			if r.FirewallImage == "" {

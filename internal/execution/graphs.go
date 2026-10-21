@@ -14,10 +14,12 @@ func GraphDefinition(plan contract.Plan, pipeline, path string) (contract.Graph,
 	if document == nil {
 		return contract.Graph{}, fmt.Errorf("pipeline %q is not in the frozen plan", pipeline)
 	}
+
 	graph := document.Spec.Graph
 	if path == "" {
 		return graph, nil
 	}
+
 	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
 	for len(parts) > 0 {
 		if len(parts) < 3 || parts[0] != "nodes" || parts[2] != "body" {

@@ -120,9 +120,23 @@ func (q *Queries) InsertOwnedResource(ctx context.Context, arg InsertOwnedResour
 }
 
 const lockResourceCleanup = `-- name: LockResourceCleanup :one
-SELECT r.engine_id,r.host_id,r.run_id,r.instance_id,r.attempt_number,r.worker_id,
-    r.ownership_generation,r.cleanup_generation,r.kind,r.lifetime,r.state,r.closed_at,w.heartbeat_at,a.state AS attempt_state,
-    a.lease_expires_at,r.mcp_session
+SELECT
+    r.engine_id,
+    r.host_id,
+    r.run_id,
+    r.instance_id,
+    r.attempt_number,
+    r.worker_id,
+    r.ownership_generation,
+    r.cleanup_generation,
+    r.kind,
+    r.lifetime,
+    r.state,
+    r.closed_at,
+    w.heartbeat_at,
+    a.state AS attempt_state,
+    a.lease_expires_at,
+    r.mcp_session
 FROM knotra_resources r JOIN knotra_workers w ON w.id=r.worker_id
 JOIN knotra_execution_attempts a ON a.run_id=r.run_id AND a.instance_id=r.instance_id AND a.number=r.attempt_number
 WHERE r.id=$1 AND r.engine_id=$2 FOR UPDATE OF r,w

@@ -17,7 +17,11 @@ SELECT route,digest,status,response FROM knotra_commands WHERE principal=$1 AND 
 INSERT INTO knotra_commands(principal,id,route,digest,status,response) VALUES($1,$2,$3,$4,$5,$6);
 
 -- name: PutDefinition :one
-INSERT INTO knotra_definitions(id,digest,document) VALUES($1,$2,$3) ON CONFLICT(digest) DO UPDATE SET digest=EXCLUDED.digest RETURNING document;
+INSERT INTO knotra_definitions(id,digest,document)
+VALUES($1,$2,$3)
+ON CONFLICT(digest) DO UPDATE
+SET digest=EXCLUDED.digest
+RETURNING document;
 
 -- name: ReadDefinition :one
 SELECT document FROM knotra_definitions WHERE id=$1;
@@ -36,7 +40,13 @@ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,1,$8,$10);
 SELECT EXISTS(SELECT 1 FROM knotra_events WHERE run_id=$1 AND id=$2);
 
 -- name: ListEvents :many
-SELECT id,document FROM knotra_events WHERE run_id=sqlc.arg(run_id) AND id>sqlc.arg(id) AND (sqlc.arg(instance_id)::text='' OR document->>'instanceId'=sqlc.arg(instance_id)) ORDER BY id LIMIT 100;
+SELECT id,document
+FROM knotra_events
+WHERE run_id=sqlc.arg(run_id)
+    AND id>sqlc.arg(id)
+    AND (sqlc.arg(instance_id)::text='' OR document->>'instanceId'=sqlc.arg(instance_id))
+ORDER BY id
+LIMIT 100;
 
 -- name: ReadRunInputs :one
 SELECT inputs FROM knotra_runs WHERE id=$1;

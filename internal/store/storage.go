@@ -16,11 +16,13 @@ func (s *Store) BindStorage(ctx context.Context, identity string, remote bool) e
 	if identity == "" {
 		return errors.New("storage identity is required")
 	}
+
 	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		q := db.New(tx)
 		if _, err := q.LockTransactionKey(ctx, "knotra.storage."+s.EngineID); err != nil {
 			return err
 		}
+
 		_, err := q.ReadStorageBinding(ctx)
 		if errors.Is(err, pgx.ErrNoRows) && remote {
 			hasData, err := q.HasDurableData(ctx)
@@ -37,6 +39,7 @@ func (s *Store) BindStorage(ctx context.Context, identity string, remote bool) e
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("durable storage configuration differs from this database's bound store")
 		}
+
 		return err
 	})
 }

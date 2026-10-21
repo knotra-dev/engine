@@ -54,7 +54,10 @@ func commandReceiptProxy(t *testing.T, ctx context.Context, api *client.Client, 
 	hold, release := context.WithCancel(ctx)
 	var dropped atomic.Bool
 	proxy.ModifyResponse = func(response *http.Response) error {
-		if !holdResponse || response.Request.Method != http.MethodPost || response.Request.URL.Path != path || !dropped.CompareAndSwap(false, true) {
+		if !holdResponse ||
+			response.Request.Method != http.MethodPost ||
+			response.Request.URL.Path != path ||
+			!dropped.CompareAndSwap(false, true) {
 			return nil
 		}
 		data, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
@@ -118,7 +121,14 @@ func TestRiverCancellationProcessCrashBoundaries(t *testing.T) {
 			work := t.TempDir()
 			profilePath := filepath.Join(work, "profile.json")
 			writeJSON(t, profilePath, profile)
-			options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), DataDir: filepath.Join(work, "engine"), HelperPath: os.Getenv("KNOTRA_TEST_HELPER"), Profiles: []string{profilePath}, Version: "cancel-recovery-test"}
+			options := app.Options{
+				Listen:      unusedAddress(t),
+				DatabaseURL: databaseSchema(t, ctx),
+				DataDir:     filepath.Join(work, "engine"),
+				HelperPath:  os.Getenv("KNOTRA_TEST_HELPER"),
+				Profiles:    []string{profilePath},
+				Version:     "cancel-recovery-test",
+			}
 			optionsPath := filepath.Join(work, "server.json")
 			writeJSON(t, optionsPath, options)
 			api := &client.Client{BaseURL: "http://" + options.Listen, StateDir: filepath.Join(work, "admission-client")}
@@ -126,12 +136,22 @@ func TestRiverCancellationProcessCrashBoundaries(t *testing.T) {
 			engineID := engineIdentity(t, ctx, api)
 			var definition struct{ Definition protocol.Definition }
 			source := riverToolCancellationPipeline
-			pkg := contract.Package{Entrypoint: "pipeline.yaml", Source: source, Files: []contract.File{{Path: "pipeline.yaml", Content: []byte(source)}}}
+			pkg := contract.Package{
+				Entrypoint: "pipeline.yaml",
+				Source:     source,
+				Files:      []contract.File{{Path: "pipeline.yaml", Content: []byte(source)}},
+			}
 			if err := api.Command(ctx, "/definitions", map[string]any{"package": pkg}, uuid.NewString(), &definition); err != nil {
 				t.Fatal(err)
 			}
 			var admitted struct{ Run protocol.Run }
-			if err := api.Command(ctx, "/runs", map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name}, uuid.NewString(), &admitted); err != nil {
+			if err := api.Command(
+				ctx,
+				"/runs",
+				map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name},
+				uuid.NewString(),
+				&admitted,
+			); err != nil {
 				t.Fatal(err)
 			}
 			select {
@@ -188,8 +208,11 @@ func TestRiverCancellationProcessCrashBoundaries(t *testing.T) {
 				if _, err := barrier.Exec(ctx, "SELECT pg_advisory_lock(918273650)"); err != nil {
 					t.Fatal(err)
 				}
-				if _, err := admin.Pool.Exec(ctx, `CREATE FUNCTION cancel_crash_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273650); RETURN NEW; END $$;
-					CREATE TRIGGER cancel_crash_barrier BEFORE UPDATE ON knotra_runs FOR EACH ROW WHEN (NOT OLD.cancel_requested AND NEW.cancel_requested) EXECUTE FUNCTION cancel_crash_barrier()`); err != nil {
+				if _, err := admin.Pool.Exec(
+					ctx,
+					`CREATE FUNCTION cancel_crash_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273650); RETURN NEW; END $$;
+					CREATE TRIGGER cancel_crash_barrier BEFORE UPDATE ON knotra_runs FOR EACH ROW WHEN (NOT OLD.cancel_requested AND NEW.cancel_requested) EXECUTE FUNCTION cancel_crash_barrier()`,
+				); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -200,7 +223,10 @@ func TestRiverCancellationProcessCrashBoundaries(t *testing.T) {
 			if mode == "before_commit" {
 				for {
 					var waiting bool
-					if err := admin.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event='advisory' AND query LIKE '%SetRunCancelled%')`).Scan(&waiting); err != nil {
+					if err := admin.Pool.QueryRow(
+						ctx,
+						`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event='advisory' AND query LIKE '%SetRunCancelled%')`,
+					).Scan(&waiting); err != nil {
 						t.Fatal(err)
 					}
 					if waiting {
@@ -255,10 +281,16 @@ func TestRiverCancellationProcessCrashBoundaries(t *testing.T) {
 			}
 			var cancelling bool
 			var receipts int
-			if err := admin.Pool.QueryRow(ctx, "SELECT cancel_requested,(SELECT count(*) FROM knotra_commands WHERE id=$2) FROM knotra_runs WHERE id=$1", admitted.Run.ID, key).Scan(&cancelling, &receipts); err != nil {
+			if err := admin.Pool.QueryRow(
+				ctx,
+				"SELECT cancel_requested,(SELECT count(*) FROM knotra_commands WHERE id=$2) FROM knotra_runs WHERE id=$1",
+				admitted.Run.ID,
+				key,
+			).Scan(&cancelling, &receipts); err != nil {
 				t.Fatal(err)
 			}
-			if cancelling != (mode == "committed_before_receipt") || receipts != map[string]int{"before_commit": 0, "committed_before_receipt": 1}[mode] {
+			if cancelling != (mode == "committed_before_receipt") ||
+				receipts != map[string]int{"before_commit": 0, "committed_before_receipt": 1}[mode] {
 				t.Fatalf("cancel intent and receipt were not atomic: cancelling=%v receipts=%d", cancelling, receipts)
 			}
 			startEngineProcess(t, ctx, optionsPath, filepath.Join(work, "after.log"), api)
@@ -303,7 +335,9 @@ func TestRiverCancellationProcessCrashBoundaries(t *testing.T) {
 			}
 			var attempts, tools, slots, requests, publications int
 			var finalRootDeadline, finalNodeDeadline time.Time
-			if err := admin.Pool.QueryRow(ctx, `SELECT
+			if err := admin.Pool.QueryRow(
+				ctx,
+				`SELECT
 				(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1),
 				COALESCE((SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='tool'),0),
 				(SELECT active_attempts FROM knotra_execution_scopes WHERE run_id=$1 AND id=$1),
@@ -311,7 +345,10 @@ func TestRiverCancellationProcessCrashBoundaries(t *testing.T) {
 				(SELECT count(*) FROM knotra_artifacts WHERE published AND document->'origin'->>'runId'=$1),
 				(SELECT count(*) FROM knotra_commands WHERE id=$2),
 				(SELECT execution_deadline FROM knotra_runs WHERE id=$1),
-				(SELECT deadline FROM knotra_execution_nodes WHERE run_id=$1 AND node_id='work')`, final.ID, key).Scan(&attempts, &tools, &slots, &requests, &publications, &receipts, &finalRootDeadline, &finalNodeDeadline); err != nil {
+				(SELECT deadline FROM knotra_execution_nodes WHERE run_id=$1 AND node_id='work')`,
+				final.ID,
+				key,
+			).Scan(&attempts, &tools, &slots, &requests, &publications, &receipts, &finalRootDeadline, &finalNodeDeadline); err != nil {
 				t.Fatal(err)
 			}
 			probe, err := http.NewRequestWithContext(ctx, http.MethodGet, remote.URL, nil)
@@ -326,8 +363,33 @@ func TestRiverCancellationProcessCrashBoundaries(t *testing.T) {
 				t.Fatal(err)
 			}
 			_ = response.Body.Close()
-			if final.Status != "cancelled" || len(final.Outputs) != 0 || len(final.Artifacts) != 0 || attempts != 1 || tools != 1 || calls.Load() != 1 || slots != 0 || requests != 0 || publications != 0 || receipts != 1 || !rootDeadline.Equal(finalRootDeadline) || !nodeDeadline.Equal(finalNodeDeadline) || response.StatusCode != http.StatusNotFound {
-				t.Fatalf("status=%s attempts=%d debits=%d calls=%d slots=%d requests=%d publications=%d receipts=%d deadlines=%v/%v remote=%d", final.Status, attempts, tools, calls.Load(), slots, requests, publications, receipts, rootDeadline.Equal(finalRootDeadline), nodeDeadline.Equal(finalNodeDeadline), response.StatusCode)
+			if final.Status != "cancelled" ||
+				len(final.Outputs) != 0 ||
+				len(final.Artifacts) != 0 ||
+				attempts != 1 ||
+				tools != 1 ||
+				calls.Load() != 1 ||
+				slots != 0 ||
+				requests != 0 ||
+				publications != 0 ||
+				receipts != 1 ||
+				!rootDeadline.Equal(finalRootDeadline) ||
+				!nodeDeadline.Equal(finalNodeDeadline) ||
+				response.StatusCode != http.StatusNotFound {
+				t.Fatalf(
+					"status=%s attempts=%d debits=%d calls=%d slots=%d requests=%d publications=%d receipts=%d deadlines=%v/%v remote=%d",
+					final.Status,
+					attempts,
+					tools,
+					calls.Load(),
+					slots,
+					requests,
+					publications,
+					receipts,
+					rootDeadline.Equal(finalRootDeadline),
+					nodeDeadline.Equal(finalNodeDeadline),
+					response.StatusCode,
+				)
 			}
 			t.Log("SIGKILL preserved cancel/receipt atomicity; client replay kept one attempt/debit and original deadlines, stopped the physical call and closed its remote session")
 		})
@@ -347,7 +409,13 @@ func TestRiverHumanAnswerProcessCrashBoundaries(t *testing.T) {
 			profile.Spec.Sandboxes = nil
 			profilePath := filepath.Join(work, "profile.json")
 			writeJSON(t, profilePath, profile)
-			options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), DataDir: filepath.Join(work, "engine"), Profiles: []string{profilePath}, Version: "human-recovery-test"}
+			options := app.Options{
+				Listen:      unusedAddress(t),
+				DatabaseURL: databaseSchema(t, ctx),
+				DataDir:     filepath.Join(work, "engine"),
+				Profiles:    []string{profilePath},
+				Version:     "human-recovery-test",
+			}
 			optionsPath := filepath.Join(work, "server.json")
 			writeJSON(t, optionsPath, options)
 			api := &client.Client{BaseURL: "http://" + options.Listen, StateDir: filepath.Join(work, "admission-client")}
@@ -359,12 +427,22 @@ func TestRiverHumanAnswerProcessCrashBoundaries(t *testing.T) {
 			}
 			source := fmt.Sprintf(riverHumanRecoveryPipeline, timeout)
 			var definition struct{ Definition protocol.Definition }
-			pkg := contract.Package{Entrypoint: "pipeline.yaml", Source: source, Files: []contract.File{{Path: "pipeline.yaml", Content: []byte(source)}}}
+			pkg := contract.Package{
+				Entrypoint: "pipeline.yaml",
+				Source:     source,
+				Files:      []contract.File{{Path: "pipeline.yaml", Content: []byte(source)}},
+			}
 			if err := api.Command(ctx, "/definitions", map[string]any{"package": pkg}, uuid.NewString(), &definition); err != nil {
 				t.Fatal(err)
 			}
 			var admitted struct{ Run protocol.Run }
-			if err := api.Command(ctx, "/runs", map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name}, uuid.NewString(), &admitted); err != nil {
+			if err := api.Command(
+				ctx,
+				"/runs",
+				map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name},
+				uuid.NewString(),
+				&admitted,
+			); err != nil {
 				t.Fatal(err)
 			}
 			request := awaitHuman(t, ctx, api, admitted.Run.ID)
@@ -395,7 +473,14 @@ func TestRiverHumanAnswerProcessCrashBoundaries(t *testing.T) {
 			if err := admin.Pool.QueryRow(ctx, "SELECT deadline FROM knotra_execution_nodes WHERE run_id=$1 AND id=$2", admitted.Run.ID, parentID).Scan(&parentDeadline); err != nil {
 				t.Fatal(err)
 			}
-			commands, received, release := commandReceiptProxy(t, ctx, api, "/v1/requests/"+request.ID+"/response", filepath.Join(work, "response-client"), mode == "committed_before_receipt")
+			commands, received, release := commandReceiptProxy(
+				t,
+				ctx,
+				api,
+				"/v1/requests/"+request.ID+"/response",
+				filepath.Join(work, "response-client"),
+				mode == "committed_before_receipt",
+			)
 			key := uuid.NewString()
 			answer := strings.Repeat("accepted-", 25000)
 			payload := map[string]any{"outputs": map[string]any{"answer": answer}}
@@ -409,8 +494,11 @@ func TestRiverHumanAnswerProcessCrashBoundaries(t *testing.T) {
 				if _, err := barrier.Exec(ctx, "SELECT pg_advisory_lock(918273648)"); err != nil {
 					t.Fatal(err)
 				}
-				if _, err := admin.Pool.Exec(ctx, `CREATE FUNCTION answer_crash_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273648); RETURN NEW; END $$;
-					CREATE TRIGGER answer_crash_barrier BEFORE UPDATE ON knotra_requests FOR EACH ROW WHEN (OLD.status='open' AND NEW.status='answered') EXECUTE FUNCTION answer_crash_barrier()`); err != nil {
+				if _, err := admin.Pool.Exec(
+					ctx,
+					`CREATE FUNCTION answer_crash_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273648); RETURN NEW; END $$;
+					CREATE TRIGGER answer_crash_barrier BEFORE UPDATE ON knotra_requests FOR EACH ROW WHEN (OLD.status='open' AND NEW.status='answered') EXECUTE FUNCTION answer_crash_barrier()`,
+				); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -422,7 +510,10 @@ func TestRiverHumanAnswerProcessCrashBoundaries(t *testing.T) {
 				defer ticker.Stop()
 				for {
 					var waiting bool
-					if err := admin.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event='advisory' AND query LIKE '%AcceptHumanAnswer%')`).Scan(&waiting); err != nil {
+					if err := admin.Pool.QueryRow(
+						ctx,
+						`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event='advisory' AND query LIKE '%AcceptHumanAnswer%')`,
+					).Scan(&waiting); err != nil {
 						t.Fatal(err)
 					}
 					if waiting {
@@ -482,17 +573,50 @@ func TestRiverHumanAnswerProcessCrashBoundaries(t *testing.T) {
 			var responseID *string
 			var accepted *time.Time
 			var receipts, active, succeeded, collected int
-			if err := admin.Pool.QueryRow(ctx, `SELECT q.status,q.response_id,q.accepted_at,
+			if err := admin.Pool.QueryRow(
+				ctx,
+				`SELECT q.status,q.response_id,q.accepted_at,
 				(SELECT count(*) FROM knotra_commands WHERE id=$2),c.active_children,c.succeeded_children,c.collection_position
-				FROM knotra_requests q JOIN knotra_execution_controls c ON c.run_id=q.run_id AND c.instance_id=$3 WHERE q.id=$1`, request.ID, key, parentID).Scan(&status, &responseID, &accepted, &receipts, &active, &succeeded, &collected); err != nil {
+				FROM knotra_requests q JOIN knotra_execution_controls c ON c.run_id=q.run_id AND c.instance_id=$3 WHERE q.id=$1`,
+				request.ID,
+				key,
+				parentID,
+			).Scan(&status, &responseID, &accepted, &receipts, &active, &succeeded, &collected); err != nil {
 				t.Fatal(err)
 			}
 			if mode == "before_commit" {
 				if status != "open" || responseID != nil || accepted != nil || receipts != 0 || active != 1 || succeeded != 0 || collected != 0 {
-					t.Fatalf("uncommitted answer survived SIGKILL: status=%s response=%v accepted=%v receipts=%d control=%d/%d/%d", status, responseID, accepted, receipts, active, succeeded, collected)
+					t.Fatalf(
+						"uncommitted answer survived SIGKILL: status=%s response=%v accepted=%v receipts=%d control=%d/%d/%d",
+						status,
+						responseID,
+						accepted,
+						receipts,
+						active,
+						succeeded,
+						collected,
+					)
 				}
-			} else if status != "accepted" || responseID == nil || *responseID != key || accepted == nil || !accepted.Before(request.Deadline) || receipts != 1 || active != 0 || succeeded != 1 || collected < 0 || collected > 1 {
-				t.Fatalf("committed answer was not atomic: status=%s response=%v accepted=%v receipts=%d control=%d/%d/%d", status, responseID, accepted, receipts, active, succeeded, collected)
+			} else if status != "accepted" ||
+				responseID == nil ||
+				*responseID != key ||
+				accepted == nil ||
+				!accepted.Before(request.Deadline) ||
+				receipts != 1 ||
+				active != 0 ||
+				succeeded != 1 ||
+				collected < 0 ||
+				collected > 1 {
+				t.Fatalf(
+					"committed answer was not atomic: status=%s response=%v accepted=%v receipts=%d control=%d/%d/%d",
+					status,
+					responseID,
+					accepted,
+					receipts,
+					active,
+					succeeded,
+					collected,
+				)
 			}
 			runStatus, err := store.ReadRunStatus(ctx, admin.Pool, admitted.Run.ID)
 			if err != nil || protocol.Terminal(runStatus) {
@@ -539,12 +663,20 @@ func TestRiverHumanAnswerProcessCrashBoundaries(t *testing.T) {
 			final := awaitTerminal(t, ctx, api, admitted.Run.ID)
 			var answers []string
 			if err := json.Unmarshal(final.Outputs["answers"], &answers); err != nil || final.Status != "succeeded" || len(answers) != 1 || answers[0] != answer {
-				t.Fatalf("recovered status=%s export bytes=%d diagnostics=%+v error=%v", final.Status, len(final.Outputs["answers"]), final.Diagnostics, err)
+				t.Fatalf(
+					"recovered status=%s export bytes=%d diagnostics=%+v error=%v",
+					final.Status,
+					len(final.Outputs["answers"]),
+					final.Diagnostics,
+					err,
+				)
 			}
 			var attempts, operations, debits, slots, successes int
 			var finalParentDeadline, finalRequestDeadline time.Time
 			var savedReceipt []byte
-			if err := admin.Pool.QueryRow(ctx, `SELECT
+			if err := admin.Pool.QueryRow(
+				ctx,
+				`SELECT
 				(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1),
 				(SELECT count(*) FROM knotra_operations WHERE run_id=$1),
 				COALESCE((SELECT sum(used) FROM knotra_budgets WHERE run_id=$1),0),
@@ -553,11 +685,45 @@ func TestRiverHumanAnswerProcessCrashBoundaries(t *testing.T) {
 				(SELECT deadline FROM knotra_execution_nodes WHERE run_id=$1 AND id=$2),
 				(q.document->>'deadline')::timestamptz,q.response_id,
 				(SELECT response FROM knotra_commands WHERE id=$4)
-				FROM knotra_requests q WHERE q.id=$3`, final.ID, parentID, request.ID, key).Scan(&attempts, &operations, &debits, &slots, &successes, &finalParentDeadline, &finalRequestDeadline, &responseID, &savedReceipt); err != nil {
+				FROM knotra_requests q WHERE q.id=$3`,
+				final.ID,
+				parentID,
+				request.ID,
+				key,
+			).Scan(
+				&attempts,
+				&operations,
+				&debits,
+				&slots,
+				&successes,
+				&finalParentDeadline,
+				&finalRequestDeadline,
+				&responseID,
+				&savedReceipt,
+			); err != nil {
 				t.Fatal(err)
 			}
-			if attempts != 0 || operations != 0 || debits != 0 || slots != 0 || successes != 2 || !parentDeadline.Equal(finalParentDeadline) || !request.Deadline.Equal(finalRequestDeadline) || responseID == nil || *responseID != key || string(savedReceipt) != string(replay) {
-				t.Fatalf("attempts=%d operations=%d debits=%d slots=%d successes=%d parent deadline=%v request deadline=%v response=%v", attempts, operations, debits, slots, successes, parentDeadline.Equal(finalParentDeadline), request.Deadline.Equal(finalRequestDeadline), responseID)
+			if attempts != 0 ||
+				operations != 0 ||
+				debits != 0 ||
+				slots != 0 ||
+				successes != 2 ||
+				!parentDeadline.Equal(finalParentDeadline) ||
+				!request.Deadline.Equal(finalRequestDeadline) ||
+				responseID == nil ||
+				*responseID != key ||
+				string(savedReceipt) != string(replay) {
+				t.Fatalf(
+					"attempts=%d operations=%d debits=%d slots=%d successes=%d parent deadline=%v request deadline=%v response=%v",
+					attempts,
+					operations,
+					debits,
+					slots,
+					successes,
+					parentDeadline.Equal(finalParentDeadline),
+					request.Deadline.Equal(finalRequestDeadline),
+					responseID,
+				)
 			}
 			t.Log("SIGKILL preserved answer/receipt/child completion atomically; client retry kept one answer, full 225 KB export and original deadlines")
 		})
@@ -635,7 +801,11 @@ func TestRiverResolutionProcessCrashBoundaries(t *testing.T) {
 				}
 				generations[index].Add(1)
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = fmt.Fprintf(w, `{"status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"knotra_output","arguments":"{\"answer\":%d}"}]}`, answer)
+				_, _ = fmt.Fprintf(
+					w,
+					`{"status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"knotra_output","arguments":"{\"answer\":%d}"}]}`,
+					answer,
+				)
 			}))
 			defer func() { cancel(); provider.Close() }()
 			work := t.TempDir()
@@ -646,10 +816,21 @@ func TestRiverResolutionProcessCrashBoundaries(t *testing.T) {
 				profile.Spec.Limits.MaxModelCalls = 4
 			}
 			profile.Spec.Secrets = map[string]contract.SecretSource{"fixture": {Env: "KNOTRA_RESOLUTION_FIXTURE_KEY"}}
-			profile.Spec.Models = map[string]contract.ModelConnection{"cloud": {Provider: "openai", Model: "fixture-model", BaseURL: provider.URL, Auth: map[string]contract.Credential{"key": {SecretRef: "fixture"}}}}
+			profile.Spec.Models = map[string]contract.ModelConnection{"cloud": {
+				Provider: "openai",
+				Model:    "fixture-model",
+				BaseURL:  provider.URL,
+				Auth:     map[string]contract.Credential{"key": {SecretRef: "fixture"}},
+			}}
 			profilePath := filepath.Join(work, "profile.json")
 			writeJSON(t, profilePath, profile)
-			options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), DataDir: filepath.Join(work, "engine"), Profiles: []string{profilePath}, Version: "resolution-recovery-test"}
+			options := app.Options{
+				Listen:      unusedAddress(t),
+				DatabaseURL: databaseSchema(t, ctx),
+				DataDir:     filepath.Join(work, "engine"),
+				Profiles:    []string{profilePath},
+				Version:     "resolution-recovery-test",
+			}
 			optionsPath := filepath.Join(work, "server.json")
 			writeJSON(t, optionsPath, options)
 			api := &client.Client{BaseURL: "http://" + options.Listen, StateDir: filepath.Join(work, "admission-client")}
@@ -673,18 +854,32 @@ func TestRiverResolutionProcessCrashBoundaries(t *testing.T) {
 				t.Fatal(err)
 			}
 			var definition struct{ Definition protocol.Definition }
-			pkg := contract.Package{Entrypoint: "pipeline.yaml", Source: riverResolutionRecoveryPipeline, Files: []contract.File{{Path: "pipeline.yaml", Content: []byte(riverResolutionRecoveryPipeline)}}}
+			pkg := contract.Package{
+				Entrypoint: "pipeline.yaml",
+				Source:     riverResolutionRecoveryPipeline,
+				Files:      []contract.File{{Path: "pipeline.yaml", Content: []byte(riverResolutionRecoveryPipeline)}},
+			}
 			if err := api.Command(ctx, "/definitions", map[string]any{"package": pkg}, uuid.NewString(), &definition); err != nil {
 				t.Fatal(err)
 			}
 			var admitted struct{ Run protocol.Run }
-			if err := api.Command(ctx, "/runs", map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name}, uuid.NewString(), &admitted); err != nil {
+			if err := api.Command(
+				ctx,
+				"/runs",
+				map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name},
+				uuid.NewString(),
+				&admitted,
+			); err != nil {
 				t.Fatal(err)
 			}
 			if outcome != "succeeded" {
 				for {
 					var open int
-					if err := admin.Pool.QueryRow(ctx, "SELECT count(*) FROM knotra_requests WHERE run_id=$1 AND kind='resolution' AND status='open'", admitted.Run.ID).Scan(&open); err != nil {
+					if err := admin.Pool.QueryRow(
+						ctx,
+						"SELECT count(*) FROM knotra_requests WHERE run_id=$1 AND kind='resolution' AND status='open'",
+						admitted.Run.ID,
+					).Scan(&open); err != nil {
 						t.Fatal(err)
 					}
 					if open == 1 && calls[1].Load() == 1 {
@@ -714,7 +909,11 @@ func TestRiverResolutionProcessCrashBoundaries(t *testing.T) {
 			}
 			for {
 				var open int
-				if err := admin.Pool.QueryRow(ctx, "SELECT count(*) FROM knotra_requests WHERE run_id=$1 AND kind='resolution' AND status='open'", admitted.Run.ID).Scan(&open); err != nil {
+				if err := admin.Pool.QueryRow(
+					ctx,
+					"SELECT count(*) FROM knotra_requests WHERE run_id=$1 AND kind='resolution' AND status='open'",
+					admitted.Run.ID,
+				).Scan(&open); err != nil {
 					t.Fatal(err)
 				}
 				if open == 2 {
@@ -736,7 +935,12 @@ func TestRiverResolutionProcessCrashBoundaries(t *testing.T) {
 				t.Fatal("lost model request cannot be retried after verified non-execution")
 			}
 			var rootDeadline, nodeDeadline time.Time
-			if err := admin.Pool.QueryRow(ctx, `SELECT execution_deadline,(SELECT deadline FROM knotra_execution_nodes WHERE run_id=$1 AND id=$2) FROM knotra_runs WHERE id=$1`, admitted.Run.ID, b).Scan(&rootDeadline, &nodeDeadline); err != nil {
+			if err := admin.Pool.QueryRow(
+				ctx,
+				`SELECT execution_deadline,(SELECT deadline FROM knotra_execution_nodes WHERE run_id=$1 AND id=$2) FROM knotra_runs WHERE id=$1`,
+				admitted.Run.ID,
+				b,
+			).Scan(&rootDeadline, &nodeDeadline); err != nil {
 				t.Fatal(err)
 			}
 			schema, err := storedb.New(admin.Pool).CurrentSchema(ctx)
@@ -758,13 +962,24 @@ func TestRiverResolutionProcessCrashBoundaries(t *testing.T) {
 			case <-ctx.Done():
 				t.Fatal(ctx.Err())
 			}
-			payload := map[string]any{"outcome": "succeeded", "evidence": "fixture provider recorded answer 42 before its journal commit failed", "outputs": map[string]any{"answer": 42}}
+			payload := map[string]any{
+				"outcome":  "succeeded",
+				"evidence": "fixture provider recorded answer 42 before its journal commit failed",
+				"outputs":  map[string]any{"answer": 42},
+			}
 			if err := api.Command(ctx, "/runs/"+admitted.Run.ID+"/instances/"+a+"/resolve", payload, uuid.NewString(), new(any)); err != nil {
 				t.Fatal(err)
 			}
 			var paused bool
 			if err := admin.Pool.QueryRow(ctx, "SELECT admission_paused FROM knotra_runs WHERE id=$1", admitted.Run.ID).Scan(&paused); err != nil || !paused || calls[0].Load() != 1 || calls[1].Load() != 1 || calls[2].Load() != 0 {
-				t.Fatalf("first resolution resumed root: paused=%v calls=%d/%d/%d error=%v", paused, calls[0].Load(), calls[1].Load(), calls[2].Load(), err)
+				t.Fatalf(
+					"first resolution resumed root: paused=%v calls=%d/%d/%d error=%v",
+					paused,
+					calls[0].Load(),
+					calls[1].Load(),
+					calls[2].Load(),
+					err,
+				)
 			}
 			payload["outcome"] = outcome
 			if outcome != "succeeded" {
@@ -787,8 +1002,11 @@ func TestRiverResolutionProcessCrashBoundaries(t *testing.T) {
 				if _, err := barrier.Exec(ctx, "SELECT pg_advisory_lock(918273651)"); err != nil {
 					t.Fatal(err)
 				}
-				if _, err := admin.Pool.Exec(ctx, `CREATE FUNCTION resolution_crash_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273651); RETURN NEW; END $$;
-					CREATE TRIGGER resolution_crash_barrier BEFORE UPDATE ON knotra_requests FOR EACH ROW WHEN (OLD.status='open' AND NEW.status='resolved') EXECUTE FUNCTION resolution_crash_barrier()`); err != nil {
+				if _, err := admin.Pool.Exec(
+					ctx,
+					`CREATE FUNCTION resolution_crash_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273651); RETURN NEW; END $$;
+					CREATE TRIGGER resolution_crash_barrier BEFORE UPDATE ON knotra_requests FOR EACH ROW WHEN (OLD.status='open' AND NEW.status='resolved') EXECUTE FUNCTION resolution_crash_barrier()`,
+				); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -798,7 +1016,10 @@ func TestRiverResolutionProcessCrashBoundaries(t *testing.T) {
 			if mode == "before_commit" {
 				for {
 					var waiting bool
-					if err := admin.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event='advisory' AND query LIKE '%AcceptResolution%')`).Scan(&waiting); err != nil {
+					if err := admin.Pool.QueryRow(
+						ctx,
+						`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event='advisory' AND query LIKE '%AcceptResolution%')`,
+					).Scan(&waiting); err != nil {
 						t.Fatal(err)
 					}
 					if waiting {
@@ -858,13 +1079,32 @@ func TestRiverResolutionProcessCrashBoundaries(t *testing.T) {
 			var responseID *string
 			var accepted *time.Time
 			var receipts int
-			if err := admin.Pool.QueryRow(ctx, `SELECT q.status,q.response_id,q.accepted_at,n.state,r.admission_paused,(SELECT count(*) FROM knotra_commands WHERE id=$2),COALESCE(r.stop_cause->>'code','')
-				FROM knotra_requests q JOIN knotra_execution_nodes n ON n.run_id=q.run_id AND n.id=q.document->>'instanceId' JOIN knotra_runs r ON r.id=q.run_id WHERE q.id=$1`, request.ID, key).Scan(&status, &responseID, &accepted, &nodeState, &paused, &receipts, &stopCode); err != nil {
+			if err := admin.Pool.QueryRow(
+				ctx,
+				`SELECT q.status,q.response_id,q.accepted_at,n.state,r.admission_paused,(SELECT count(*) FROM knotra_commands WHERE id=$2),COALESCE(r.stop_cause->>'code','')
+				FROM knotra_requests q JOIN knotra_execution_nodes n ON n.run_id=q.run_id AND n.id=q.document->>'instanceId' JOIN knotra_runs r ON r.id=q.run_id WHERE q.id=$1`,
+				request.ID,
+				key,
+			).Scan(&status, &responseID, &accepted, &nodeState, &paused, &receipts, &stopCode); err != nil {
 				t.Fatal(err)
 			}
 			if mode == "before_commit" {
-				if status != "open" || nodeState != "waiting_resolution" || responseID != nil || accepted != nil || !paused || receipts != 0 || stopCode != "" {
-					t.Fatalf("uncommitted resolution survived: status=%s node=%s response=%v accepted=%v paused=%v receipts=%d", status, nodeState, responseID, accepted, paused, receipts)
+				if status != "open" ||
+					nodeState != "waiting_resolution" ||
+					responseID != nil ||
+					accepted != nil ||
+					!paused ||
+					receipts != 0 ||
+					stopCode != "" {
+					t.Fatalf(
+						"uncommitted resolution survived: status=%s node=%s response=%v accepted=%v paused=%v receipts=%d",
+						status,
+						nodeState,
+						responseID,
+						accepted,
+						paused,
+						receipts,
+					)
 				}
 			} else {
 				wantNode, wantStop := "succeeded", ""
@@ -874,8 +1114,25 @@ func TestRiverResolutionProcessCrashBoundaries(t *testing.T) {
 				if outcome == "not_started" {
 					wantNode = "retry_wait"
 				}
-				if status != "resolved" || nodeState != wantNode || responseID == nil || *responseID != key || accepted == nil || !accepted.Before(request.Deadline) || (outcome != "failed" && paused) || receipts != 1 || stopCode != wantStop {
-					t.Fatalf("committed resolution was not atomic: status=%s node=%s response=%v accepted=%v paused=%v receipts=%d stop=%s", status, nodeState, responseID, accepted, paused, receipts, stopCode)
+				if status != "resolved" ||
+					nodeState != wantNode ||
+					responseID == nil ||
+					*responseID != key ||
+					accepted == nil ||
+					!accepted.Before(request.Deadline) ||
+					(outcome != "failed" && paused) ||
+					receipts != 1 ||
+					stopCode != wantStop {
+					t.Fatalf(
+						"committed resolution was not atomic: status=%s node=%s response=%v accepted=%v paused=%v receipts=%d stop=%s",
+						status,
+						nodeState,
+						responseID,
+						accepted,
+						paused,
+						receipts,
+						stopCode,
+					)
 				}
 			}
 			startEngineProcess(t, ctx, optionsPath, filepath.Join(work, "after.log"), api)
@@ -910,7 +1167,9 @@ func TestRiverResolutionProcessCrashBoundaries(t *testing.T) {
 			var attempts, models, operations, completed, slots, open, successes int
 			var finalRootDeadline, finalNodeDeadline, finalRequestDeadline time.Time
 			var decision, evidence, operationID string
-			if err := admin.Pool.QueryRow(ctx, `SELECT
+			if err := admin.Pool.QueryRow(
+				ctx,
+				`SELECT
 				(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1),
 				COALESCE((SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='model'),0),
 				(SELECT count(*) FROM knotra_operations WHERE run_id=$1),
@@ -922,7 +1181,28 @@ func TestRiverResolutionProcessCrashBoundaries(t *testing.T) {
 				(SELECT deadline FROM knotra_execution_nodes WHERE run_id=$1 AND id=$2),
 				(q.document->>'deadline')::timestamptz,q.response_id,q.response->>'decision',q.response->>'evidence',q.response->>'operationId',
 				(SELECT count(*) FROM knotra_commands WHERE id=$4)
-				FROM knotra_requests q WHERE q.id=$3`, final.ID, b, request.ID, key).Scan(&attempts, &models, &operations, &completed, &slots, &open, &successes, &finalRootDeadline, &finalNodeDeadline, &finalRequestDeadline, &responseID, &decision, &evidence, &operationID, &receipts); err != nil {
+				FROM knotra_requests q WHERE q.id=$3`,
+				final.ID,
+				b,
+				request.ID,
+				key,
+			).Scan(
+				&attempts,
+				&models,
+				&operations,
+				&completed,
+				&slots,
+				&open,
+				&successes,
+				&finalRootDeadline,
+				&finalNodeDeadline,
+				&finalRequestDeadline,
+				&responseID,
+				&decision,
+				&evidence,
+				&operationID,
+				&receipts,
+			); err != nil {
 				t.Fatal(err)
 			}
 			wantStatus, wantDecision := "succeeded", "completed"
@@ -936,10 +1216,16 @@ func TestRiverResolutionProcessCrashBoundaries(t *testing.T) {
 				wantDecision, wantAttempts, wantCompleted, wantBCalls = "not_executed", 4, 2, 2
 			}
 			var preservedState, preservedAnswer string
-			if err := admin.Pool.QueryRow(ctx, "SELECT state,outputs->'answer'->>'json' FROM knotra_execution_nodes WHERE run_id=$1 AND id=$2", final.ID, a).Scan(&preservedState, &preservedAnswer); err != nil || preservedState != "succeeded" || preservedAnswer != "42" {
+			if err := admin.Pool.QueryRow(
+				ctx,
+				"SELECT state,outputs->'answer'->>'json' FROM knotra_execution_nodes WHERE run_id=$1 AND id=$2",
+				final.ID,
+				a,
+			).Scan(&preservedState, &preservedAnswer); err != nil || preservedState != "succeeded" || preservedAnswer != "42" {
 				t.Fatalf("confirmed sibling changed: state=%s answer=%s error=%v", preservedState, preservedAnswer, err)
 			}
-			if outcome != "failed" && (string(final.Outputs["a"]) != "42" || string(final.Outputs["b"]) != "42" || string(final.Outputs["c"]) != "44") {
+			if outcome != "failed" &&
+				(string(final.Outputs["a"]) != "42" || string(final.Outputs["b"]) != "42" || string(final.Outputs["c"]) != "44") {
 				t.Fatalf("resolution exports=%+v", final.Outputs)
 			}
 			if outcome == "failed" && (len(final.Outputs) != 0 || len(final.Artifacts) != 0) {
@@ -949,8 +1235,47 @@ func TestRiverResolutionProcessCrashBoundaries(t *testing.T) {
 			if outcome == "failed" {
 				wantBGenerations = 0
 			}
-			if final.Status != wantStatus || attempts != wantAttempts || models != wantAttempts || operations != wantAttempts || completed != wantCompleted || slots != 0 || open != 0 || successes != wantSuccesses || calls[0].Load() != 1 || calls[1].Load() != wantBCalls || calls[2].Load() != wantCCalls || generations[0].Load() != 1 || generations[1].Load() != wantBGenerations || generations[2].Load() != wantCCalls || responseID == nil || *responseID != key || decision != wantDecision || evidence != payload["evidence"] || operationID != request.Failure.OperationID || receipts != 1 || !rootDeadline.Equal(finalRootDeadline) || !nodeDeadline.Equal(finalNodeDeadline) || !request.Deadline.Equal(finalRequestDeadline) {
-				t.Fatalf("status=%s attempts=%d models=%d operations=%d/%d slots=%d open=%d successes=%d calls=%d/%d/%d decision=%s deadlines=%v/%v/%v", final.Status, attempts, models, completed, operations, slots, open, successes, calls[0].Load(), calls[1].Load(), calls[2].Load(), decision, rootDeadline.Equal(finalRootDeadline), nodeDeadline.Equal(finalNodeDeadline), request.Deadline.Equal(finalRequestDeadline))
+			if final.Status != wantStatus ||
+				attempts != wantAttempts ||
+				models != wantAttempts ||
+				operations != wantAttempts ||
+				completed != wantCompleted ||
+				slots != 0 ||
+				open != 0 ||
+				successes != wantSuccesses ||
+				calls[0].Load() != 1 ||
+				calls[1].Load() != wantBCalls ||
+				calls[2].Load() != wantCCalls ||
+				generations[0].Load() != 1 ||
+				generations[1].Load() != wantBGenerations ||
+				generations[2].Load() != wantCCalls ||
+				responseID == nil ||
+				*responseID != key ||
+				decision != wantDecision ||
+				evidence != payload["evidence"] ||
+				operationID != request.Failure.OperationID ||
+				receipts != 1 ||
+				!rootDeadline.Equal(finalRootDeadline) ||
+				!nodeDeadline.Equal(finalNodeDeadline) ||
+				!request.Deadline.Equal(finalRequestDeadline) {
+				t.Fatalf(
+					"status=%s attempts=%d models=%d operations=%d/%d slots=%d open=%d successes=%d calls=%d/%d/%d decision=%s deadlines=%v/%v/%v",
+					final.Status,
+					attempts,
+					models,
+					completed,
+					operations,
+					slots,
+					open,
+					successes,
+					calls[0].Load(),
+					calls[1].Load(),
+					calls[2].Load(),
+					decision,
+					rootDeadline.Equal(finalRootDeadline),
+					nodeDeadline.Equal(finalNodeDeadline),
+					request.Deadline.Equal(finalRequestDeadline),
+				)
 			}
 			t.Log("SIGKILL kept decision/receipt/node transition/root stop or resume atomic; confirmed sibling and original deadlines survived, with physical requests and generations matching the operator decision")
 		})

@@ -19,7 +19,11 @@ func TestOwnedOperationAdmissionAndBudgetAreAtomic(t *testing.T) {
 	if err != nil || claim == nil {
 		t.Fatalf("claim: %+v %v", claim, err)
 	}
-	if _, err := s.Pool.Exec(ctx, `UPDATE knotra_execution_scopes SET limits=jsonb_set(limits,'{maxModelCalls}','1') WHERE run_id=$1 AND id<>$1`, claim.RunID); err != nil {
+	if _, err := s.Pool.Exec(
+		ctx,
+		`UPDATE knotra_execution_scopes SET limits=jsonb_set(limits,'{maxModelCalls}','1') WHERE run_id=$1 AND id<>$1`,
+		claim.RunID,
+	); err != nil {
 		t.Fatal(err)
 	}
 	var physicalCalls atomic.Int32
@@ -81,7 +85,12 @@ func TestOwnedOperationAdmissionAndBudgetAreAtomic(t *testing.T) {
 	if rootUsed != 1 || childUsed != 1 || !unadmitted {
 		t.Fatalf("failed admission partially committed: root=%d child=%d unadmitted=%v", rootUsed, childUsed, unadmitted)
 	}
-	if _, err := s.Pool.Exec(ctx, "UPDATE knotra_execution_attempts SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE run_id=$1 AND instance_id=$2", claim.RunID, claim.InstanceID); err != nil {
+	if _, err := s.Pool.Exec(
+		ctx,
+		"UPDATE knotra_execution_attempts SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE run_id=$1 AND instance_id=$2",
+		claim.RunID,
+		claim.InstanceID,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.BeginOwnedOperation(ctx, claim.Ownership, "late", "tool", "write"); !errors.Is(err, ErrExecutionOwnership) {
@@ -121,7 +130,15 @@ func TestOwnedOperationCancellationRetainsUnconfirmedIntent(t *testing.T) {
 		t.Fatalf("cancelled owner confirmed late evidence: %v", err)
 	}
 	files := Artifacts{Store: s, Root: t.TempDir()}
-	if _, err := s.PutOwnedArtifact(ctx, claim.Ownership, files, "late.txt", "text/plain", []byte("late"), map[string]string{"runId": claim.RunID}); !errors.Is(err, ErrExecutionOwnership) {
+	if _, err := s.PutOwnedArtifact(
+		ctx,
+		claim.Ownership,
+		files,
+		"late.txt",
+		"text/plain",
+		[]byte("late"),
+		map[string]string{"runId": claim.RunID},
+	); !errors.Is(err, ErrExecutionOwnership) {
 		t.Fatalf("cancelled owner published artifact metadata: %v", err)
 	}
 	var admitted, completed bool

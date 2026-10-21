@@ -178,8 +178,13 @@ func TestManagedMCPOverlaysAndRemovalPreserveEditableProfile(t *testing.T) {
 	}
 	connections := sourceFixture()
 	connections.MCP = map[string]contract.MCPConnection{
-		"mcp_docs": {Transport: "streamable_http", URL: "https://docs.example/mcp", Headers: map[string]contract.Credential{"Authorization": {SecretRef: "mcp_docs_auth"}}, AllowedTools: []string{"search"}},
-		"mcp_box":  {Transport: "stdio", Sandbox: "node_box", Command: []string{"node", "/workspace/server.js"}, AllowedTools: []string{}},
+		"mcp_docs": {
+			Transport:    "streamable_http",
+			URL:          "https://docs.example/mcp",
+			Headers:      map[string]contract.Credential{"Authorization": {SecretRef: "mcp_docs_auth"}},
+			AllowedTools: []string{"search"},
+		},
+		"mcp_box": {Transport: "stdio", Sandbox: "node_box", Command: []string{"node", "/workspace/server.js"}, AllowedTools: []string{}},
 	}
 	connections.Secrets["mcp_docs_auth"] = contract.SecretSource{Env: "KNOTRA_MCP_DOCS_AUTH"}
 	connections.RemoveMCP = []string{"mcp_retired"}
@@ -199,13 +204,19 @@ func TestManagedMCPOverlaysAndRemovalPreserveEditableProfile(t *testing.T) {
 	if contract.HasErrors(diagnostics) {
 		t.Fatal(diagnostics)
 	}
-	if len(managed.Spec.MCP) != 3 || managed.Spec.MCP["manual_remote"].URL != profile.Spec.MCP["manual_remote"].URL || managed.Spec.MCP["mcp_docs"].Headers["Authorization"].SecretRef != "mcp_docs_auth" || managed.Spec.MCP["mcp_box"].Transport != "stdio" {
+	if len(managed.Spec.MCP) != 3 ||
+		managed.Spec.MCP["manual_remote"].URL != profile.Spec.MCP["manual_remote"].URL ||
+		managed.Spec.MCP["mcp_docs"].Headers["Authorization"].SecretRef != "mcp_docs_auth" ||
+		managed.Spec.MCP["mcp_box"].Transport != "stdio" {
 		t.Fatalf("MCP overlay lost configuration: %+v", managed.Spec.MCP)
 	}
 	if _, ok := managed.Spec.MCP["mcp_retired"]; ok {
 		t.Fatal("retired desktop MCP source was restored")
 	}
-	if len(managed.Spec.Models) != 5 || len(managed.Spec.Sandboxes) != 2 || managed.Spec.Secrets["mcp_docs_auth"].Env != "KNOTRA_MCP_DOCS_AUTH" || bytes.Contains(data, []byte("fixture-key")) {
+	if len(managed.Spec.Models) != 5 ||
+		len(managed.Spec.Sandboxes) != 2 ||
+		managed.Spec.Secrets["mcp_docs_auth"].Env != "KNOTRA_MCP_DOCS_AUTH" ||
+		bytes.Contains(data, []byte("fixture-key")) {
 		t.Fatal("MCP overlay changed unrelated resources or serialized credentials")
 	}
 	delete(connections.MCP, "mcp_docs")

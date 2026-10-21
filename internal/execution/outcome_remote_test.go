@@ -114,8 +114,17 @@ func TestRemoteMCPRecoveryPreservesSessionAndCurrentCall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resource := ResourceRecord{ID: uuid.NewString(), EngineID: "engine", HostID: "host", Kind: "mcp_http", Lifetime: "run", State: "active", DispatchGeneration: 1,
-		Ownership: fixtureOutcome().Ownership, MCP: &MCPSessionRecord{Connection: "tools", SessionID: "session", ProtocolVersion: "2025-11-25"}}
+	resource := ResourceRecord{
+		ID:                 uuid.NewString(),
+		EngineID:           "engine",
+		HostID:             "host",
+		Kind:               "mcp_http",
+		Lifetime:           "run",
+		State:              "active",
+		DispatchGeneration: 1,
+		Ownership:          fixtureOutcome().Ownership,
+		MCP:                &MCPSessionRecord{Connection: "tools", SessionID: "session", ProtocolVersion: "2025-11-25"},
+	}
 	if err := files.PutMCPSession(resource); err != nil {
 		t.Fatal(err)
 	}

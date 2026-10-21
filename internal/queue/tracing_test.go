@@ -61,7 +61,10 @@ func TestRuntimeDiagnosticsKeepIdentityWithoutPrivateData(t *testing.T) {
 	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		body, err := io.ReadAll(req.Body)
-		if err != nil || !bytes.Contains(body, []byte(input)) || !bytes.Contains(body, []byte(prompt)) || req.Header.Get("Authorization") != "Bearer "+secret {
+		if err != nil ||
+			!bytes.Contains(body, []byte(input)) ||
+			!bytes.Contains(body, []byte(prompt)) ||
+			req.Header.Get("Authorization") != "Bearer "+secret {
 			t.Error("physical provider request lost its private input, prompt or authentication")
 		}
 		calls.Add(1)
@@ -147,7 +150,15 @@ func TestRuntimeDiagnosticsKeepIdentityWithoutPrivateData(t *testing.T) {
 		}
 		switch span.Name {
 		case "node.llm", "outcome.publish", "river.knotra_execute_v1":
-			for _, key := range []attribute.Key{"knotra.run.id", "knotra.instance.id", "knotra.attempt", "knotra.worker.id", "knotra.ownership.generation", "knotra.engine.id", "knotra.host.id"} {
+			for _, key := range []attribute.Key{
+				"knotra.run.id",
+				"knotra.instance.id",
+				"knotra.attempt",
+				"knotra.worker.id",
+				"knotra.ownership.generation",
+				"knotra.engine.id",
+				"knotra.host.id",
+			} {
 				value, found := attrs.Value(key)
 				if !found || value.AsInterface() == "" {
 					t.Fatalf("%s lacks %s", span.Name, key)
@@ -184,10 +195,32 @@ func TestRuntimeDiagnosticsKeepIdentityWithoutPrivateData(t *testing.T) {
 			}
 		}
 	}
-	if nodes != 3 || executions != 3 || publications < 4 || recoveries < 1 || operationEvents["operation.intent"] != 3 || operationEvents["operation.admission"] != 3 || operationEvents["operation.confirmation"] != 3 {
-		t.Fatalf("nodes=%d executions=%d publications=%d recoveries=%d operation events=%v", nodes, executions, publications, recoveries, operationEvents)
+	if nodes != 3 ||
+		executions != 3 ||
+		publications < 4 ||
+		recoveries < 1 ||
+		operationEvents["operation.intent"] != 3 ||
+		operationEvents["operation.admission"] != 3 ||
+		operationEvents["operation.confirmation"] != 3 {
+		t.Fatalf(
+			"nodes=%d executions=%d publications=%d recoveries=%d operation events=%v",
+			nodes,
+			executions,
+			publications,
+			recoveries,
+			operationEvents,
+		)
 	}
-	for _, identity := range []string{id, r.WorkerID, r.Store.EngineID, r.HostID, "generation", "attempt", "knotra.operation.id", "outcome.publication"} {
+	for _, identity := range []string{
+		id,
+		r.WorkerID,
+		r.Store.EngineID,
+		r.HostID,
+		"generation",
+		"attempt",
+		"knotra.operation.id",
+		"outcome.publication",
+	} {
 		if !strings.Contains(logs.String(), identity) {
 			t.Fatalf("logs lack identity/boundary %s", identity)
 		}

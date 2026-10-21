@@ -63,11 +63,17 @@ func claimedHost(t *testing.T, endpoint string) (*Host, execution.ExecuteRequest
 	node := contract.Node{Type: "llm", Outputs: map[string]contract.Port{"answer": {Schema: json.RawMessage(`{"type":"integer"}`)}},
 		LLM: &contract.LLMNode{Model: "model", Prompt: contract.TextSource{Text: "Return answer 42."}}}
 	limits := contract.Limits{Timeout: "1h", MaxConcurrentNodes: 2, MaxNodeInstances: 100, MaxModelCalls: 2, MaxToolCalls: 2}
-	plan := contract.Plan{Version: "knotra/v1", CompilerVersion: contract.CompilerVersion, CELVersion: contract.CELVersion, Root: "main.yaml", Digest: "frozen-plan",
+	plan := contract.Plan{
+		Version:         "knotra/v1",
+		CompilerVersion: contract.CompilerVersion,
+		CELVersion:      contract.CELVersion,
+		Root:            "main.yaml",
+		Digest:          "frozen-plan",
 		Pipelines: map[string]*contract.Pipeline{"main.yaml": {Spec: contract.Spec{Graph: contract.Graph{Nodes: map[string]contract.Node{"model": node}},
 			Models: map[string]contract.Model{"model": {Connection: "local"}}}}},
 		Profile: contract.Profile{Spec: contract.ProfileSpec{Limits: limits,
-			Models: map[string]contract.ModelConnection{"local": {Provider: "ollama", Model: "fixture", BaseURL: endpoint}}}}}
+			Models: map[string]contract.ModelConnection{"local": {Provider: "ollama", Model: "fixture", BaseURL: endpoint}}}},
+	}
 	definition := protocol.Definition{ID: uuid.NewString(), PackageDigest: uuid.NewString(), Name: "executor-test"}
 	run := protocol.Run{ID: uuid.NewString(), DefinitionID: definition.ID, Status: "pending"}
 	id := execution.AttemptID{RunID: run.ID, InstanceID: "model", Number: 1}
@@ -91,16 +97,38 @@ func claimedHost(t *testing.T, endpoint string) (*Host, execution.ExecuteRequest
 			VALUES($1,'root','root','main.yaml','root','{}',$2,$3,'running')`, run.ID, b, state.Deadline); err != nil {
 			return err
 		}
-		q := execution.ExecuteRequest{RunID: run.ID, InstanceID: id.InstanceID, NodeID: "model", Pipeline: "main.yaml", Attempt: 1, Node: node, Inputs: contract.Values{}, Scopes: scopes, Deadline: state.Deadline}
+		q := execution.ExecuteRequest{
+			RunID:      run.ID,
+			InstanceID: id.InstanceID,
+			NodeID:     "model",
+			Pipeline:   "main.yaml",
+			Attempt:    1,
+			Node:       node,
+			Inputs:     contract.Values{},
+			Scopes:     scopes,
+			Deadline:   state.Deadline,
+		}
 		b, err = json.Marshal(q)
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO knotra_execution_nodes(run_id,id,graph_id,node_id,address,state,execution_request,deadline,attempt_number)
-			VALUES($1,$2,'root','model','root/model','ready',$3,$4,1)`, run.ID, id.InstanceID, b, state.Deadline); err != nil {
+		if _, err := tx.Exec(
+			ctx,
+			`INSERT INTO knotra_execution_nodes(run_id,id,graph_id,node_id,address,state,execution_request,deadline,attempt_number)
+			VALUES($1,$2,'root','model','root/model','ready',$3,$4,1)`,
+			run.ID,
+			id.InstanceID,
+			b,
+			state.Deadline,
+		); err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO knotra_execution_attempts(run_id,instance_id,number,dispatch_generation,state) VALUES($1,$2,1,1,'ready')`, run.ID, id.InstanceID)
+		_, err = tx.Exec(
+			ctx,
+			`INSERT INTO knotra_execution_attempts(run_id,instance_id,number,dispatch_generation,state) VALUES($1,$2,1,1,'ready')`,
+			run.ID,
+			id.InstanceID,
+		)
 		return err
 	})
 	if err != nil {
@@ -165,7 +193,11 @@ func TestHostRechecksOwnershipAfterProviderPreparation(t *testing.T) {
 	var q execution.ExecuteRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/tags" {
-			if _, err := h.Store.Pool.Exec(r.Context(), "UPDATE knotra_execution_attempts SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE run_id=$1", q.RunID); err != nil {
+			if _, err := h.Store.Pool.Exec(
+				r.Context(),
+				"UPDATE knotra_execution_attempts SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE run_id=$1",
+				q.RunID,
+			); err != nil {
 				t.Error(err)
 			}
 			_, _ = fmt.Fprint(w, `{"models":[{"name":"fixture","digest":"admitted"}]}`)
@@ -178,7 +210,11 @@ func TestHostRechecksOwnershipAfterProviderPreparation(t *testing.T) {
 	h, q = claimedHost(t, server.URL)
 	ctx := context.Background()
 	// A frozen digest triggers the real provider preparation request.
-	if _, err := h.Store.Pool.Exec(ctx, `UPDATE knotra_runs SET plan=(plan::jsonb || '{"modelDigests":{"local/fixture":"admitted"}}')::json WHERE id=$1`, q.RunID); err != nil {
+	if _, err := h.Store.Pool.Exec(
+		ctx,
+		`UPDATE knotra_runs SET plan=(plan::jsonb || '{"modelDigests":{"local/fixture":"admitted"}}')::json WHERE id=$1`,
+		q.RunID,
+	); err != nil {
 		t.Fatal(err)
 	}
 	result := h.Execute(ctx, q)
@@ -203,7 +239,11 @@ func TestHostLostOwnershipCannotConfirmExternalResponse(t *testing.T) {
 		calls.Add(1)
 		// External work has happened, but the original owner's lease has expired
 		// before its response can be journaled. The envelope must remain unknown.
-		if _, err := h.Store.Pool.Exec(r.Context(), "UPDATE knotra_execution_attempts SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE run_id=$1", q.RunID); err != nil {
+		if _, err := h.Store.Pool.Exec(
+			r.Context(),
+			"UPDATE knotra_execution_attempts SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE run_id=$1",
+			q.RunID,
+		); err != nil {
 			t.Error(err)
 		}
 		_, _ = fmt.Fprint(w, fixtureResponse)
@@ -233,9 +273,13 @@ func TestHostLostOwnershipCannotConfirmExternalResponse(t *testing.T) {
 		t.Fatalf("lost owner repeated a physical call: %+v calls=%d", again, calls.Load())
 	}
 	var used, unconfirmed int
-	if err := h.Store.Pool.QueryRow(ctx, `SELECT
+	if err := h.Store.Pool.QueryRow(
+		ctx,
+		`SELECT
 		(SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='model'),
-		(SELECT count(*) FROM knotra_operations WHERE run_id=$1 AND admitted_at IS NOT NULL AND NOT completed)`, q.RunID).Scan(&used, &unconfirmed); err != nil {
+		(SELECT count(*) FROM knotra_operations WHERE run_id=$1 AND admitted_at IS NOT NULL AND NOT completed)`,
+		q.RunID,
+	).Scan(&used, &unconfirmed); err != nil {
 		t.Fatal(err)
 	}
 	if used != 1 || unconfirmed != 1 {

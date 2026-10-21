@@ -31,6 +31,7 @@ func (s *Server) prepareRestart(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, 503, "UNAVAILABLE", "engine control request was cancelled", nil)
 		return
 	}
+
 	active, err := db.New(s.Store.Pool).CountUnfinishedRuns(r.Context())
 	if err != nil {
 		s.err(w, err)

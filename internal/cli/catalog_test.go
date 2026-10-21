@@ -16,7 +16,10 @@ func TestPipelineShowKeepsLegacyCommandsAndJSON(t *testing.T) {
 		if r.URL.Path != "/v1/definitions/pipeline" {
 			t.Errorf("unexpected route %s", r.URL.Path)
 		}
-		_, _ = fmt.Fprint(w, `{"definition":{"id":"pipeline","name":"example","title":"Example","packageDigest":"digest","package":{"entrypoint":"pipeline.yaml","source":"exact bytes","files":[]}}}`)
+		_, _ = fmt.Fprint(
+			w,
+			`{"definition":{"id":"pipeline","name":"example","title":"Example","packageDigest":"digest","package":{"entrypoint":"pipeline.yaml","source":"exact bytes","files":[]}}}`,
+		)
 	}))
 	defer server.Close()
 	for _, command := range [][]string{{"pipelines", "show", "pipeline"}, {"definitions", "get", "pipeline"}} {
@@ -32,7 +35,10 @@ func TestPipelineShowKeepsLegacyCommandsAndJSON(t *testing.T) {
 				Package map[string]any `json:"package"`
 			} `json:"definition"`
 		}
-		if err != nil || json.Unmarshal([]byte(out), &result) != nil || result.Definition.ID != "pipeline" || result.Definition.Package["source"] != "exact bytes" {
+		if err != nil ||
+			json.Unmarshal([]byte(out), &result) != nil ||
+			result.Definition.ID != "pipeline" ||
+			result.Definition.Package["source"] != "exact bytes" {
 			t.Fatalf("JSON for %v: %q, %v", command, out, err)
 		}
 	}
@@ -58,7 +64,11 @@ func TestRequestFiltersSearchLaterPages(t *testing.T) {
 			args := append([]string{"--endpoint", server.URL, "requests", "list", "--json"}, filter...)
 			out, _, err := invoke(t, args, "")
 			var result protocol.Page[protocol.HumanRequest]
-			if err != nil || json.Unmarshal([]byte(out), &result) != nil || len(result.Items) != 1 || result.Items[0].ID != "wanted" || result.NextCursor != nil {
+			if err != nil ||
+				json.Unmarshal([]byte(out), &result) != nil ||
+				len(result.Items) != 1 ||
+				result.Items[0].ID != "wanted" ||
+				result.NextCursor != nil {
 				t.Fatalf("filtered requests: %s, %v", out, err)
 			}
 			if len(cursors) != 2 || cursors[1] != "next" {
@@ -100,7 +110,11 @@ func TestPipelinePublishKeepsLegacyCommand(t *testing.T) {
 				Definition  protocol.Definition `json:"definition"`
 				OperationID string              `json:"operationId"`
 			}
-			if err != nil || json.Unmarshal([]byte(out), &result) != nil || !published || result.Definition.ID != "pipeline" || result.OperationID != "publish" {
+			if err != nil ||
+				json.Unmarshal([]byte(out), &result) != nil ||
+				!published ||
+				result.Definition.ID != "pipeline" ||
+				result.OperationID != "publish" {
 				t.Fatalf("pipeline publish changed: %s, %v (published=%v)", out, err, published)
 			}
 		})

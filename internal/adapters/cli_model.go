@@ -24,10 +24,12 @@ func CheckCLIProvider(ctx context.Context, provider string) error {
 	if !cliModelProvider(provider) {
 		return fmt.Errorf("unsupported CLI provider %q", provider)
 	}
+
 	dir, err := os.MkdirTemp("", "knotra-cli-check-*")
 	if err != nil {
 		return err
 	}
+
 	defer func() { _ = os.RemoveAll(dir) }()
 	helpArgs := []string{"--help"}
 	required := []string{"--restricted", "--json-schema", "--strict-mcp-config"}
@@ -43,6 +45,7 @@ func CheckCLIProvider(ctx context.Context, provider string) error {
 	if err != nil {
 		return fmt.Errorf("install or update %s on the engine computer, then run %s as the engine user", provider, login)
 	}
+
 	for _, flag := range required {
 		if !bytes.Contains(help, []byte(flag)) {
 			return fmt.Errorf("update %s on the engine computer; this integration requires %s", provider, flag)
@@ -59,26 +62,68 @@ func CheckCLIProvider(ctx context.Context, provider string) error {
 		account = json.Unmarshal(status, &auth) == nil && auth.AuthMethod == "claude.ai"
 	}
 	if err != nil || !account {
-		return fmt.Errorf("%s requires an account login; run %s as the same OS user that starts the engine, then retry (API-key logins are not used)", provider, login)
+		return fmt.Errorf(
+			"%s requires an account login; run %s as the same OS user that starts the engine, then retry (API-key logins are not used)",
+			provider,
+			login,
+		)
 	}
+
 	return nil
 }
 
 func claudeIsolationArgs() []string {
-	return []string{"--restricted", "--setting-sources", "", "--settings", `{"disableAllHooks":true,"forceLoginMethod":"claudeai"}`, `--mcp-config={"mcpServers":{}}`, "--strict-mcp-config"}
+	return []string{
+		"--restricted",
+		"--setting-sources",
+		"",
+		"--settings",
+		`{"disableAllHooks":true,"forceLoginMethod":"claudeai"}`,
+		`--mcp-config={"mcpServers":{}}`,
+		"--strict-mcp-config",
+	}
 }
 
 // Preserve login/keychain locations and network settings, never the engine's
 // secrets or API credentials that would override subscription authentication.
 func cliEnvironment() []string {
 	allowed := map[string]bool{
-		"HOME": true, "USER": true, "LOGNAME": true, "PATH": true, "SHELL": true,
-		"USERPROFILE": true, "HOMEDRIVE": true, "HOMEPATH": true, "SYSTEMROOT": true, "WINDIR": true,
-		"APPDATA": true, "LOCALAPPDATA": true, "TEMP": true, "TMP": true, "TMPDIR": true,
-		"LANG": true, "CODEX_HOME": true, "CLAUDE_CONFIG_DIR": true,
-		"XDG_CONFIG_HOME": true, "XDG_DATA_HOME": true, "XDG_CACHE_HOME": true, "XDG_RUNTIME_DIR": true,
-		"DBUS_SESSION_BUS_ADDRESS": true, "HTTP_PROXY": true, "HTTPS_PROXY": true, "NO_PROXY": true,
-		"SSL_CERT_FILE": true, "SSL_CERT_DIR": true, "NODE_EXTRA_CA_CERTS": true, "CODEX_CA_CERTIFICATE": true,
+		"HOME":    true,
+		"USER":    true,
+		"LOGNAME": true,
+		"PATH":    true,
+		"SHELL":   true,
+
+		"USERPROFILE": true,
+		"HOMEDRIVE":   true,
+		"HOMEPATH":    true,
+		"SYSTEMROOT":  true,
+		"WINDIR":      true,
+
+		"APPDATA":      true,
+		"LOCALAPPDATA": true,
+		"TEMP":         true,
+		"TMP":          true,
+		"TMPDIR":       true,
+
+		"LANG":              true,
+		"CODEX_HOME":        true,
+		"CLAUDE_CONFIG_DIR": true,
+
+		"XDG_CONFIG_HOME": true,
+		"XDG_DATA_HOME":   true,
+		"XDG_CACHE_HOME":  true,
+		"XDG_RUNTIME_DIR": true,
+
+		"DBUS_SESSION_BUS_ADDRESS": true,
+		"HTTP_PROXY":               true,
+		"HTTPS_PROXY":              true,
+		"NO_PROXY":                 true,
+
+		"SSL_CERT_FILE":        true,
+		"SSL_CERT_DIR":         true,
+		"NODE_EXTRA_CA_CERTS":  true,
+		"CODEX_CA_CERTIFICATE": true,
 	}
 	result := []string{}
 	for _, entry := range os.Environ() {
@@ -95,10 +140,12 @@ func runCLI(ctx context.Context, provider string, args []string, dir string, inp
 	if !cliModelProvider(provider) {
 		return nil, fmt.Errorf("unsupported CLI provider")
 	}
+
 	executable, err := exec.LookPath(provider)
 	if err != nil {
 		return nil, fmt.Errorf("%s executable is unavailable", provider)
 	}
+
 	callCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	cmd := exec.CommandContext(callCtx, executable, args...)
@@ -108,6 +155,7 @@ func runCLI(ctx context.Context, provider string, args []string, dir string, inp
 	if err != nil {
 		return nil, err
 	}
+
 	cmd.Stderr = io.Discard
 	if mergeStderr {
 		cmd.Stderr = cmd.Stdout
@@ -115,6 +163,7 @@ func runCLI(ctx context.Context, provider string, args []string, dir string, inp
 	if err = cmd.Start(); err != nil {
 		return nil, fmt.Errorf("cannot start %s; check its installation on the engine computer", provider)
 	}
+
 	data, readErr := io.ReadAll(io.LimitReader(stdout, maxResponseBytes+1))
 	if readErr != nil || len(data) > maxResponseBytes {
 		cancel()
@@ -130,6 +179,7 @@ func runCLI(ctx context.Context, provider string, args []string, dir string, inp
 		// CLI diagnostics can contain account details, tokens or private prompts.
 		return nil, fmt.Errorf("%s failed; check its account login, model access and usage limits in a terminal", provider)
 	}
+
 	return data, nil
 }
 
@@ -138,6 +188,7 @@ func (r *Runner) cliResponse(ctx context.Context, c contract.ModelConnection, me
 	if err != nil {
 		return chatResponse{}, err
 	}
+
 	defer func() { _ = os.RemoveAll(dir) }()
 	schema := format
 	if len(tools) > 0 {
@@ -146,10 +197,13 @@ func (r *Runner) cliResponse(ctx context.Context, c contract.ModelConnection, me
 			names = append(names, tool.Function.Name)
 		}
 		schema, err = json.Marshal(map[string]any{
-			"type": "object", "properties": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
 				"tool":      map[string]any{"type": "string", "enum": names},
 				"arguments": map[string]any{"type": "string", "description": "JSON-encoded arguments for the selected tool"},
-			}, "required": []string{"tool", "arguments"}, "additionalProperties": false,
+			},
+			"required":             []string{"tool", "arguments"},
+			"additionalProperties": false,
 		})
 		if err != nil {
 			return chatResponse{}, err
@@ -159,6 +213,7 @@ func (r *Runner) cliResponse(ctx context.Context, c contract.ModelConnection, me
 	if err != nil {
 		return chatResponse{}, err
 	}
+
 	prompt := append([]byte("You are the model for one Knotra workflow turn. Read the conversation below and follow its system instructions. Return only the declared JSON output. When tools are supplied, select exactly one declared tool and return {tool, arguments}, with arguments encoded as a JSON string. Do not execute tools yourself: Knotra runs them with the workflow's permissions and returns their results in the conversation.\n\n"), input...)
 	var args []string
 	var outputPath string
@@ -168,15 +223,62 @@ func (r *Runner) cliResponse(ctx context.Context, c contract.ModelConnection, me
 			return chatResponse{}, err
 		}
 		outputPath = filepath.Join(dir, "output.json")
-		args = []string{"exec", "--ignore-user-config", "--ignore-rules", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "--color", "never", "--json", "--output-schema", schemaPath, "--output-last-message", outputPath}
+		args = []string{
+			"exec",
+			"--ignore-user-config",
+			"--ignore-rules",
+			"--ephemeral",
+			"--skip-git-repo-check",
+			"--sandbox",
+			"read-only",
+			"--color",
+			"never",
+			"--json",
+			"--output-schema",
+			schemaPath,
+			"--output-last-message",
+			outputPath,
+		}
 		for _, option := range []string{`forced_login_method="chatgpt"`, `approval_policy="never"`, `web_search="disabled"`, "project_doc_max_bytes=0"} {
 			args = append(args, "-c", option)
 		}
-		for _, feature := range []string{"shell_tool", "shell_snapshot", "hooks", "apps", "plugins", "remote_plugin", "multi_agent", "computer_use", "browser_use", "browser_use_external", "image_generation", "view_image", "code_mode", "code_mode_host", "artifact"} {
+		for _, feature := range []string{
+			"shell_tool",
+			"shell_snapshot",
+			"hooks",
+			"apps",
+			"plugins",
+			"remote_plugin",
+			"multi_agent",
+			"computer_use",
+			"browser_use",
+			"browser_use_external",
+			"image_generation",
+			"view_image",
+			"code_mode",
+			"code_mode_host",
+			"artifact",
+		} {
 			args = append(args, "--disable", feature)
 		}
 	} else {
-		args = append(claudeIsolationArgs(), "--print", "--tools", "", "--disallowedTools", "mcp__*", "--disable-slash-commands", "--no-chrome", "--permission-mode", "dontAsk", "--no-session-persistence", "--output-format", "json", "--json-schema", string(schema))
+		args = append(
+			claudeIsolationArgs(),
+			"--print",
+			"--tools",
+			"",
+			"--disallowedTools",
+			"mcp__*",
+			"--disable-slash-commands",
+			"--no-chrome",
+			"--permission-mode",
+			"dontAsk",
+			"--no-session-persistence",
+			"--output-format",
+			"json",
+			"--json-schema",
+			string(schema),
+		)
 	}
 	if c.Model != "default" {
 		args = append(args, "--model", c.Model)
@@ -230,6 +332,7 @@ func (r *Runner) cliResponse(ctx context.Context, c contract.ModelConnection, me
 		}
 		return chatResponse{}, invalidModelResponse()
 	}
+
 	return result, nil
 }
 
@@ -247,6 +350,7 @@ func checkCodexEvents(data []byte) error {
 		if json.Unmarshal(scanner.Bytes(), &event) != nil {
 			return failure("OUTPUT_INVALID", fmt.Errorf("codex emitted malformed JSON events"))
 		}
+
 		switch event.Type {
 		case "thread.started", "turn.started":
 			completed = false
@@ -267,5 +371,6 @@ func checkCodexEvents(data []byte) error {
 	if scanner.Err() != nil || !completed {
 		return failure("OUTPUT_INVALID", fmt.Errorf("codex event stream ended without turn completion"))
 	}
+
 	return nil
 }

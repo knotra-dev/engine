@@ -38,6 +38,7 @@ func Cancel(ctx context.Context, tx pgx.Tx, id string, wake EnqueueWake) error {
 	if err != nil {
 		return err
 	}
+
 	defer func() { _ = inner.Rollback(ctx) }()
 	tx = inner
 	run, cancelling, err := lockRun(ctx, tx, id)
@@ -59,6 +60,7 @@ func Cancel(ctx context.Context, tx pgx.Tx, id string, wake EnqueueWake) error {
 	if err := enqueueControl(ctx, tx, id, wake); err != nil {
 		return err
 	}
+
 	return tx.Commit(ctx)
 }
 
@@ -67,10 +69,12 @@ func Respond(ctx context.Context, tx pgx.Tx, id, responseID string, values contr
 	if strings.TrimSpace(responseID) == "" {
 		return &ValidationError{"response requires an identity"}
 	}
+
 	inner, err := tx.Begin(ctx)
 	if err != nil {
 		return err
 	}
+
 	defer func() { _ = inner.Rollback(ctx) }()
 	tx = inner
 	var runID string
@@ -99,6 +103,7 @@ func Respond(ctx context.Context, tx pgx.Tx, id, responseID string, values contr
 	if err = json.Unmarshal(storedRequest.Document, &request); err != nil {
 		return err
 	}
+
 	accepted, err := controlTime(ctx, tx, runID)
 	if err != nil {
 		return err
@@ -106,14 +111,17 @@ func Respond(ctx context.Context, tx pgx.Tx, id, responseID string, values contr
 	if storedRequest.Status != "open" || request.Kind != "human" || !request.Deadline.After(accepted) {
 		return ErrConflict
 	}
+
 	values, err = validateResponse(ctx, tx, request.Outputs, values)
 	if err != nil {
 		return err
 	}
+
 	response, err := raw(values)
 	if err != nil {
 		return err
 	}
+
 	accepted, err = controlTime(ctx, tx, runID)
 	if err != nil || !request.Deadline.After(accepted) {
 		if err != nil {
@@ -121,12 +129,16 @@ func Respond(ctx context.Context, tx pgx.Tx, id, responseID string, values contr
 		}
 		return ErrConflict
 	}
-	if _, err = db.New(tx).AcceptHumanAnswer(ctx, db.AcceptHumanAnswerParams{ID: id, ResponseID: new(responseID), Response: response, AcceptedAt: new(accepted)}); err != nil {
+	if _, err = db.New(tx).AcceptHumanAnswer(
+		ctx,
+		db.AcceptHumanAnswerParams{ID: id, ResponseID: new(responseID), Response: response, AcceptedAt: new(accepted)},
+	); err != nil {
 		return err
 	}
 	if err := enqueueControl(ctx, tx, runID, wake); err != nil {
 		return err
 	}
+
 	return tx.Commit(ctx)
 }
 
@@ -142,10 +154,12 @@ func Resolve(
 	if strings.TrimSpace(responseID) == "" {
 		return &ValidationError{"resolution requires an identity"}
 	}
+
 	inner, err := tx.Begin(ctx)
 	if err != nil {
 		return err
 	}
+
 	defer func() { _ = inner.Rollback(ctx) }()
 	tx = inner
 	run, cancelling, err := lockRun(ctx, tx, runID)
@@ -155,6 +169,7 @@ func Resolve(
 	if cancelling || protocol.Terminal(run.Status) {
 		return ErrConflict
 	}
+
 	stored, err := db.New(tx).LockResolutionRequest(ctx, db.LockResolutionRequestParams{RunID: runID, InstanceID: instanceID})
 	if err != nil {
 		return classify(err)
@@ -162,10 +177,12 @@ func Resolve(
 	if stored.Status != "open" {
 		return ErrConflict
 	}
+
 	var req execution.Request
 	if err = json.Unmarshal(stored.Document, &req); err != nil {
 		return err
 	}
+
 	accepted, err := controlTime(ctx, tx, runID)
 	if err != nil {
 		return err
@@ -198,6 +215,7 @@ func Resolve(
 		}
 		return ErrConflict
 	}
+
 	signal := execution.ResolutionSignal{
 		AcceptedAt:  accepted,
 		InstanceID:  instanceID,
@@ -211,12 +229,16 @@ func Resolve(
 	if err != nil {
 		return err
 	}
-	if _, err = db.New(tx).AcceptResolution(ctx, db.AcceptResolutionParams{ID: req.ID, ResponseID: new(responseID), Response: response, AcceptedAt: new(accepted)}); err != nil {
+	if _, err = db.New(tx).AcceptResolution(
+		ctx,
+		db.AcceptResolutionParams{ID: req.ID, ResponseID: new(responseID), Response: response, AcceptedAt: new(accepted)},
+	); err != nil {
 		return err
 	}
 	if err := enqueueControl(ctx, tx, runID, wake); err != nil {
 		return err
 	}
+
 	return tx.Commit(ctx)
 }
 

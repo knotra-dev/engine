@@ -43,6 +43,7 @@ func Compile(pkg Package, profile *Profile) (*Plan, []Diagnostic) {
 	if err != nil {
 		return nil, []Diagnostic{diagnostic("PACKAGE_INVALID", "package", pkg.Entrypoint, "", err)}
 	}
+
 	c := &compiler{
 		plan: &Plan{
 			Version:         "knotra/v1",
@@ -182,16 +183,19 @@ func (c *compiler) pipeline(file string, depth int) *Pipeline {
 	if c.finished[file] {
 		return c.plan.Pipelines[file]
 	}
+
 	data, exists := c.files[file]
 	if !exists {
 		c.add("PACKAGE_MISSING", "package", file, "", fmt.Errorf("file not included"))
 		return nil
 	}
+
 	p, diags := parsePipeline(data, file)
 	c.diags = append(c.diags, diags...)
 	if HasErrors(diags) {
 		return nil
 	}
+
 	c.visiting[file] = true
 	c.plan.Pipelines[file] = &p
 
@@ -249,6 +253,7 @@ func (c *compiler) schemaFile(owner, name string) json.RawMessage {
 		c.add("SCHEMA_FILE", "package", owner, "", fmt.Errorf("schema file %q not admitted", name))
 		return nil
 	}
+
 	var v any
 	var err error
 
@@ -265,6 +270,7 @@ func (c *compiler) schemaFile(owner, name string) json.RawMessage {
 		c.add("SCHEMA_FILE", "package", owner, name, err)
 		return nil
 	}
+
 	raw, err := marshalJSON(v)
 	c.add("SCHEMA_FILE", "package", owner, name, err)
 	return raw
@@ -318,6 +324,7 @@ func (s portScope) resolve(ref string) (Port, error) {
 	if len(parts) < 2 {
 		return Port{}, fmt.Errorf("invalid reference %q", ref)
 	}
+
 	var ports map[string]Port
 	var name string
 
@@ -363,6 +370,7 @@ func (s portScope) resolve(ref string) (Port, error) {
 	if !ok {
 		return Port{}, fmt.Errorf("reference %q is unavailable in this scope", ref)
 	}
+
 	return p, nil
 }
 
@@ -503,6 +511,7 @@ func compatible(source, target Port) error {
 
 		return fmt.Errorf("JSON port types are disjoint: %v and %v", a, b)
 	}
+
 	return nil
 }
 
@@ -533,6 +542,7 @@ func (c *compiler) graph(file string, spec *Spec, g *Graph, prefix string, depth
 		c.semantic(file, prefix, fmt.Errorf("graph depth exceeds 32"))
 		return
 	}
+
 	c.ports(file, spec, g.Inputs, prefix+"/inputs")
 	c.ports(file, spec, g.Outputs, prefix+"/outputs")
 
@@ -544,6 +554,7 @@ func (c *compiler) graph(file string, spec *Spec, g *Graph, prefix string, depth
 			c.semantic(file, where, fmt.Errorf("static node count exceeds 10000"))
 			return
 		}
+
 		c.ports(file, spec, n.Inputs, where+"/inputs")
 		c.ports(file, spec, n.Outputs, where+"/outputs")
 		n.Execution = c.execution(file, where, n.Type, spec.Defaults.Execution, n.Execution)

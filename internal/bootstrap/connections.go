@@ -26,6 +26,7 @@ func readConnections(path string) (Connections, error) {
 	if err != nil {
 		return connections, err
 	}
+
 	defer func() { _ = file.Close() }()
 	data, err := io.ReadAll(io.LimitReader(file, (4<<20)+1))
 	if err != nil {
@@ -34,6 +35,7 @@ func readConnections(path string) (Connections, error) {
 	if len(data) > 4<<20 {
 		return connections, fmt.Errorf("connection configuration exceeds 4 MiB")
 	}
+
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&connections); err != nil {
@@ -42,6 +44,7 @@ func readConnections(path string) (Connections, error) {
 	if decoder.Decode(new(any)) != io.EOF {
 		return connections, fmt.Errorf("invalid connection configuration")
 	}
+
 	for _, model := range connections.Models {
 		switch model.Provider {
 		case "openai", "anthropic", "openai_compatible", "ollama", "codex", "claude":
@@ -83,10 +86,12 @@ func (s *Setup) ProfilePath() (string, error) {
 	if s.connections == nil {
 		return path, nil
 	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}
+
 	profile, diagnostics := contract.ParseProfile(data)
 	if contract.HasErrors(diagnostics) {
 		return "", fmt.Errorf("invalid saved profile: %v", diagnostics)
@@ -119,10 +124,12 @@ func (s *Setup) ProfilePath() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	file, err := os.CreateTemp(s.Config.Dir, ".managed-profile-*")
 	if err != nil {
 		return "", err
 	}
+
 	defer func() { _ = os.Remove(file.Name()) }()
 	if err = file.Chmod(0600); err == nil {
 		_, err = file.Write(data)
@@ -136,6 +143,7 @@ func (s *Setup) ProfilePath() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	path = filepath.Join(s.Config.Dir, "managed-profile.json")
 	return path, os.Rename(file.Name(), path)
 }

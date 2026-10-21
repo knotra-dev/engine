@@ -66,6 +66,7 @@ def build(service_ids):
             "inventory_file": artifact("application/json", collect="inventory.json"),
         },
     )
+
     for service in service_ids:
         for index, kind in enumerate(KINDS):
             check_inputs = {
@@ -86,6 +87,7 @@ def build(service_ids):
                     "evidence_file": artifact("application/json", collect="check.json"),
                 },
             )
+
     inputs = {"inventory": bound_input(obj, "nodes.freeze_snapshot.outputs.inventory")}
     inputs.update(
         {
@@ -110,12 +112,14 @@ def build(service_ids):
             },
         },
     )
+
     nodes["require_green"] = code(
         "require-green",
         "Block before any review when regression, API or deployment checks fail.",
         {"eligible": bound_input(boolean, "nodes.release_matrix.outputs.eligible")},
         {"allowed": {"schema": {"const": True}}},
     )
+
     for scope in SCOPES:
         nodes[f"{scope}_review"] = {
             "type": "agent",
@@ -165,6 +169,7 @@ Call knotra_finish alone with {{"review": {{"summary": "...", "citations":
             },
             {"review": {"schema": obj}},
         )
+
     nodes["readiness_packet"] = code(
         "assemble",
         "Assemble checked evidence, model advice and the unchanged repository snapshot.",
@@ -183,6 +188,7 @@ Call knotra_finish alone with {{"review": {{"summary": "...", "citations":
             "candidate": artifact("application/zip", collect="release-candidate.zip"),
         },
     )
+
     nodes["release_authorization"] = {
         "type": "human",
         "description": "Authorize the exact reviewed evidence packet, with a change ticket.",
@@ -206,6 +212,7 @@ Call knotra_finish alone with {{"review": {{"summary": "...", "citations":
             "comments": {"schema": {"type": "string"}},
         },
     }
+
     nodes["seal_release"] = code(
         "publish",
         "Seal the reviewed bytes with authorization, snapshot hash and change ticket.",
@@ -240,6 +247,7 @@ Call knotra_finish alone with {{"review": {{"summary": "...", "citations":
             "bundle": artifact("application/zip", collect="authorized-release.zip"),
         },
     )
+
     return {
         "apiVersion": "knotra/v1",
         "kind": "Pipeline",
@@ -289,5 +297,6 @@ if __name__ == "__main__":
     ]
     if not services or len(services) != len(set(services)):
         parser.error("Manifest services must be nonempty and unique")
+
     # JSON is a YAML 1.2 subset; the compiler accepts this without a YAML dependency.
     args.output.write_text(json.dumps(build(services), indent=2) + "\n")

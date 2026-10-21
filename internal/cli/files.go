@@ -35,6 +35,7 @@ func (s *commandState) readFile(name string, limitBytes int64) ([]byte, error) {
 	if int64(len(b)) > limitBytes {
 		return nil, fmt.Errorf("%s exceeds %d bytes", name, limitBytes)
 	}
+
 	return b, nil
 }
 
@@ -45,10 +46,12 @@ func (s *commandState) object(file string, assignments []string) (map[string]jso
 		if err != nil {
 			return nil, err
 		}
+
 		value, err := contract.DecodeJSON(b)
 		if err != nil {
 			return nil, err
 		}
+
 		object, ok := value.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("%s must contain one JSON object", file)
@@ -165,6 +168,7 @@ func atomicFile(name string, data []byte, replace bool) error {
 	if err != nil {
 		return err
 	}
+
 	defer func() { _ = os.Remove(file.Name()) }()
 	if _, err = file.Write(data); err != nil {
 		_ = file.Close()
@@ -185,5 +189,6 @@ func atomicFile(name string, data []byte, replace bool) error {
 	if err != nil {
 		return err
 	}
+
 	return fsutil.SyncDir(dir)
 }

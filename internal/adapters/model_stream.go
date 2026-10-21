@@ -91,6 +91,7 @@ func readModelEvents(ctx context.Context, body io.ReadCloser, started time.Time,
 		if data.Len() > 0 && !send(modelEvent{data: []byte(strings.TrimSuffix(data.String(), "\n"))}) {
 			return
 		}
+
 		send(modelEvent{err: io.EOF})
 	}()
 	var firstToken time.Duration

@@ -28,7 +28,10 @@ import (
 
 func TestRiverBackupRestoresHumanAndUncommittedOutcome(t *testing.T) {
 	container := os.Getenv("KNOTRA_TEST_POSTGRES_CONTAINER")
-	if container == "" || os.Getenv("KNOTRA_TEST_RECOVERY") != "1" || os.Getenv("KNOTRA_TEST_HELPER") == "" || os.Getenv("KNOTRA_TEST_DATABASE_URL") == "" {
+	if container == "" ||
+		os.Getenv("KNOTRA_TEST_RECOVERY") != "1" ||
+		os.Getenv("KNOTRA_TEST_HELPER") == "" ||
+		os.Getenv("KNOTRA_TEST_DATABASE_URL") == "" {
 		t.Skip("set KNOTRA_TEST_POSTGRES_CONTAINER, KNOTRA_TEST_RECOVERY, KNOTRA_TEST_HELPER and KNOTRA_TEST_DATABASE_URL for backup/restore acceptance")
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 4*time.Minute)
@@ -41,9 +44,16 @@ func TestRiverBackupRestoresHumanAndUncommittedOutcome(t *testing.T) {
 	profile := recoveryProfile()
 	profilePath := filepath.Join(work, "profile.json")
 	writeJSON(t, profilePath, profile)
-	options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx),
-		DataDir: filepath.Join(work, "engine"), SharedDataDir: filepath.Join(work, "shared"),
-		DockerHost: os.Getenv("DOCKER_HOST"), HelperPath: os.Getenv("KNOTRA_TEST_HELPER"), Profiles: []string{profilePath}, Version: "backup-test"}
+	options := app.Options{
+		Listen:        unusedAddress(t),
+		DatabaseURL:   databaseSchema(t, ctx),
+		DataDir:       filepath.Join(work, "engine"),
+		SharedDataDir: filepath.Join(work, "shared"),
+		DockerHost:    os.Getenv("DOCKER_HOST"),
+		HelperPath:    os.Getenv("KNOTRA_TEST_HELPER"),
+		Profiles:      []string{profilePath},
+		Version:       "backup-test",
+	}
 	optionsPath := filepath.Join(work, "server.json")
 	writeJSON(t, optionsPath, options)
 	api := &client.Client{BaseURL: "http://" + options.Listen, StateDir: filepath.Join(work, "client")}
@@ -70,15 +80,22 @@ func TestRiverBackupRestoresHumanAndUncommittedOutcome(t *testing.T) {
 	if _, err := barrier.Exec(ctx, "SELECT pg_advisory_lock(918273663)"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := admin.Pool.Exec(ctx, `CREATE FUNCTION backup_publication_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273663); RETURN NEW; END $$;
-		CREATE TRIGGER backup_publication_barrier BEFORE UPDATE ON knotra_artifacts FOR EACH ROW WHEN (NOT OLD.published AND NEW.published) EXECUTE FUNCTION backup_publication_barrier()`); err != nil {
+	if _, err := admin.Pool.Exec(
+		ctx,
+		`CREATE FUNCTION backup_publication_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273663); RETURN NEW; END $$;
+		CREATE TRIGGER backup_publication_barrier BEFORE UPDATE ON knotra_artifacts FOR EACH ROW WHEN (NOT OLD.published AND NEW.published) EXECUTE FUNCTION backup_publication_barrier()`,
+	); err != nil {
 		t.Fatal(err)
 	}
 	marker := strings.Repeat("backup-complete-input-", 10000)
 	pending := startCLIRun(t, ctx, api, filepath.Join(root, "examples/integration/recovery.yaml"), marker)
 	awaitLifecycleBoundary(t, ctx, first, firstLog, func() bool {
 		var blocked bool
-		if err := admin.Pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_pids(pid)))", int64(barrier.PgConn().PID())).Scan(&blocked); err != nil {
+		if err := admin.Pool.QueryRow(
+			ctx,
+			"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_pids(pid)))",
+			int64(barrier.PgConn().PID()),
+		).Scan(&blocked); err != nil {
 			t.Fatal(err)
 		}
 		return blocked
@@ -127,18 +144,30 @@ func TestRiverBackupRestoresHumanAndUncommittedOutcome(t *testing.T) {
 	if _, err := barrier.Exec(ctx, "SELECT pg_advisory_unlock(918273663)"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := admin.Pool.Exec(ctx, "DROP TRIGGER backup_publication_barrier ON knotra_artifacts; DROP FUNCTION backup_publication_barrier()"); err != nil {
+	if _, err := admin.Pool.Exec(
+		ctx,
+		"DROP TRIGGER backup_publication_barrier ON knotra_artifacts; DROP FUNCTION backup_publication_barrier()",
+	); err != nil {
 		t.Fatal(err)
 	}
 	var published, stored int
-	if err := admin.Pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM knotra_artifacts WHERE id=$1 AND published),
-		(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$2 AND outcome IS NOT NULL)`, artifact.ID, pending.ID).Scan(&published, &stored); err != nil || published+stored != 0 {
+	if err := admin.Pool.QueryRow(
+		ctx,
+		`SELECT (SELECT count(*) FROM knotra_artifacts WHERE id=$1 AND published),
+		(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$2 AND outcome IS NOT NULL)`,
+		artifact.ID,
+		pending.ID,
+	).Scan(&published, &stored); err != nil || published+stored != 0 {
 		t.Fatalf("backup boundary published=%d imported=%d error=%v", published, stored, err)
 	}
 	snapshot := func(s *store.Store) map[string][]byte {
 		t.Helper()
 		result := map[string][]byte{}
-		rows, err := s.Pool.Query(ctx, "SELECT tablename FROM pg_tables WHERE schemaname=$1 AND tablename LIKE 'knotra_%' ORDER BY tablename", schema)
+		rows, err := s.Pool.Query(
+			ctx,
+			"SELECT tablename FROM pg_tables WHERE schemaname=$1 AND tablename LIKE 'knotra_%' ORDER BY tablename",
+			schema,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -175,7 +204,25 @@ func TestRiverBackupRestoresHumanAndUncommittedOutcome(t *testing.T) {
 	}
 	dump := filepath.Join(work, "database.dump")
 	archive := filepath.Join(work, "state.tar")
-	save(dump, exec.CommandContext(ctx, "docker", "exec", container, "pg_dump", "-U", config.User, "-d", config.Database, "--schema", schema, "--format=custom", "--no-owner", "--no-acl"))
+	save(
+		dump,
+		exec.CommandContext(
+			ctx,
+			"docker",
+			"exec",
+			container,
+			"pg_dump",
+			"-U",
+			config.User,
+			"-d",
+			config.Database,
+			"--schema",
+			schema,
+			"--format=custom",
+			"--no-owner",
+			"--no-acl",
+		),
+	)
 	save(archive, exec.CommandContext(ctx, "tar", "-cf", "-", "-C", work, "engine", "shared"))
 	admin.Close()
 	// These exact schema/directories were created by this fixture. No baseline
@@ -255,11 +302,22 @@ func TestRiverBackupRestoresHumanAndUncommittedOutcome(t *testing.T) {
 	third := startEngineProcess(t, ctx, optionsPath, thirdLog, api)
 	// Expiring queue retention cannot turn a repeated finalizer into another
 	// attempt, debit, artifact publication or terminal event.
-	if _, err := restored.Pool.Exec(ctx, "DELETE FROM river_job WHERE kind='knotra_finalize_v1' AND args->>'outcomeKey'=$1 AND state='completed'", key); err != nil {
+	if _, err := restored.Pool.Exec(
+		ctx,
+		"DELETE FROM river_job WHERE kind='knotra_finalize_v1' AND args->>'outcomeKey'=$1 AND state='completed'",
+		key,
+	); err != nil {
 		t.Fatal(err)
 	}
-	delivery, err := queue.Insert(ctx, nativequeue.FinalizeArgs{Attempt: outcome.Ownership.AttemptID, OutcomeKey: key, RoutingVersion: nativequeue.RoutingVersion},
-		&river.InsertOpts{Queue: "knotra_maintenance_" + identity})
+	delivery, err := queue.Insert(
+		ctx,
+		nativequeue.FinalizeArgs{
+			Attempt:        outcome.Ownership.AttemptID,
+			OutcomeKey:     key,
+			RoutingVersion: nativequeue.RoutingVersion,
+		},
+		&river.InsertOpts{Queue: "knotra_maintenance_" + identity},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,18 +330,45 @@ func TestRiverBackupRestoresHumanAndUncommittedOutcome(t *testing.T) {
 	})
 	var attempts, slots, resources, debits, terminals int
 	var restoredDeadline time.Time
-	if err := restored.Pool.QueryRow(ctx, `SELECT execution_deadline,
+	if err := restored.Pool.QueryRow(
+		ctx,
+		`SELECT execution_deadline,
 		(SELECT count(*) FROM knotra_execution_attempts),
 		(SELECT count(*) FROM knotra_execution_slots WHERE released_at IS NULL),
 		(SELECT count(*) FROM knotra_resources WHERE state<>'closed'),
 		(SELECT sum(used) FROM knotra_budgets WHERE kind='tool'),
 		(SELECT count(*) FROM knotra_events WHERE document->>'type'='run' AND document->'data'->>'status'='succeeded')
-		FROM knotra_runs WHERE id=$1`, pending.ID).Scan(&restoredDeadline, &attempts, &slots, &resources, &debits, &terminals); err != nil || attempts != 4 || slots != 0 || resources != 0 || debits != 4 || terminals != 2 || !deadline.Equal(restoredDeadline) {
-		t.Fatalf("idempotent recovery attempts/slots/resources/debits/terminals=%d/%d/%d/%d/%d deadline=%v error=%v", attempts, slots, resources, debits, terminals, restoredDeadline, err)
+		FROM knotra_runs WHERE id=$1`,
+		pending.ID,
+	).Scan(&restoredDeadline, &attempts, &slots, &resources, &debits, &terminals); err != nil ||
+		attempts != 4 ||
+		slots != 0 ||
+		resources != 0 ||
+		debits != 4 ||
+		terminals != 2 ||
+		!deadline.Equal(restoredDeadline) {
+		t.Fatalf(
+			"idempotent recovery attempts/slots/resources/debits/terminals=%d/%d/%d/%d/%d deadline=%v error=%v",
+			attempts,
+			slots,
+			resources,
+			debits,
+			terminals,
+			restoredDeadline,
+			err,
+		)
 	}
 	var nonce string
-	if err := restored.Pool.QueryRow(ctx, "SELECT outputs->'nonce'->>'json' FROM knotra_execution_nodes WHERE run_id=$1 AND id=$2", pending.ID, instance).Scan(&nonce); err != nil || nonce != document.Nonce {
+	if err := restored.Pool.QueryRow(
+		ctx,
+		"SELECT outputs->'nonce'->>'json' FROM knotra_execution_nodes WHERE run_id=$1 AND id=$2",
+		pending.ID,
+		instance,
+	).Scan(&nonce); err != nil || nonce != document.Nonce {
 		t.Fatalf("saved physical work repeated: nonce=%q expected=%q error=%v", nonce, document.Nonce, err)
 	}
-	t.Logf("real pg_dump/tar disaster restore retained %d complete domain tables, receipts, human deadline/SSE and uncommitted evidence; publication and repeated finalizer after queue retention did not repeat physical preparation", len(before))
+	t.Logf(
+		"real pg_dump/tar disaster restore retained %d complete domain tables, receipts, human deadline/SSE and uncommitted evidence; publication and repeated finalizer after queue retention did not repeat physical preparation",
+		len(before),
+	)
 }

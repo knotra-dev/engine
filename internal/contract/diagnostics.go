@@ -18,6 +18,7 @@ func sourcePositions(data []byte) map[string]sourcePosition {
 	if err != nil {
 		return positions
 	}
+
 	var visit func(*yaml.Node, string)
 	visit = func(n *yaml.Node, path string) {
 		positions[path] = sourcePosition{n.Line, n.Column}
@@ -67,6 +68,7 @@ func diagnosticError(code, phase, file, path string, err error) Diagnostic {
 		d.Column = source.column
 		return d
 	}
+
 	var validation *jsonschema.ValidationError
 	if errors.As(err, &validation) {
 		deepest := validation

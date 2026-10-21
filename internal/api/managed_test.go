@@ -137,7 +137,12 @@ spec:
 	if w.Code != 201 || json.Unmarshal(w.Body.Bytes(), &definition) != nil {
 		t.Fatalf("define: %d %s", w.Code, w.Body)
 	}
-	payload, err := json.Marshal(map[string]any{"definitionId": definition.Definition.ID, "profile": "local", "inputs": map[string]any{}, "artifacts": map[string]any{}})
+	payload, err := json.Marshal(map[string]any{
+		"definitionId": definition.Definition.ID,
+		"profile":      "local",
+		"inputs":       map[string]any{},
+		"artifacts":    map[string]any{},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,8 +177,23 @@ func TestManagedRestartWaitsForEveryUnfinishedRunAndPreservesReceipts(t *testing
 	s, handler, payload := managedFixture(t)
 	first := managedCall(handler, "/runs", "", "initial", payload)
 	run := managedRun(t, first)
-	for _, status := range []string{"pending", "running", "waiting_human", "waiting_resolution", "retry_wait", "queued", "unknown", "future_status", ""} {
-		if _, err := s.Store.Pool.Exec(t.Context(), "UPDATE knotra_runs SET document=jsonb_set(document::jsonb,'{status}',to_jsonb($2::text)) WHERE id=$1", run.ID, status); err != nil {
+	for _, status := range []string{
+		"pending",
+		"running",
+		"waiting_human",
+		"waiting_resolution",
+		"retry_wait",
+		"queued",
+		"unknown",
+		"future_status",
+		"",
+	} {
+		if _, err := s.Store.Pool.Exec(
+			t.Context(),
+			"UPDATE knotra_runs SET document=jsonb_set(document::jsonb,'{status}',to_jsonb($2::text)) WHERE id=$1",
+			run.ID,
+			status,
+		); err != nil {
 			t.Fatal(err)
 		}
 		if status == "" {
@@ -186,7 +206,11 @@ func TestManagedRestartWaitsForEveryUnfinishedRunAndPreservesReceipts(t *testing
 		}
 	}
 	second := managedRun(t, managedCall(handler, "/runs", "", "busy-stays-open", payload))
-	if _, err := s.Store.Pool.Exec(t.Context(), "UPDATE knotra_runs SET document=jsonb_set(document::jsonb,'{status}',to_jsonb('succeeded'::text)) WHERE id=$1", second.ID); err != nil {
+	if _, err := s.Store.Pool.Exec(
+		t.Context(),
+		"UPDATE knotra_runs SET document=jsonb_set(document::jsonb,'{status}',to_jsonb('succeeded'::text)) WHERE id=$1",
+		second.ID,
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -197,12 +221,20 @@ func TestManagedRestartWaitsForEveryUnfinishedRunAndPreservesReceipts(t *testing
 	profile.Spec.Models["source"] = model
 	profile.Spec.Secrets["source_key"] = contract.SecretSource{Env: "REPLACEMENT_MODEL_KEY"}
 	plan, err := s.Store.Plan(t.Context(), run.ID)
-	if err != nil || plan.Profile.Spec.Models["source"].Model != "original-model" || plan.Profile.Spec.Models["source"].BaseURL != "https://original.example/v1" || plan.Profile.Spec.Secrets["source_key"].Env != "ORIGINAL_MODEL_KEY" {
+	if err != nil ||
+		plan.Profile.Spec.Models["source"].Model != "original-model" ||
+		plan.Profile.Spec.Models["source"].BaseURL != "https://original.example/v1" ||
+		plan.Profile.Spec.Secrets["source_key"].Env != "ORIGINAL_MODEL_KEY" {
 		t.Fatalf("admitted bindings changed: %v %v", plan.Profile, err)
 	}
 
 	for _, status := range []string{"succeeded", "failed", "cancelled", "skipped"} {
-		if _, err := s.Store.Pool.Exec(t.Context(), "UPDATE knotra_runs SET document=jsonb_set(document::jsonb,'{status}',to_jsonb($2::text)) WHERE id=$1", run.ID, status); err != nil {
+		if _, err := s.Store.Pool.Exec(
+			t.Context(),
+			"UPDATE knotra_runs SET document=jsonb_set(document::jsonb,'{status}',to_jsonb($2::text)) WHERE id=$1",
+			run.ID,
+			status,
+		); err != nil {
 			t.Fatal(err)
 		}
 		if ready, active := managedReady(t, handler); !ready || active != 0 {
@@ -271,7 +303,10 @@ func TestManagedRestartWaitsThroughRunCommit(t *testing.T) {
 	defer deadline.Stop()
 	for {
 		var commitBlocked bool
-		if err := s.Store.Pool.QueryRow(t.Context(), "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype='advisory' AND objid=713674129 AND NOT granted)").Scan(&commitBlocked); err != nil {
+		if err := s.Store.Pool.QueryRow(
+			t.Context(),
+			"SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype='advisory' AND objid=713674129 AND NOT granted)",
+		).Scan(&commitBlocked); err != nil {
 			t.Fatal(err)
 		}
 		if commitBlocked {

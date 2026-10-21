@@ -60,10 +60,12 @@ func validateOllamaOption(name string, value any) error {
 
 		return nil
 	}
+
 	raw, err := json.Marshal(value)
 	if err != nil {
 		return invalid()
 	}
+
 	var number float64
 	if err = json.Unmarshal(raw, &number); err != nil || math.IsNaN(number) || math.IsInf(number, 0) {
 		return invalid()

@@ -33,6 +33,7 @@ func TestDesktopLiteralClients(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(desktopDir, "src-tauri/Cargo.toml")); err != nil {
 		t.Fatalf("desktop checkout: %v", err)
 	}
+
 	root, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)
@@ -65,9 +66,16 @@ func TestDesktopLiteralClients(t *testing.T) {
 	profile.Spec.Models = map[string]contract.ModelConnection{"model_main": {Provider: "ollama", Model: "qwen3.5:9b", BaseURL: provider.URL}}
 	profilePath := filepath.Join(work, "profile.json")
 	writeJSON(t, profilePath, profile)
-	options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx),
-		CORSOrigin: "http://127.0.0.1:1420", DataDir: filepath.Join(work, "engine"), DockerHost: os.Getenv("DOCKER_HOST"),
-		HelperPath: os.Getenv("KNOTRA_TEST_HELPER"), FirewallImage: env("KNOTRA_TEST_FIREWALL_IMAGE", "knotra-firewall:dev"), Profiles: []string{profilePath}}
+	options := app.Options{
+		Listen:        unusedAddress(t),
+		DatabaseURL:   databaseSchema(t, ctx),
+		CORSOrigin:    "http://127.0.0.1:1420",
+		DataDir:       filepath.Join(work, "engine"),
+		DockerHost:    os.Getenv("DOCKER_HOST"),
+		HelperPath:    os.Getenv("KNOTRA_TEST_HELPER"),
+		FirewallImage: env("KNOTRA_TEST_FIREWALL_IMAGE", "knotra-firewall:dev"),
+		Profiles:      []string{profilePath},
+	}
 	optionsPath := filepath.Join(work, "server.json")
 	writeJSON(t, optionsPath, options)
 	api := &client.Client{BaseURL: "http://" + options.Listen, StateDir: filepath.Join(work, "client")}
@@ -104,7 +112,14 @@ func TestDesktopLiteralClients(t *testing.T) {
 		t.Fatal(err)
 	}
 	if runs != 5 || succeeded != 5 || calls.Load() != 5 || model != 5 || tool != 5 {
-		t.Fatalf("desktop changed work/receipts: runs=%d succeeded=%d physical calls=%d model=%d tool=%d", runs, succeeded, calls.Load(), model, tool)
+		t.Fatalf(
+			"desktop changed work/receipts: runs=%d succeeded=%d physical calls=%d model=%d tool=%d",
+			runs,
+			succeeded,
+			calls.Load(),
+			model,
+			tool,
+		)
 	}
 	t.Log("native SQLite receipts/SSE replay and four browser flows preserved five runs, five model calls and five tool debits")
 }
@@ -150,8 +165,14 @@ func desktopLiteralProvider(t *testing.T, calls *atomic.Int32) *httptest.Server 
 			case 1:
 				name, args = "knotra_files_read", map[string]any{"root": "workspace", "path": "note.txt"}
 			}
-			_ = encoder.Encode(map[string]any{"message": map[string]any{"role": "assistant", "tool_calls": []any{
-				map[string]any{"function": map[string]any{"name": name, "arguments": args}}}}, "done": true, "done_reason": "stop", "prompt_eval_count": 12, "eval_count": 8})
+			_ = encoder.Encode(map[string]any{
+				"message": map[string]any{"role": "assistant", "tool_calls": []any{
+					map[string]any{"function": map[string]any{"name": name, "arguments": args}}}},
+				"done":              true,
+				"done_reason":       "stop",
+				"prompt_eval_count": 12,
+				"eval_count":        8,
+			})
 			return
 		}
 		w.Header().Set("Content-Type", "application/x-ndjson")

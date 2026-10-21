@@ -39,10 +39,12 @@ func (s *Server) compile(
 			Path:     "/profile",
 		}}
 	}
+
 	plan, diags := contract.Compile(pkg, &p)
 	if contract.HasErrors(diags) {
 		return plan, nil, diags
 	}
+
 	values := contract.Values{}
 
 	for k, v := range input {
@@ -104,11 +106,13 @@ func (s *Server) define(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, 400, "INPUT_INVALID", e.Error(), nil)
 		return
 	}
+
 	s.command(w, r, b, func(tx pgx.Tx) (int, any, error) {
 		plan, d := contract.Compile(q.Package, nil)
 		if contract.HasErrors(d) {
 			return 422, protocol.Error{Code: "VALIDATION_FAILED", Message: "package failed validation", Diagnostics: d}, nil
 		}
+
 		p := plan.Pipelines[plan.Root]
 		title := p.Metadata.Title
 		if title == "" {
@@ -157,20 +161,24 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, 400, "INPUT_INVALID", e.Error(), nil)
 		return
 	}
+
 	s.admissionMu.RLock()
 	defer s.admissionMu.RUnlock()
 	s.command(w, r, b, func(tx pgx.Tx) (int, any, error) {
 		if s.restartPrepared {
 			return 0, nil, errRestartPrepared
 		}
+
 		def, e := store.ReadDefinition(r.Context(), tx, q.DefinitionID)
 		if e != nil {
 			return 0, nil, e
 		}
+
 		plan, values, d := s.compile(r.Context(), tx, def.Package, q.Profile, q.Inputs, q.Artifacts)
 		if contract.HasErrors(d) {
 			return 422, protocol.Error{Code: "VALIDATION_FAILED", Message: "run admission failed", Diagnostics: d}, nil
 		}
+
 		run := protocol.Run{
 			ID:               uuid.NewString(),
 			DefinitionID:     def.ID,

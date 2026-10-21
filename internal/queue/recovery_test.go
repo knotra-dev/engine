@@ -45,7 +45,14 @@ func newOutageProxy(t *testing.T, target string) *outageProxy {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := &outageProxy{ctx: t.Context(), listener: ln, target: target, online: true, connections: map[net.Conn]bool{}, done: make(chan struct{})}
+	p := &outageProxy{
+		ctx:         t.Context(),
+		listener:    ln,
+		target:      target,
+		online:      true,
+		connections: map[net.Conn]bool{},
+		done:        make(chan struct{}),
+	}
 	go func() {
 		defer close(p.done)
 		for {
@@ -138,7 +145,11 @@ func runRecoveryChild(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = files.Close() }()
-	owner := execution.Ownership{AttemptID: execution.AttemptID{RunID: "run", InstanceID: "a", Number: 1}, WorkerID: "crashed-worker", Generation: 1}
+	owner := execution.Ownership{
+		AttemptID:  execution.AttemptID{RunID: "run", InstanceID: "a", Number: 1},
+		WorkerID:   "crashed-worker",
+		Generation: 1,
+	}
 	key, _ := owner.OutcomeKey()
 	h := testHandlers()
 	h.Execute = func(ctx context.Context, _ *river.Job[ExecuteArgs]) error {
@@ -175,7 +186,13 @@ func runRecoveryChild(t *testing.T) {
 			return err
 		}
 		// Complete evidence is handed off while PostgreSQL is unreachable.
-		if _, err := files.Put(execution.Outcome{FormatVersion: execution.StateFormatVersion, Ownership: owner, PlanID: "plan", CompletedAt: time.Now().UTC(), Outputs: contract.Values{"result": {JSON: []byte(`"confirmed"`)}}}); err != nil {
+		if _, err := files.Put(execution.Outcome{
+			FormatVersion: execution.StateFormatVersion,
+			Ownership:     owner,
+			PlanID:        "plan",
+			CompletedAt:   time.Now().UTC(),
+			Outputs:       contract.Values{"result": {JSON: []byte(`"confirmed"`)}},
+		}); err != nil {
 			return err
 		}
 		if err := writeSignal(directory, "outcome-stored"); err != nil {
@@ -216,7 +233,12 @@ func runRecoveryChild(t *testing.T) {
 			return err
 		}
 		defer func() { _ = tx.Rollback(ctx) }()
-		updated, err := tx.Exec(ctx, "UPDATE spike_attempt SET state='completed',result=$2 WHERE state='claimed' AND operation_complete AND outcome_key=$1", job.Args.OutcomeKey, result)
+		updated, err := tx.Exec(
+			ctx,
+			"UPDATE spike_attempt SET state='completed',result=$2 WHERE state='claimed' AND operation_complete AND outcome_key=$1",
+			job.Args.OutcomeKey,
+			result,
+		)
 		if err != nil {
 			return err
 		}
@@ -225,7 +247,12 @@ func runRecoveryChild(t *testing.T) {
 				return err
 			}
 			client := river.ClientFromContext[pgx.Tx](ctx)
-			if _, err := client.InsertTx(ctx, tx, AdvanceArgs{RunID: "run", WakeGeneration: 2, RoutingVersion: RoutingVersion}, &river.InsertOpts{Queue: "knotra_advance_" + os.Getenv("KNOTRA_RIVER_SPIKE_ENGINE")}); err != nil {
+			if _, err := client.InsertTx(
+				ctx,
+				tx,
+				AdvanceArgs{RunID: "run", WakeGeneration: 2, RoutingVersion: RoutingVersion},
+				&river.InsertOpts{Queue: "knotra_advance_" + os.Getenv("KNOTRA_RIVER_SPIKE_ENGINE")},
+			); err != nil {
 				return err
 			}
 		}
@@ -237,7 +264,14 @@ func runRecoveryChild(t *testing.T) {
 		}
 		return writeSignal(directory, "finalized")
 	}
-	c := newTestClient(t, testDatabase{pool: pool, schema: os.Getenv("KNOTRA_RIVER_SPIKE_SCHEMA")}, os.Getenv("KNOTRA_RIVER_SPIKE_ENGINE"), "queue-test", 30*time.Second, h)
+	c := newTestClient(
+		t,
+		testDatabase{pool: pool, schema: os.Getenv("KNOTRA_RIVER_SPIKE_SCHEMA")},
+		os.Getenv("KNOTRA_RIVER_SPIKE_ENGINE"),
+		"queue-test",
+		30*time.Second,
+		h,
+	)
 	if err := c.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -270,8 +304,11 @@ func TestSixMinuteDatabaseOutageAndProcessTermination(t *testing.T) {
 	if err := Migrate(ctx, db.pool, db.schema); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.pool.Exec(ctx, `CREATE TABLE spike_attempt(state text NOT NULL,outcome_key text NOT NULL,operation_complete bool NOT NULL DEFAULT false,result jsonb);
-		CREATE TABLE spike_events(id integer PRIMARY KEY); INSERT INTO spike_attempt(state,outcome_key) VALUES('ready','')`); err != nil {
+	if _, err := db.pool.Exec(
+		ctx,
+		`CREATE TABLE spike_attempt(state text NOT NULL,outcome_key text NOT NULL,operation_complete bool NOT NULL DEFAULT false,result jsonb);
+		CREATE TABLE spike_events(id integer PRIMARY KEY); INSERT INTO spike_attempt(state,outcome_key) VALUES('ready','')`,
+	); err != nil {
 		t.Fatal(err)
 	}
 	config := db.config.ConnConfig.Copy()
@@ -286,7 +323,11 @@ func TestSixMinuteDatabaseOutageAndProcessTermination(t *testing.T) {
 	childURL.RawQuery = params.Encode()
 	engineID := uuid.NewString()
 	c := newTestClient(t, db, engineID, "queue-test", time.Minute, testHandlers()) // insertion only; the child executes
-	owner := execution.Ownership{AttemptID: execution.AttemptID{RunID: "run", InstanceID: "a", Number: 1}, WorkerID: "crashed-worker", Generation: 1}
+	owner := execution.Ownership{
+		AttemptID:  execution.AttemptID{RunID: "run", InstanceID: "a", Number: 1},
+		WorkerID:   "crashed-worker",
+		Generation: 1,
+	}
 	key, _ := owner.OutcomeKey()
 	tx, err := db.pool.Begin(ctx)
 	if err != nil {
@@ -301,7 +342,15 @@ func TestSixMinuteDatabaseOutageAndProcessTermination(t *testing.T) {
 	directory := t.TempDir()
 	startChild := func(mode string) *exec.Cmd {
 		cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestSixMinuteDatabaseOutageAndProcessTermination$")
-		cmd.Env = append(os.Environ(), "KNOTRA_RIVER_SPIKE_CHILD=1", "KNOTRA_RIVER_SPIKE_MODE="+mode, "KNOTRA_RIVER_SPIKE_DIRECTORY="+directory, "KNOTRA_RIVER_SPIKE_DSN="+childURL.String(), "KNOTRA_RIVER_SPIKE_SCHEMA="+db.schema, "KNOTRA_RIVER_SPIKE_ENGINE="+engineID)
+		cmd.Env = append(
+			os.Environ(),
+			"KNOTRA_RIVER_SPIKE_CHILD=1",
+			"KNOTRA_RIVER_SPIKE_MODE="+mode,
+			"KNOTRA_RIVER_SPIKE_DIRECTORY="+directory,
+			"KNOTRA_RIVER_SPIKE_DSN="+childURL.String(),
+			"KNOTRA_RIVER_SPIKE_SCHEMA="+db.schema,
+			"KNOTRA_RIVER_SPIKE_ENGINE="+engineID,
+		)
 		output, err := os.Create(filepath.Join(directory, mode+".log"))
 		if err != nil {
 			t.Fatal(err)
@@ -346,7 +395,11 @@ func TestSixMinuteDatabaseOutageAndProcessTermination(t *testing.T) {
 	proxy.setOnline(true)
 	// Age the abandoned delivery past the configured rescue horizon. The new
 	// process must discard its exhausted delivery and finalize domain evidence.
-	if _, err := db.pool.Exec(ctx, "UPDATE river_job SET attempted_at=clock_timestamp()-interval '3 hours' WHERE kind=$1 AND state='running'", (ExecuteArgs{}).Kind()); err != nil {
+	if _, err := db.pool.Exec(
+		ctx,
+		"UPDATE river_job SET attempted_at=clock_timestamp()-interval '3 hours' WHERE kind=$1 AND state='running'",
+		(ExecuteArgs{}).Kind(),
+	); err != nil {
 		t.Fatal(err)
 	}
 	tx, err = db.pool.Begin(ctx)
@@ -365,7 +418,10 @@ func TestSixMinuteDatabaseOutageAndProcessTermination(t *testing.T) {
 		t.Fatalf("replacement failed: %v\n%s", err, data)
 	}
 	var completed, events, wakeups int
-	if err := db.pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM spike_attempt WHERE state='completed'),(SELECT count(*) FROM spike_events),(SELECT count(*) FROM river_job WHERE kind='knotra_advance_v1')`).Scan(&completed, &events, &wakeups); err != nil {
+	if err := db.pool.QueryRow(
+		ctx,
+		`SELECT (SELECT count(*) FROM spike_attempt WHERE state='completed'),(SELECT count(*) FROM spike_events),(SELECT count(*) FROM river_job WHERE kind='knotra_advance_v1')`,
+	).Scan(&completed, &events, &wakeups); err != nil {
 		t.Fatal(err)
 	}
 	if completed != 1 || events != 1 || wakeups != 1 {
@@ -411,7 +467,15 @@ func TestLongExecutionExceedsRiverDefaultTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := c.InsertExecute(ctx, tx, ExecuteArgs{Attempt: execution.AttemptID{RunID: "run", InstanceID: "long", Number: 1}, DispatchGeneration: 1, RoutingVersion: RoutingVersion}); err != nil {
+	if err := c.InsertExecute(
+		ctx,
+		tx,
+		ExecuteArgs{
+			Attempt:            execution.AttemptID{RunID: "run", InstanceID: "long", Number: 1},
+			DispatchGeneration: 1,
+			RoutingVersion:     RoutingVersion,
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(ctx); err != nil {

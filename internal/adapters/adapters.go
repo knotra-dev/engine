@@ -150,6 +150,7 @@ func (r *Runner) Execute(ctx context.Context, req Request) (contract.Values, err
 			fmt.Errorf("admitted plan requires adapter version %q; worker has %q", version, Version),
 		)
 	}
+
 	req.observation = r.newObservation(ctx, req)
 	defer req.observation.finish(ctx)
 
@@ -217,6 +218,7 @@ func (r *Runner) operation(ctx context.Context, op Operation, fn func(admit func
 			Retryable:   safeRetry,
 		}
 	}
+
 	admitted := false
 	result, err := fn(func() error {
 		if admitted {
@@ -263,6 +265,7 @@ func (r *Runner) operation(ctx context.Context, op Operation, fn func(admit func
 			Unknown:     true,
 		}
 	}
+
 	return result, nil
 }
 
@@ -338,6 +341,7 @@ func (r *Runner) releaseSession(key string, wait bool) error {
 	if !s.mu.TryLock() {
 		return errors.New("shared MCP session has an active call")
 	}
+
 	defer s.mu.Unlock()
 	if err := s.close(); err != nil {
 		return err
@@ -345,6 +349,7 @@ func (r *Runner) releaseSession(key string, wait bool) error {
 	if !cache.mu.TryLock() {
 		return errors.New("shared MCP session initialization is busy")
 	}
+
 	defer cache.mu.Unlock()
 	if cache.sessions[key] == s {
 		cache.remove(key)

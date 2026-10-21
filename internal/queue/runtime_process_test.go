@@ -69,7 +69,17 @@ func runtimeProcessChild(t *testing.T) {
 	if hostID == "" {
 		hostID = "process-test"
 	}
-	r := &Runtime{Store: s, Outcomes: files, WorkerID: uuid.NewString(), HostID: hostID, Host: &executor.Host{Store: s, Runner: runner, Artifacts: store.Artifacts{Store: s, Root: filepath.Join(directory, "artifacts")}}}
+	r := &Runtime{
+		Store:    s,
+		Outcomes: files,
+		WorkerID: uuid.NewString(),
+		HostID:   hostID,
+		Host: &executor.Host{
+			Store:     s,
+			Runner:    runner,
+			Artifacts: store.Artifacts{Store: s, Root: filepath.Join(directory, "artifacts")},
+		},
+	}
 	handlers := r.Handlers()
 	if os.Getenv("KNOTRA_RUNTIME_MODE") == "fetched_before_claim" {
 		handlers.Execute = func(ctx context.Context, job *river.Job[ExecuteArgs]) error {
@@ -92,7 +102,18 @@ func runtimeProcessChild(t *testing.T) {
 	if role == execution.RoleExecutor {
 		workers = 1
 	}
-	r.Client, err = New(s.Pool, Config{Role: role, EngineID: s.EngineID, HostID: r.HostID, Schema: schema, ExecutionWorkers: workers, ExecutionTimeout: timeout}, handlers)
+	r.Client, err = New(
+		s.Pool,
+		Config{
+			Role:             role,
+			EngineID:         s.EngineID,
+			HostID:           r.HostID,
+			Schema:           schema,
+			ExecutionWorkers: workers,
+			ExecutionTimeout: timeout,
+		},
+		handlers,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +141,11 @@ func runtimeProcessChild(t *testing.T) {
 		if os.Getenv("KNOTRA_RUNTIME_WAIT_CLEANUP") == "1" {
 			await(t, 30*time.Second, func() (bool, error) {
 				var open int
-				err := s.Pool.QueryRow(ctx, "SELECT count(*) FROM knotra_resources WHERE run_id=$1 AND state<>'closed'", os.Getenv("KNOTRA_RUNTIME_RUN")).Scan(&open)
+				err := s.Pool.QueryRow(
+					ctx,
+					"SELECT count(*) FROM knotra_resources WHERE run_id=$1 AND state<>'closed'",
+					os.Getenv("KNOTRA_RUNTIME_RUN"),
+				).Scan(&open)
 				return open == 0, err
 			})
 		}
@@ -138,7 +163,16 @@ func TestRuntimeProcessCrashBoundaries(t *testing.T) {
 	if os.Getenv("KNOTRA_TEST_RUNTIME_RECOVERY") != "1" {
 		t.Skip("set KNOTRA_TEST_RUNTIME_RECOVERY=1 for actual Runtime SIGKILL checks")
 	}
-	modes := []string{"fetched_before_claim", "ownership_claimed_before_intent", "prepared_intent_before_admission", "operation_admitted_before_send", "external_accepted_before_journal", "response_journaled_before_envelope", "envelope_saved_before_result_commit", "result_committed"}
+	modes := []string{
+		"fetched_before_claim",
+		"ownership_claimed_before_intent",
+		"prepared_intent_before_admission",
+		"operation_admitted_before_send",
+		"external_accepted_before_journal",
+		"response_journaled_before_envelope",
+		"envelope_saved_before_result_commit",
+		"result_committed",
+	}
 	if os.Getenv("KNOTRA_TEST_RUNTIME_OUTAGE") == "1" {
 		modes = append(modes, "database_outage_saved_envelope")
 	}
@@ -176,14 +210,20 @@ func TestRuntimeProcessCrashBoundaries(t *testing.T) {
 						return
 					}
 				}
-				_ = json.NewEncoder(w).Encode(map[string]any{"message": map[string]string{"role": "assistant", "content": string(content)}, "done": true, "done_reason": "stop"})
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"message":     map[string]string{"role": "assistant", "content": string(content)},
+					"done":        true,
+					"done_reason": "stop",
+				})
 			}))
 			defer server.Close()
 			defer releaseOnce.Do(func() { close(release) })
 			plan := deliveryPlan(server.URL)
 			plan.Profile.Spec.Limits.Timeout = "3m"
 			plan.Pipelines[plan.Root].Spec.Defaults.Execution.Timeout = "90s"
-			beforeSend := mode == "ownership_claimed_before_intent" || mode == "prepared_intent_before_admission" || mode == "operation_admitted_before_send"
+			beforeSend := mode == "ownership_claimed_before_intent" ||
+				mode == "prepared_intent_before_admission" ||
+				mode == "operation_admitted_before_send"
 			if beforeSend {
 				node := plan.Pipelines[plan.Root].Spec.Nodes["a"]
 				node.Execution.Retry = &contract.Retry{MaxAttempts: 2, Backoff: "1ms"}
@@ -215,7 +255,15 @@ func TestRuntimeProcessCrashBoundaries(t *testing.T) {
 			start := func(childMode string) *exec.Cmd {
 				t.Helper()
 				cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestRuntimeProcessCrashBoundaries$", "-test.timeout=2m")
-				cmd.Env = append(os.Environ(), "KNOTRA_RUNTIME_CHILD=1", "KNOTRA_RUNTIME_MODE="+childMode, "KNOTRA_RUNTIME_DSN="+dsn.String(), "KNOTRA_RUNTIME_DIRECTORY="+directory, "KNOTRA_RUNTIME_RUN="+id, "KNOTRA_RUNTIME_TIMEOUT="+executionTimeout)
+				cmd.Env = append(
+					os.Environ(),
+					"KNOTRA_RUNTIME_CHILD=1",
+					"KNOTRA_RUNTIME_MODE="+childMode,
+					"KNOTRA_RUNTIME_DSN="+dsn.String(),
+					"KNOTRA_RUNTIME_DIRECTORY="+directory,
+					"KNOTRA_RUNTIME_RUN="+id,
+					"KNOTRA_RUNTIME_TIMEOUT="+executionTimeout,
+				)
 				log, err := os.Create(filepath.Join(directory, childMode+".log"))
 				if err != nil {
 					t.Fatal(err)
@@ -234,7 +282,11 @@ func TestRuntimeProcessCrashBoundaries(t *testing.T) {
 			// boundary. Killing the process releases its transaction and domain locks.
 			var barrier *pgx.Conn
 			var barrierTable string
-			if mode == "ownership_claimed_before_intent" || mode == "prepared_intent_before_admission" || mode == "response_journaled_before_envelope" || mode == "envelope_saved_before_result_commit" || mode == "database_outage_saved_envelope" {
+			if mode == "ownership_claimed_before_intent" ||
+				mode == "prepared_intent_before_admission" ||
+				mode == "response_journaled_before_envelope" ||
+				mode == "envelope_saved_before_result_commit" ||
+				mode == "database_outage_saved_envelope" {
 				barrier, err = pgx.Connect(ctx, directDSN)
 				if err != nil {
 					t.Fatal(err)
@@ -253,7 +305,15 @@ func TestRuntimeProcessCrashBoundaries(t *testing.T) {
 					table, when, event = "knotra_operations", "NEW.kind='model' AND OLD.admitted_at IS NULL AND NEW.admitted_at IS NOT NULL", "UPDATE"
 				}
 				barrierTable = table
-				if _, err := r.Store.Pool.Exec(ctx, fmt.Sprintf(`CREATE FUNCTION crash_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273645); RETURN NEW; END $$; CREATE TRIGGER crash_barrier BEFORE %s ON %s FOR EACH ROW WHEN (%s) EXECUTE FUNCTION crash_barrier()`, event, table, when)); err != nil {
+				if _, err := r.Store.Pool.Exec(
+					ctx,
+					fmt.Sprintf(
+						`CREATE FUNCTION crash_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273645); RETURN NEW; END $$; CREATE TRIGGER crash_barrier BEFORE %s ON %s FOR EACH ROW WHEN (%s) EXECUTE FUNCTION crash_barrier()`,
+						event,
+						table,
+						when,
+					),
+				); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -274,7 +334,11 @@ func TestRuntimeProcessCrashBoundaries(t *testing.T) {
 			case "ownership_claimed_before_intent", "prepared_intent_before_admission", "response_journaled_before_envelope", "envelope_saved_before_result_commit", "database_outage_saved_envelope":
 				await(t, 15*time.Second, func() (bool, error) {
 					var waiting bool
-					err := r.Store.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event='advisory' AND application_name=$1 AND query LIKE '%knotra_%' AND pid<>pg_backend_pid())`, "knotra-runtime-crash-"+id).Scan(&waiting)
+					err := r.Store.Pool.QueryRow(
+						ctx,
+						`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event='advisory' AND application_name=$1 AND query LIKE '%knotra_%' AND pid<>pg_backend_pid())`,
+						"knotra-runtime-crash-"+id,
+					).Scan(&waiting)
 					return waiting, err
 				})
 			case "result_committed":
@@ -286,13 +350,21 @@ func TestRuntimeProcessCrashBoundaries(t *testing.T) {
 			var instance string
 			var deadline time.Time
 			var key *string
-			if err := r.Store.Pool.QueryRow(ctx, "SELECT n.id,n.deadline,a.outcome_key FROM knotra_execution_nodes n JOIN knotra_execution_attempts a ON a.run_id=n.run_id AND a.instance_id=n.id WHERE n.run_id=$1", id).Scan(&instance, &deadline, &key); err != nil {
+			if err := r.Store.Pool.QueryRow(
+				ctx,
+				"SELECT n.id,n.deadline,a.outcome_key FROM knotra_execution_nodes n JOIN knotra_execution_attempts a ON a.run_id=n.run_id AND a.instance_id=n.id WHERE n.run_id=$1",
+				id,
+			).Scan(&instance, &deadline, &key); err != nil {
 				t.Fatal(err)
 			}
 			if mode == "fetched_before_claim" {
 				var state string
 				var effects, reservations int
-				if err := r.Store.Pool.QueryRow(ctx, `SELECT state,(SELECT count(*) FROM knotra_operations WHERE run_id=$1),(SELECT count(*) FROM knotra_execution_slots WHERE run_id=$1) FROM knotra_execution_attempts WHERE run_id=$1`, id).Scan(&state, &effects, &reservations); err != nil || state != "ready" || key != nil || effects != 0 || reservations != 0 || calls.Load() != 0 {
+				if err := r.Store.Pool.QueryRow(
+					ctx,
+					`SELECT state,(SELECT count(*) FROM knotra_operations WHERE run_id=$1),(SELECT count(*) FROM knotra_execution_slots WHERE run_id=$1) FROM knotra_execution_attempts WHERE run_id=$1`,
+					id,
+				).Scan(&state, &effects, &reservations); err != nil || state != "ready" || key != nil || effects != 0 || reservations != 0 || calls.Load() != 0 {
 					t.Fatalf("preclaim state=%s key=%v effects=%d reservations=%d calls=%d error=%v", state, key, effects, reservations, calls.Load(), err)
 				}
 			}
@@ -314,8 +386,23 @@ func TestRuntimeProcessCrashBoundaries(t *testing.T) {
 				case "operation_admitted_before_send":
 					wantAdmitted = 1
 				}
-				if state != "claimed" || key == nil || operations != wantOperations || admitted != wantAdmitted || budget != wantAdmitted || slots != 1 || calls.Load() != 0 {
-					t.Fatalf("before-send claim/key=%s/%v operations/admitted/budget/slots/calls=%d/%d/%d/%d/%d", state, key, operations, admitted, budget, slots, calls.Load())
+				if state != "claimed" ||
+					key == nil ||
+					operations != wantOperations ||
+					admitted != wantAdmitted ||
+					budget != wantAdmitted ||
+					slots != 1 ||
+					calls.Load() != 0 {
+					t.Fatalf(
+						"before-send claim/key=%s/%v operations/admitted/budget/slots/calls=%d/%d/%d/%d/%d",
+						state,
+						key,
+						operations,
+						admitted,
+						budget,
+						slots,
+						calls.Load(),
+					)
 				}
 				if _, err := files.Get(*key); !os.IsNotExist(err) {
 					t.Fatalf("unexecuted claim has an envelope: %v", err)
@@ -413,12 +500,19 @@ func TestRuntimeProcessCrashBoundaries(t *testing.T) {
 					t.Fatalf("lost outcome status=%s", run.Status)
 				}
 				srv := &api.Server{Store: r.Store, Artifacts: r.Host.Artifacts, Wake: r.CommandWake}
-				decision := map[string]any{"outcome": "succeeded", "evidence": "literal provider fixture verified", "outputs": map[string]string{"answer": answer}}
+				decision := map[string]any{
+					"outcome":  "succeeded",
+					"evidence": "literal provider fixture verified",
+					"outputs":  map[string]string{"answer": answer},
+				}
 				if beforeSend {
 					if calls.Load() != 0 {
 						t.Fatal("expired claim automatically called the provider before an operator decision")
 					}
-					decision = map[string]any{"outcome": "not_started", "evidence": "physical transport fixture and provider verified zero generation requests"}
+					decision = map[string]any{
+						"outcome":  "not_started",
+						"evidence": "physical transport fixture and provider verified zero generation requests",
+					}
 				}
 				body, _ := json.Marshal(decision)
 				if w := runtimeCommand(t, srv.Handler(), "/v1/runs/"+id+"/instances/"+instance+"/resolve", "verified", string(body)); w.Code != 202 {
@@ -442,7 +536,11 @@ func TestRuntimeProcessCrashBoundaries(t *testing.T) {
 			}
 			var attempts, number, budget, slots, successes, workers int
 			var finalDeadline time.Time
-			if err := r.Store.Pool.QueryRow(ctx, `SELECT count(*),max(a.number),(SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='model'),(SELECT active_attempts FROM knotra_execution_scopes WHERE run_id=$1 AND id=$1),(SELECT count(*) FROM knotra_events WHERE run_id=$1 AND document->>'type'='node' AND document->>'message'='succeeded'),(SELECT count(*) FROM knotra_workers),max(n.deadline) FROM knotra_execution_attempts a JOIN knotra_execution_nodes n ON n.run_id=a.run_id AND n.id=a.instance_id WHERE a.run_id=$1`, id).Scan(&attempts, &number, &budget, &slots, &successes, &workers, &finalDeadline); err != nil {
+			if err := r.Store.Pool.QueryRow(
+				ctx,
+				`SELECT count(*),max(a.number),(SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='model'),(SELECT active_attempts FROM knotra_execution_scopes WHERE run_id=$1 AND id=$1),(SELECT count(*) FROM knotra_events WHERE run_id=$1 AND document->>'type'='node' AND document->>'message'='succeeded'),(SELECT count(*) FROM knotra_workers),max(n.deadline) FROM knotra_execution_attempts a JOIN knotra_execution_nodes n ON n.run_id=a.run_id AND n.id=a.instance_id WHERE a.run_id=$1`,
+				id,
+			).Scan(&attempts, &number, &budget, &slots, &successes, &workers, &finalDeadline); err != nil {
 				t.Fatal(err)
 			}
 			wantAttempts, wantBudget, wantWorkers := 1, 1, 2
@@ -452,8 +550,25 @@ func TestRuntimeProcessCrashBoundaries(t *testing.T) {
 					wantBudget = 2
 				}
 			}
-			if calls.Load() != 1 || attempts != wantAttempts || number != wantAttempts || budget != wantBudget || slots != 0 || successes != 1 || workers != wantWorkers || !deadline.Equal(finalDeadline) {
-				t.Fatalf("calls=%d attempts=%d number=%d budget=%d slots=%d successes=%d workers=%d deadline=%v", calls.Load(), attempts, number, budget, slots, successes, workers, finalDeadline.Equal(deadline))
+			if calls.Load() != 1 ||
+				attempts != wantAttempts ||
+				number != wantAttempts ||
+				budget != wantBudget ||
+				slots != 0 ||
+				successes != 1 ||
+				workers != wantWorkers ||
+				!deadline.Equal(finalDeadline) {
+				t.Fatalf(
+					"calls=%d attempts=%d number=%d budget=%d slots=%d successes=%d workers=%d deadline=%v",
+					calls.Load(),
+					attempts,
+					number,
+					budget,
+					slots,
+					successes,
+					workers,
+					finalDeadline.Equal(deadline),
+				)
 			}
 			t.Log("SIGKILL recovered with one physical call, expected attempt/debit counts, original deadline and complete outputs")
 		})

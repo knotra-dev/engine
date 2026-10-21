@@ -98,21 +98,25 @@ func (call *mcpCallEvidence) beforeSend(request *http.Request) error {
 	if request.Method != http.MethodPost || request.GetBody == nil {
 		return errors.New("MCP call requires a replayable SDK envelope")
 	}
+
 	body, err := request.GetBody()
 	if err != nil {
 		return err
 	}
+
 	defer func() { _ = body.Close() }()
 	decoder := json.NewDecoder(io.LimitReader(body, 4096))
 	if token, err := decoder.Token(); err != nil || token != json.Delim('{') {
 		return errors.New("invalid MCP request envelope")
 	}
+
 	var id json.RawMessage
 	for decoder.More() {
 		field, err := decoder.Token()
 		if err != nil {
 			return err
 		}
+
 		switch field {
 		case "id":
 			if err := decoder.Decode(&id); err != nil {
@@ -189,7 +193,10 @@ func (t headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	response, err := t.base.RoundTrip(clone)
 	if req.Method == http.MethodDelete {
 		// 404 means already gone; 405 leaves termination to the server under MCP.
-		if err == nil && (response.StatusCode < 200 || response.StatusCode >= 300) && response.StatusCode != http.StatusNotFound && response.StatusCode != http.StatusMethodNotAllowed {
+		if err == nil &&
+			(response.StatusCode < 200 || response.StatusCode >= 300) &&
+			response.StatusCode != http.StatusNotFound &&
+			response.StatusCode != http.StatusMethodNotAllowed {
 			_ = response.Body.Close()
 			err = fmt.Errorf("MCP session cleanup returned HTTP %d", response.StatusCode)
 			response = nil
@@ -209,6 +216,7 @@ func (t headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		_ = response.Body.Close()
 		return nil, fmt.Errorf("MCP response exceeds byte limit")
 	}
+
 	response.Body = &boundedResponse{ReadCloser: response.Body, remaining: maxMCPResponseBytes}
 	return response, nil
 }
@@ -248,14 +256,17 @@ func (r *Runner) CleanupMCPSession(ctx context.Context, resource execution.Resou
 	if resource.MCP.SessionID == "" {
 		return nil // Stateless transport has no remote session to delete.
 	}
+
 	connection, ok := profile.Spec.MCP[resource.MCP.Connection]
 	if !ok || connection.Transport != "streamable_http" {
 		return fmt.Errorf("MCP cleanup connection is absent from admitted profile")
 	}
+
 	client, err := r.mcpHTTPClient(profile, connection, nil)
 	if err != nil {
 		return err
 	}
+
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	if r.ResourceEvidence != nil {
@@ -272,10 +283,12 @@ func (r *Runner) CleanupMCPSession(ctx context.Context, resource execution.Resou
 			if err != nil {
 				return err
 			}
+
 			request, err := http.NewRequestWithContext(ctx, http.MethodPost, connection.URL, bytes.NewReader(data))
 			if err != nil {
 				return err
 			}
+
 			request.Header.Set("Mcp-Session-Id", resource.MCP.SessionID)
 			request.Header.Set("Mcp-Protocol-Version", resource.MCP.ProtocolVersion)
 			request.Header.Set("Mcp-Method", "notifications/cancelled")
@@ -285,6 +298,7 @@ func (r *Runner) CleanupMCPSession(ctx context.Context, resource execution.Resou
 			if err != nil {
 				return err
 			}
+
 			_ = response.Body.Close()
 			if response.StatusCode == http.StatusNotFound {
 				return nil
@@ -298,6 +312,7 @@ func (r *Runner) CleanupMCPSession(ctx context.Context, resource execution.Resou
 	if err != nil {
 		return err
 	}
+
 	request.Header.Set("Mcp-Session-Id", resource.MCP.SessionID)
 	request.Header.Set("Mcp-Protocol-Version", resource.MCP.ProtocolVersion)
 	response, err := client.Do(request)
@@ -402,7 +417,11 @@ func (r *Runner) connectMCP(ctx context.Context, req Request, name string, conne
 		return s, errors.Join(connectionErr, s.close())
 	}
 	if s.resource.Ownership.WorkerID != "" {
-		s.resource.MCP = &execution.MCPSessionRecord{Connection: name, SessionID: s.session.ID(), ProtocolVersion: s.session.InitializeResult().ProtocolVersion}
+		s.resource.MCP = &execution.MCPSessionRecord{
+			Connection:      name,
+			SessionID:       s.session.ID(),
+			ProtocolVersion: s.session.InitializeResult().ProtocolVersion,
+		}
 		if err := r.recordMCPSession(ctx, s); err != nil {
 			return s, errors.Join(err, s.close())
 		}
@@ -429,6 +448,7 @@ func (r *Runner) session(ctx context.Context, req Request, alias string) (*mcpSe
 	if !ok {
 		return nil, nil, fmt.Errorf("unknown MCP alias %q", alias)
 	}
+
 	connection := req.Plan.Profile.Spec.MCP[resource.Connection]
 	req.service = resource.Session == "run"
 	if resource.Session != "run" {
@@ -441,12 +461,14 @@ func (r *Runner) session(ctx context.Context, req Request, alias string) (*mcpSe
 	if !connection.AllowRunSession {
 		return nil, nil, fmt.Errorf("run MCP session is not permitted")
 	}
+
 	key := req.RunID + "/" + req.ScopeID + "/" + alias
 	cache := r.cache()
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, nil, err
 		}
+
 		cache.mu.Lock()
 		if initializing := cache.initializing[key]; initializing != nil {
 			cache.mu.Unlock()
@@ -461,6 +483,7 @@ func (r *Runner) session(ctx context.Context, req Request, alias string) (*mcpSe
 			cache.mu.Unlock()
 			return s, func() {}, nil
 		}
+
 		initializing := make(chan struct{})
 		cache.initializing[key] = initializing
 		cache.save(key, nil)
@@ -492,12 +515,14 @@ func (r *Runner) session(ctx context.Context, req Request, alias string) (*mcpSe
 			Unknown:     true,
 		}
 	}
+
 	initialization, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	s, err := r.connectMCP(initialization, req, resource.Connection, connection)
 	if err != nil {
 		return nil, nil, err
 	}
+
 	cache.mu.Lock()
 	cache.save(key, s)
 	cache.mu.Unlock()
@@ -510,10 +535,12 @@ func (r *Runner) callMCP(ctx context.Context, req Request, s *mcpSession, alias,
 	if !slices.Contains(connection.AllowedTools, name) {
 		return nil, fmt.Errorf("MCP tool is not allowed")
 	}
+
 	snapshot, ok := req.Plan.MCPTools[resource.Connection][name]
 	if !ok {
 		return nil, fmt.Errorf("MCP tool was not snapshotted at admission")
 	}
+
 	policy := connection.ToolPolicies[name]
 	if policy.Effect == "" {
 		policy.Effect = "unknown"
@@ -524,6 +551,7 @@ func (r *Runner) callMCP(ctx context.Context, req Request, s *mcpSession, alias,
 	if err != nil {
 		return nil, err
 	}
+
 	obj, ok := decoded.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("MCP arguments must be an object")
@@ -540,6 +568,7 @@ func (r *Runner) callMCP(ctx context.Context, req Request, s *mcpSession, alias,
 	if err = contract.ValidateValue(contract.Port{Schema: snapshot.InputSchema}, contract.Value{JSON: complete}); err != nil {
 		return nil, fmt.Errorf("MCP input schema: %w", err)
 	}
+
 	op := Operation{ID: id, Kind: "tool", Effect: policy.Effect}
 	if policy.IdempotencyArgument != "" {
 		op.IdempotencyKey = logicalID
@@ -563,6 +592,7 @@ func (r *Runner) callMCP(ctx context.Context, req Request, s *mcpSession, alias,
 		if err := verifyLiveTool(ctx, s.session, name, snapshot); err != nil {
 			return nil, failure("MCP_SCHEMA_CHANGED", err)
 		}
+
 		var call *mcpCallEvidence
 		callCtx := ctx
 		if s.resource.Ownership.WorkerID != "" {
@@ -627,19 +657,23 @@ func verifyLiveTool(ctx context.Context, session *mcp.ClientSession, name string
 		if err != nil {
 			return fmt.Errorf("cannot verify live MCP tool: %w", err)
 		}
+
 		count++
 		if seen[tool.Name] {
 			return fmt.Errorf("MCP catalog contains duplicate tool %q", tool.Name)
 		}
+
 		seen[tool.Name] = true
 		input, err := json.Marshal(tool.InputSchema)
 		if err != nil {
 			return err
 		}
+
 		output, err := json.Marshal(tool.OutputSchema)
 		if err != nil {
 			return err
 		}
+
 		size += len(input) + len(output) + len(tool.Description) + len(tool.Name)
 		if count > 4096 || size > 8<<20 {
 			return fmt.Errorf("MCP catalog exceeds discovery limits")
@@ -656,6 +690,7 @@ func verifyLiveTool(ctx context.Context, session *mcp.ClientSession, name string
 	if !found {
 		return fmt.Errorf("MCP tool %q is no longer available", name)
 	}
+
 	return nil
 }
 
@@ -678,6 +713,7 @@ func insertIdempotency(obj map[string]any, pointer, value string) error {
 	if pointer == "" || pointer[0] != '/' {
 		return fmt.Errorf("invalid idempotency pointer")
 	}
+
 	parts := strings.Split(pointer[1:], "/")
 	current := obj
 
@@ -690,6 +726,7 @@ func insertIdempotency(obj map[string]any, pointer, value string) error {
 			current[part] = value
 			return nil
 		}
+
 		child, exists := current[part]
 		if !exists {
 			next := map[string]any{}
@@ -701,6 +738,7 @@ func insertIdempotency(obj map[string]any, pointer, value string) error {
 		if !ok {
 			return fmt.Errorf("idempotency parent must be an object")
 		}
+
 		current = next
 	}
 
@@ -713,6 +751,7 @@ func (r *Runner) tool(ctx context.Context, req Request) (contract.Values, error)
 	if err != nil {
 		return nil, err
 	}
+
 	var result struct {
 		Structured json.RawMessage `json:"structuredContent"`
 		Content    json.RawMessage `json:"content"`
@@ -724,6 +763,7 @@ func (r *Runner) tool(ctx context.Context, req Request) (contract.Values, error)
 	if result.IsError {
 		return nil, failure("TOOL_FAILED", fmt.Errorf("MCP tool returned isError"))
 	}
+
 	value := result.Structured
 	if n.Response == "content" {
 		value = result.Content
@@ -731,11 +771,13 @@ func (r *Runner) tool(ctx context.Context, req Request) (contract.Values, error)
 	if value == nil {
 		return nil, failure("OUTPUT_INVALID", fmt.Errorf("MCP response lacks selected content"))
 	}
+
 	port := req.Node.Outputs["result"]
 	v := contract.Value{JSON: value}
 	if err = contract.ValidateValue(port, v); err != nil {
 		return nil, failure("OUTPUT_INVALID", err)
 	}
+
 	return contract.Values{"result": v}, nil
 }
 
@@ -813,10 +855,12 @@ func (r *Runner) discoverMCP(ctx context.Context, req Request, name string, conn
 	if err := cache.closeDiscovery(); err != nil {
 		return nil, fmt.Errorf("previous MCP discovery cleanup failed: %w", err)
 	}
+
 	cache.discovery, err = r.connectMCP(ctx, req, name, connection)
 	if cache.discovery == nil {
 		return nil, err
 	}
+
 	defer func() {
 		if cleanupErr := cache.closeDiscovery(); cleanupErr != nil {
 			err = errors.Join(err, fmt.Errorf("MCP discovery cleanup failed: %w", cleanupErr))
@@ -825,6 +869,7 @@ func (r *Runner) discoverMCP(ctx context.Context, req Request, name string, conn
 	if err != nil {
 		return nil, err
 	}
+
 	snapshots = map[string]contract.ToolSnapshot{}
 	seen := map[string]bool{}
 	totalBytes := 0
@@ -853,14 +898,17 @@ func (r *Runner) discoverMCP(ctx context.Context, req Request, name string, conn
 		if len(seen) > 4096 {
 			return nil, fmt.Errorf("MCP catalog exceeds discovery limits")
 		}
+
 		input, err := json.Marshal(tool.InputSchema)
 		if err != nil {
 			return nil, err
 		}
+
 		output, err := json.Marshal(tool.OutputSchema)
 		if err != nil {
 			return nil, err
 		}
+
 		title := tool.Title
 		if title == "" && tool.Annotations != nil {
 			title = tool.Annotations.Title

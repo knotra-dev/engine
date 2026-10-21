@@ -51,6 +51,7 @@ func number(s string) (any, error) {
 		}
 		return v, nil
 	}
+
 	f, err := strconv.ParseFloat(s, 64)
 	if err != nil || math.IsInf(f, 0) || math.IsNaN(f) {
 		return nil, fmt.Errorf("number outside finite float64: %q", s)
@@ -118,10 +119,12 @@ func parseYAML(data []byte) (*yaml.Node, error) {
 	if len(doc.Content) != 1 {
 		return nil, fmt.Errorf("expected one nonempty document")
 	}
+
 	var extra yaml.Node
 	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("multiple YAML documents are forbidden")
 	}
+
 	return &doc, nil
 }
 
@@ -151,6 +154,7 @@ func yamlValue(n *yaml.Node, depth int) (any, error) {
 			if err != nil {
 				return nil, err
 			}
+
 			k, ok := key.(string)
 			if !ok {
 				return fail("mapping keys must be strings")
@@ -161,10 +165,12 @@ func yamlValue(n *yaml.Node, depth int) (any, error) {
 			if _, ok := result[k]; ok {
 				return fail("duplicate key " + strconv.Quote(k))
 			}
+
 			v, err := yamlValue(n.Content[i+1], depth)
 			if err != nil {
 				return nil, err
 			}
+
 			result[k] = v
 		}
 		return result, nil
@@ -223,6 +229,7 @@ func DecodeJSONLimit(data []byte, maximumBytes int) (any, error) {
 	if err := checkSurrogates(data); err != nil {
 		return nil, err
 	}
+
 	d := json.NewDecoder(bytes.NewReader(data))
 	d.UseNumber()
 	v, err := jsonValue(d, 0)
@@ -232,6 +239,7 @@ func DecodeJSONLimit(data []byte, maximumBytes int) (any, error) {
 	if _, err := d.Token(); err != io.EOF {
 		return nil, fmt.Errorf("trailing JSON content")
 	}
+
 	return v, nil
 }
 

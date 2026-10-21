@@ -14,8 +14,19 @@ import (
 
 // RegisterOwnedResource commits the identity before any directory/container creation.
 func (s *Store) RegisterOwnedResource(ctx context.Context, token execution.Ownership, id, kind, lifetime string) (execution.ResourceRecord, error) {
-	resource := execution.ResourceRecord{ID: id, EngineID: s.EngineID, Kind: kind, Lifetime: lifetime, State: "active", DispatchGeneration: 1, Ownership: token}
-	if parsed, err := uuid.Parse(id); err != nil || parsed.String() != id || (kind != "sandbox" && kind != "mcp_http") || (lifetime != "attempt" && lifetime != "run") {
+	resource := execution.ResourceRecord{
+		ID:                 id,
+		EngineID:           s.EngineID,
+		Kind:               kind,
+		Lifetime:           lifetime,
+		State:              "active",
+		DispatchGeneration: 1,
+		Ownership:          token,
+	}
+	if parsed, err := uuid.Parse(id); err != nil ||
+		parsed.String() != id ||
+		(kind != "sandbox" && kind != "mcp_http") ||
+		(lifetime != "attempt" && lifetime != "run") {
 		return resource, errors.New("invalid resource identity, kind or lifetime")
 	}
 	err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
@@ -28,7 +39,21 @@ func (s *Store) RegisterOwnedResource(ctx context.Context, token execution.Owner
 			return err
 		}
 		resource.HostID = host
-		_, err = q.InsertOwnedResource(ctx, db.InsertOwnedResourceParams{ID: id, EngineID: s.EngineID, HostID: host, RunID: token.RunID, InstanceID: token.InstanceID, AttemptNumber: token.Number, WorkerID: token.WorkerID, OwnershipGeneration: token.Generation, Kind: kind, Lifetime: lifetime})
+		_, err = q.InsertOwnedResource(
+			ctx,
+			db.InsertOwnedResourceParams{
+				ID:                  id,
+				EngineID:            s.EngineID,
+				HostID:              host,
+				RunID:               token.RunID,
+				InstanceID:          token.InstanceID,
+				AttemptNumber:       token.Number,
+				WorkerID:            token.WorkerID,
+				OwnershipGeneration: token.Generation,
+				Kind:                kind,
+				Lifetime:            lifetime,
+			},
+		)
 		return err
 	})
 	return resource, err
@@ -47,7 +72,19 @@ func (s *Store) RecordOwnedMCPSession(ctx context.Context, token execution.Owner
 	if err != nil {
 		return err
 	}
-	tag, err := db.New(s.Pool).RecordOwnedMCPSession(ctx, db.RecordOwnedMCPSessionParams{ID: id, EngineID: s.EngineID, RunID: token.RunID, InstanceID: token.InstanceID, AttemptNumber: token.Number, WorkerID: token.WorkerID, OwnershipGeneration: token.Generation, McpSession: data})
+	tag, err := db.New(s.Pool).RecordOwnedMCPSession(
+		ctx,
+		db.RecordOwnedMCPSessionParams{
+			ID:                  id,
+			EngineID:            s.EngineID,
+			RunID:               token.RunID,
+			InstanceID:          token.InstanceID,
+			AttemptNumber:       token.Number,
+			WorkerID:            token.WorkerID,
+			OwnershipGeneration: token.Generation,
+			McpSession:          data,
+		},
+	)
 	if err == nil && tag.RowsAffected() != 1 {
 		return ErrExecutionOwnership
 	}
@@ -60,7 +97,18 @@ func (s *Store) CloseOwnedResource(ctx context.Context, token execution.Ownershi
 	if err := token.Validate(); err != nil {
 		return err
 	}
-	tag, err := db.New(s.Pool).CloseOwnedResource(ctx, db.CloseOwnedResourceParams{ID: id, EngineID: s.EngineID, RunID: token.RunID, InstanceID: token.InstanceID, AttemptNumber: token.Number, WorkerID: token.WorkerID, OwnershipGeneration: token.Generation})
+	tag, err := db.New(s.Pool).CloseOwnedResource(
+		ctx,
+		db.CloseOwnedResourceParams{
+			ID:                  id,
+			EngineID:            s.EngineID,
+			RunID:               token.RunID,
+			InstanceID:          token.InstanceID,
+			AttemptNumber:       token.Number,
+			WorkerID:            token.WorkerID,
+			OwnershipGeneration: token.Generation,
+		},
+	)
 	if err == nil && tag.RowsAffected() != 1 {
 		return ErrExecutionOwnership
 	}
@@ -97,7 +145,16 @@ func (s *Store) ClaimObservedResourceCleanupTx(ctx context.Context, tx pgx.Tx, o
 	if observed.EngineID != s.EngineID {
 		return nil, nil
 	}
-	return s.claimResourceCleanupTx(ctx, tx, observed.ID, observed.HostID, observed.Ownership.WorkerID, observed.Ownership.Generation, 0, &observed)
+	return s.claimResourceCleanupTx(
+		ctx,
+		tx,
+		observed.ID,
+		observed.HostID,
+		observed.Ownership.WorkerID,
+		observed.Ownership.Generation,
+		0,
+		&observed,
+	)
 }
 
 func (s *Store) claimResourceCleanupTx(ctx context.Context, tx pgx.Tx, id, host, worker string, generation, dispatchGeneration int64, observed *execution.ResourceRecord) (*execution.ResourceRecord, error) {
@@ -109,6 +166,7 @@ func (s *Store) claimResourceCleanupTx(ctx context.Context, tx pgx.Tx, id, host,
 	if err != nil {
 		return nil, err
 	}
+
 	run, err := LockExecutionRun(ctx, tx, runID)
 	if err != nil {
 		return nil, err
@@ -116,23 +174,33 @@ func (s *Store) claimResourceCleanupTx(ctx context.Context, tx pgx.Tx, id, host,
 	if err := checkExecutionVersion(run); err != nil {
 		return nil, err
 	}
+
 	row, err := q.LockResourceCleanup(ctx, db.LockResourceCleanupParams{ID: id, EngineID: s.EngineID})
 	if err != nil {
 		return nil, err
 	}
-	if row.HostID != host || row.WorkerID != worker || row.OwnershipGeneration != generation || (dispatchGeneration > 0 && row.CleanupGeneration != dispatchGeneration) {
+	if row.HostID != host ||
+		row.WorkerID != worker ||
+		row.OwnershipGeneration != generation ||
+		(dispatchGeneration > 0 && row.CleanupGeneration != dispatchGeneration) {
 		return nil, nil
 	}
-	if observed != nil && (observed.Kind != row.Kind || observed.Ownership.RunID != row.RunID || observed.Ownership.InstanceID != row.InstanceID || observed.Ownership.Number != row.AttemptNumber) {
+	if observed != nil &&
+		(observed.Kind != row.Kind ||
+			observed.Ownership.RunID != row.RunID ||
+			observed.Ownership.InstanceID != row.InstanceID ||
+			observed.Ownership.Number != row.AttemptNumber) {
 		return nil, nil
 	}
 	if row.State == "closed" && observed == nil {
 		return nil, nil
 	}
+
 	now, err := q.DatabaseTime(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	dead := !row.HeartbeatAt.Add(execution.LeaseDuration).After(now)
 	ended := row.Lifetime == "attempt" && (row.AttemptState != "claimed" || row.LeaseExpiresAt == nil || !row.LeaseExpiresAt.After(now))
 	if row.ClosedAt == nil && !dead && !ended && !protocol.Terminal(run.Status) {
@@ -141,7 +209,21 @@ func (s *Store) claimResourceCleanupTx(ctx context.Context, tx pgx.Tx, id, host,
 	if _, err := q.ClaimResourceCleanup(ctx, id); err != nil {
 		return nil, err
 	}
-	resource := &execution.ResourceRecord{ID: id, EngineID: s.EngineID, HostID: row.HostID, Kind: row.Kind, Lifetime: row.Lifetime, State: "cleaning", DispatchGeneration: row.CleanupGeneration, Ownership: execution.Ownership{AttemptID: execution.AttemptID{RunID: row.RunID, InstanceID: row.InstanceID, Number: row.AttemptNumber}, WorkerID: row.WorkerID, Generation: row.OwnershipGeneration}}
+
+	resource := &execution.ResourceRecord{
+		ID:                 id,
+		EngineID:           s.EngineID,
+		HostID:             row.HostID,
+		Kind:               row.Kind,
+		Lifetime:           row.Lifetime,
+		State:              "cleaning",
+		DispatchGeneration: row.CleanupGeneration,
+		Ownership: execution.Ownership{
+			AttemptID:  execution.AttemptID{RunID: row.RunID, InstanceID: row.InstanceID, Number: row.AttemptNumber},
+			WorkerID:   row.WorkerID,
+			Generation: row.OwnershipGeneration,
+		},
+	}
 	if row.McpSession != nil {
 		if err := json.Unmarshal(row.McpSession, &resource.MCP); err != nil {
 			return nil, err
@@ -150,5 +232,6 @@ func (s *Store) claimResourceCleanupTx(ctx context.Context, tx pgx.Tx, id, host,
 	if err := resource.Validate(); err != nil {
 		return nil, err
 	}
+
 	return resource, nil
 }

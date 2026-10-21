@@ -14,6 +14,7 @@ def compare(values, package_root):
         raise ValueError(
             "Expected independent evidence for each of the three source files"
         )
+
     ranked = []
     for item in evidence:
         source = (package_root / item["source"]).read_text(encoding="utf-8")
@@ -24,6 +25,7 @@ def compare(values, package_root):
             " ".join(quote.split()) not in normalized_source for quote in item["quotes"]
         ):
             raise ValueError(f"A quote does not occur verbatim in {item['source']}")
+
         # Reject extraction errors before doing arithmetic or asking for a recommendation.
         cost = float(re.search(r"Monthly cost: ([0-9.]+) USD", source).group(1))
         days = int(
@@ -40,6 +42,7 @@ def compare(values, package_root):
             raise ValueError(
                 f"Extracted comparison facts disagree with {item['source']}"
             )
+
         scores = {
             "cost": max(0, 5 * (1 - cost / budget)),
             "speed": max(0, 5 * (1 - days / deadline)),
@@ -52,6 +55,7 @@ def compare(values, package_root):
             / sum(weights.values()),
             2,
         )
+
         constraints = []
         if cost > budget:
             constraints.append("monthly cost exceeds budget")
@@ -69,6 +73,7 @@ def compare(values, package_root):
     ranked.sort(
         key=lambda item: (not item["eligible"], -item["weighted_score"], item["source"])
     )
+
     eligible = [item for item in ranked if item["eligible"]]
     decision = {
         "selected_source": eligible[0]["source"] if eligible else None,

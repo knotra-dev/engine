@@ -145,14 +145,17 @@ func (s *OutcomeFiles) GetMCPSessionContext(ctx context.Context, resource Resour
 	if err != nil {
 		return nil, err
 	}
+
 	data, err := s.readBoundedContext(ctx, key, maxMCPEvidenceBytes)
 	if err != nil {
 		return nil, err
 	}
+
 	var evidence mcpEvidence
 	if err := decodeStrict(data, &evidence); err != nil {
 		return nil, errors.Join(ErrInvalidOutcome, err)
 	}
+
 	stored := evidence.Resource
 	if evidence.FormatVersion != StateFormatVersion || !sameMCPResource(stored, resource) {
 		return nil, fmt.Errorf("%w: MCP evidence does not match its recorded owner", ErrInvalidOutcome)
@@ -160,11 +163,20 @@ func (s *OutcomeFiles) GetMCPSessionContext(ctx context.Context, resource Resour
 	if resource.MCP != nil && *resource.MCP != *stored.MCP {
 		return nil, fmt.Errorf("%w: MCP evidence conflicts with the recorded session", ErrInvalidOutcome)
 	}
+
 	return stored.MCP, nil
 }
 
 func sameMCPResource(stored, expected ResourceRecord) bool {
-	return stored.MCP != nil && stored.Validate() == nil && stored.ID == expected.ID && stored.EngineID == expected.EngineID && stored.HostID == expected.HostID && stored.Kind == expected.Kind && stored.Lifetime == expected.Lifetime && stored.Ownership == expected.Ownership && (expected.MCP == nil || *expected.MCP == *stored.MCP)
+	return stored.MCP != nil &&
+		stored.Validate() == nil &&
+		stored.ID == expected.ID &&
+		stored.EngineID == expected.EngineID &&
+		stored.HostID == expected.HostID &&
+		stored.Kind == expected.Kind &&
+		stored.Lifetime == expected.Lifetime &&
+		stored.Ownership == expected.Ownership &&
+		(expected.MCP == nil || *expected.MCP == *stored.MCP)
 }
 
 func mcpCallKey(resource ResourceRecord) (string, error) {
@@ -201,6 +213,7 @@ func (s *OutcomeFiles) PutMCPCall(resource ResourceRecord, id json.RawMessage, c
 	if err := validateMCPRequestID(id); err != nil {
 		return err
 	}
+
 	data, err := json.Marshal(mcpEvidence{FormatVersion: StateFormatVersion, Resource: resource, RequestID: id, Completed: completed})
 	if err != nil {
 		return err
@@ -208,6 +221,7 @@ func (s *OutcomeFiles) PutMCPCall(resource ResourceRecord, id json.RawMessage, c
 	if len(data) > maxMCPEvidenceBytes-1024 {
 		return errors.New("MCP call evidence exceeds byte limit")
 	}
+
 	_, err = s.publish(key, data, true)
 	return err
 }
@@ -223,6 +237,7 @@ func (s *OutcomeFiles) GetMCPCallContext(ctx context.Context, resource ResourceR
 	if err != nil {
 		return nil, err
 	}
+
 	data, err := s.readBoundedContext(ctx, key, maxMCPEvidenceBytes)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -230,6 +245,7 @@ func (s *OutcomeFiles) GetMCPCallContext(ctx context.Context, resource ResourceR
 	if err != nil {
 		return nil, err
 	}
+
 	var evidence mcpEvidence
 	if err := decodeStrict(data, &evidence); err != nil {
 		return nil, errors.Join(ErrInvalidOutcome, err)
@@ -243,5 +259,6 @@ func (s *OutcomeFiles) GetMCPCallContext(ctx context.Context, resource ResourceR
 	if evidence.Completed {
 		return nil, nil
 	}
+
 	return evidence.RequestID, nil
 }

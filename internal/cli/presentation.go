@@ -57,14 +57,24 @@ func (s *commandState) printMutation(result map[string]any) error {
 	if s.json {
 		return s.printJSON(result)
 	}
+
 	var rows [][]string
 	switch {
 	case result["definition"] != nil:
 		definition, _ := result["definition"].(map[string]any)
-		rows = [][]string{{"Pipeline", stringField(definition, "id")}, {"Name", stringField(definition, "name")}, {"Digest", stringField(definition, "packageDigest")}}
+		rows = [][]string{
+			{"Pipeline", stringField(definition, "id")},
+			{"Name", stringField(definition, "name")},
+			{"Digest", stringField(definition, "packageDigest")},
+		}
 	case result["artifact"] != nil:
 		artifact, _ := result["artifact"].(map[string]any)
-		rows = [][]string{{"Artifact", stringField(artifact, "id")}, {"Name", stringField(artifact, "name")}, {"Media type", stringField(artifact, "mediaType")}, {"Bytes", stringField(artifact, "size")}}
+		rows = [][]string{
+			{"Artifact", stringField(artifact, "id")},
+			{"Name", stringField(artifact, "name")},
+			{"Media type", stringField(artifact, "mediaType")},
+			{"Bytes", stringField(artifact, "size")},
+		}
 	case result["run"] != nil:
 		run, _ := result["run"].(map[string]any)
 		rows = [][]string{{"Run", stringField(run, "id")}, {"Status", stringField(run, "status")}, {"Profile", stringField(run, "profile")}}

@@ -34,6 +34,7 @@ func (a Artifacts) Write(name, mediaType string, data []byte, origin map[string]
 	if len(data) > MaxArtifactBytes {
 		return contract.Artifact{}, fmt.Errorf("artifact exceeds 64 MiB")
 	}
+
 	sum := sha256.Sum256(data)
 	hash := hex.EncodeToString(sum[:])
 	if a.Blobs != nil {
@@ -61,12 +62,14 @@ func (a Artifacts) writeFile(hash string, data []byte) error {
 	if e != nil {
 		return e
 	}
+
 	defer func() { _ = root.Close() }()
 	tmp := ".upload-" + uuid.NewString()
 	f, e := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if e != nil {
 		return e
 	}
+
 	defer func() { _ = root.Remove(tmp) }()
 	if _, e = f.Write(data); e != nil {
 		_ = f.Close()
@@ -92,6 +95,7 @@ func (a Artifacts) writeFile(hash string, data []byte) error {
 	if e != nil {
 		return e
 	}
+
 	e = fsutil.SyncOpenDir(dir)
 	closeErr := dir.Close()
 	if e != nil {
@@ -100,6 +104,7 @@ func (a Artifacts) writeFile(hash string, data []byte) error {
 	if closeErr != nil {
 		return closeErr
 	}
+
 	return nil
 }
 
@@ -168,10 +173,12 @@ func (a Artifacts) read(ctx context.Context, v contract.Artifact) ([]byte, error
 		}
 		return data, nil
 	}
+
 	root, e := os.OpenRoot(a.Root)
 	if e != nil {
 		return nil, e
 	}
+
 	defer func() { _ = root.Close() }()
 	return readArtifactFile(root, v)
 }
@@ -180,6 +187,7 @@ func readArtifactFile(root *os.Root, v contract.Artifact) ([]byte, error) {
 	if !hashPattern.MatchString(v.SHA256) {
 		return nil, fmt.Errorf("invalid artifact checksum")
 	}
+
 	fi, e := root.Lstat(v.SHA256)
 	if e != nil {
 		return nil, e
@@ -187,10 +195,12 @@ func readArtifactFile(root *os.Root, v contract.Artifact) ([]byte, error) {
 	if !fi.Mode().IsRegular() || fi.Size() != v.Size || fi.Size() > MaxArtifactBytes {
 		return nil, fmt.Errorf("artifact size or file type changed")
 	}
+
 	f, e := root.Open(v.SHA256)
 	if e != nil {
 		return nil, e
 	}
+
 	defer func() { _ = f.Close() }()
 	opened, e := f.Stat()
 	if e != nil {
@@ -199,6 +209,7 @@ func readArtifactFile(root *os.Root, v contract.Artifact) ([]byte, error) {
 	if !os.SameFile(fi, opened) {
 		return nil, fmt.Errorf("artifact changed while opening")
 	}
+
 	b, e := io.ReadAll(io.LimitReader(f, MaxArtifactBytes+1))
 	if e != nil {
 		return nil, e
@@ -206,10 +217,12 @@ func readArtifactFile(root *os.Root, v contract.Artifact) ([]byte, error) {
 	if int64(len(b)) != v.Size {
 		return nil, fmt.Errorf("artifact size changed")
 	}
+
 	sum := sha256.Sum256(b)
 	if hex.EncodeToString(sum[:]) != v.SHA256 {
 		return nil, fmt.Errorf("artifact checksum mismatch")
 	}
+
 	return b, nil
 }
 

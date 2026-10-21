@@ -8,4 +8,5 @@ def reserve(available, requested):
         raise ValueError("Invalid stock quantity")
     if requested > available:
         raise ValueError("Insufficient stock")
+
     return available - requested

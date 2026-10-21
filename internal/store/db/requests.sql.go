@@ -69,7 +69,14 @@ func (q *Queries) LockRequest(ctx context.Context, id string) (LockRequestRow, e
 }
 
 const lockResolutionRequest = `-- name: LockResolutionRequest :one
-SELECT document,status FROM knotra_requests WHERE run_id=$1 AND kind='resolution' AND document->>'instanceId'=$2::text ORDER BY created_at DESC LIMIT 1 FOR UPDATE
+SELECT document,status
+FROM knotra_requests
+WHERE run_id=$1
+    AND kind='resolution'
+    AND document->>'instanceId'=$2::text
+ORDER BY created_at DESC
+LIMIT 1
+FOR UPDATE
 `
 
 type LockResolutionRequestParams struct {

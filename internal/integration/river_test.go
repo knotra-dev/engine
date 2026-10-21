@@ -90,12 +90,22 @@ spec:
     approved: {schema: {type: boolean}, bind: {from: nodes.review.outputs.approved}}
 `
 	var definition struct{ Definition protocol.Definition }
-	pkg := contract.Package{Entrypoint: "pipeline.yaml", Source: source, Files: []contract.File{{Path: "pipeline.yaml", Content: []byte(source)}}}
+	pkg := contract.Package{
+		Entrypoint: "pipeline.yaml",
+		Source:     source,
+		Files:      []contract.File{{Path: "pipeline.yaml", Content: []byte(source)}},
+	}
 	if err := api.Command(ctx, "/definitions", map[string]any{"package": pkg}, uuid.NewString(), &definition); err != nil {
 		t.Fatal(err)
 	}
 	var accepted struct{ Run protocol.Run }
-	if err := api.Command(ctx, "/runs", map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name}, uuid.NewString(), &accepted); err != nil {
+	if err := api.Command(
+		ctx,
+		"/runs",
+		map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name},
+		uuid.NewString(),
+		&accepted,
+	); err != nil {
 		t.Fatal(err)
 	}
 	request := awaitHuman(t, ctx, api, accepted.Run.ID)
@@ -112,7 +122,13 @@ spec:
 	key := uuid.NewString()
 	var receipt any
 	for range 2 {
-		if err := api.Command(ctx, "/requests/"+request.ID+"/response", map[string]any{"outputs": map[string]any{"approved": true}}, key, &receipt); err != nil {
+		if err := api.Command(
+			ctx,
+			"/requests/"+request.ID+"/response",
+			map[string]any{"outputs": map[string]any{"approved": true}},
+			key,
+			&receipt,
+		); err != nil {
 			t.Fatal(err)
 		}
 	}

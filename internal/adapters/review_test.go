@@ -125,7 +125,12 @@ func TestExecuteRejectsIncompatibleAdapterBeforeAnyOperation(t *testing.T) {
 	runner := &Runner{Hooks: hooks}
 	_, err := runner.Execute(context.Background(), req)
 	var failed *Failure
-	if !errors.As(err, &failed) || failed.Code != "ADAPTER_VERSION_UNSUPPORTED" || failed.Retryable || failed.Unknown || len(hooks.ops) != 0 || len(hooks.calls) != 0 {
+	if !errors.As(err, &failed) ||
+		failed.Code != "ADAPTER_VERSION_UNSUPPORTED" ||
+		failed.Retryable ||
+		failed.Unknown ||
+		len(hooks.ops) != 0 ||
+		len(hooks.calls) != 0 {
 		t.Fatalf("incompatible adapter began execution: %v", err)
 	}
 }

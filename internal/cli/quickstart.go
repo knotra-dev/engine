@@ -48,7 +48,12 @@ func (s *commandState) bootstrapCommand(checkOnly bool) *cobra.Command {
 	f.StringVar(&config.Provider, "provider", config.Provider, "Connection: codex, claude, ollama, openai-compatible, openai or anthropic")
 	f.StringVar(&config.Model, "model", "", "Model ID; CLI account default for Codex/Claude, qwen3.5:9b for Ollama, required for API providers")
 	f.StringVar(&config.BaseURL, "base-url", "", "API base URL; required for openai-compatible Chat Completions servers, usually ending in /v1")
-	f.StringVar(&config.ConnectionsFile, "connections-file", "", "Saved model sources and MCP servers with environment credential references; starts infrastructure independently of model availability")
+	f.StringVar(
+		&config.ConnectionsFile,
+		"connections-file",
+		"",
+		"Saved model sources and MCP servers with environment credential references; starts infrastructure independently of model availability",
+	)
 	f.StringVar(&config.HelperPath, "sandbox-helper", s.env("KNOTRA_SANDBOX_HELPER", ""), "Linux helper; otherwise select it from the release bundle")
 	f.IntVar(&config.PostgresPort, "postgres-port", config.PostgresPort, "Local PostgreSQL port")
 	if !checkOnly {
@@ -64,28 +69,34 @@ func (s *commandState) quickstart(ctx context.Context, setup *bootstrap.Setup, l
 	if err != nil {
 		return fmt.Errorf("invalid --listen: %w", err)
 	}
+
 	ip := net.ParseIP(host)
 	if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
 		return fmt.Errorf("quickstart requires a loopback listen address")
 	}
+
 	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", listen)
 	if err != nil {
 		return fmt.Errorf("engine address %s is occupied; stop that engine or choose --listen", listen)
 	}
+
 	_ = listener.Close()
 	dsn, key, err := setup.StartInfrastructure(ctx)
 	if err != nil {
 		return err
 	}
+
 	config := setup.Config
 	profilePath, err := setup.ProfilePath()
 	if err != nil {
 		return err
 	}
+
 	logfile, err := os.OpenFile(filepath.Join(config.Dir, "engine.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
 		return err
 	}
+
 	defer func() { _ = logfile.Close() }()
 	serviceCtx, cancel := context.WithCancel(ctx)
 	done := make(chan error, 1)
@@ -109,13 +120,18 @@ func (s *commandState) quickstart(ctx context.Context, setup *bootstrap.Setup, l
 	if err != nil {
 		return fmt.Errorf("engine startup failed (see %s): %w", filepath.Join(config.Dir, "engine.log"), err)
 	}
+
 	_, _ = fmt.Fprintf(s.options.Out, "Engine: %s\nData and editable examples: %s\n", s.endpoint, config.Dir)
 	if !noRun {
 		if err = s.quickstartExample(ctx, config.Dir, key); err != nil {
 			return err
 		}
 	}
-	_, _ = fmt.Fprintf(s.options.Out, "Ready for your pipelines. Connect Desktop to %s.\nCtrl-C stops the engine; rerun this command to continue saved runs.\n", s.endpoint)
+	_, _ = fmt.Fprintf(
+		s.options.Out,
+		"Ready for your pipelines. Connect Desktop to %s.\nCtrl-C stops the engine; rerun this command to continue saved runs.\n",
+		s.endpoint,
+	)
 	select {
 	case <-ctx.Done():
 		return nil
@@ -153,18 +169,32 @@ func (s *commandState) quickstartExample(ctx context.Context, dir, key string) e
 	if err != nil {
 		return err
 	}
+
 	var definition struct {
 		Definition protocol.Definition `json:"definition"`
 	}
 	if err = s.client().Command(ctx, "/definitions", map[string]any{"package": pkg}, definitionKey(key), &definition); err != nil {
 		return err
 	}
+
 	var accepted struct {
 		Run protocol.Run `json:"run"`
 	}
-	if err = s.client().Command(ctx, "/runs", map[string]any{"definitionId": definition.Definition.ID, "profile": "local", "inputs": map[string]any{}, "artifacts": map[string]any{}}, key, &accepted); err != nil {
+	if err = s.client().Command(
+		ctx,
+		"/runs",
+		map[string]any{
+			"definitionId": definition.Definition.ID,
+			"profile":      "local",
+			"inputs":       map[string]any{},
+			"artifacts":    map[string]any{},
+		},
+		key,
+		&accepted,
+	); err != nil {
 		return err
 	}
+
 	_, _ = fmt.Fprintf(s.options.Out, "Greeting run: %s\n", accepted.Run.ID)
 	run, err := s.waitRun(ctx, accepted.Run.ID)
 	if err != nil {
@@ -173,6 +203,7 @@ func (s *commandState) quickstartExample(ctx context.Context, dir, key string) e
 	if err = runExit(run); err != nil {
 		return err
 	}
+
 	for _, artifact := range run.Artifacts {
 		if artifact.Name != "greeting.txt" {
 			continue

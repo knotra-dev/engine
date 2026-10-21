@@ -38,6 +38,7 @@ type Config struct {
 	Schema           string
 	Logger           *slog.Logger
 	ExecutionWorkers int
+
 	// ExecutionTimeout must exceed the greatest admitted attempt duration.
 	// An unlimited attempt needs a separate policy before enabling admission.
 	ExecutionTimeout time.Duration
@@ -140,6 +141,7 @@ func New(pool *pgxpool.Pool, config Config, handlers Handlers) (*Client, error) 
 	if err != nil {
 		return nil, err
 	}
+
 	c.River = client
 	return c, nil
 }
@@ -275,6 +277,7 @@ func (w *deliveryWorker[T]) Work(ctx context.Context, job *river.Job[T]) error {
 	if err := job.Args.Validate(); err != nil {
 		return river.JobCancel(telemetry.RedactError(err))
 	}
+
 	attrs := deliveryAttributes(job.Args)
 	attrs = append(attrs, attribute.Int64("river.job.id", job.ID), attribute.String("river.queue", job.Queue),
 		attribute.String("knotra.engine.id", w.client.engineID), attribute.String("knotra.host.id", w.client.hostID))
@@ -304,10 +307,19 @@ func deliveryAttributes(args deliveryArgs) []attribute.KeyValue {
 	case FinalizeArgs:
 		attempt = args.Attempt
 	case CleanupArgs:
-		return []attribute.KeyValue{attribute.String("knotra.resource.id", args.ResourceID), attribute.String("knotra.worker.id", args.WorkerID),
-			attribute.Int64("knotra.ownership.generation", args.OwnershipGeneration), attribute.Int64("knotra.dispatch.generation", args.DispatchGeneration)}
+		return []attribute.KeyValue{
+			attribute.String("knotra.resource.id", args.ResourceID),
+			attribute.String("knotra.worker.id", args.WorkerID),
+			attribute.Int64("knotra.ownership.generation", args.OwnershipGeneration),
+			attribute.Int64("knotra.dispatch.generation", args.DispatchGeneration),
+		}
 	}
-	return append(attrs, attribute.String("knotra.run.id", attempt.RunID), attribute.String("knotra.instance.id", attempt.InstanceID), attribute.Int("knotra.attempt", attempt.Number))
+	return append(
+		attrs,
+		attribute.String("knotra.run.id", attempt.RunID),
+		attribute.String("knotra.instance.id", attempt.InstanceID),
+		attribute.Int("knotra.attempt", attempt.Number),
+	)
 }
 
 // A pending advance consumes all committed generations under the run lock.
@@ -317,24 +329,43 @@ func (c *Client) hasPendingAdvance(ctx context.Context, tx pgx.Tx, run execution
 	if err != nil {
 		return false, err
 	}
-	jobs, err := c.River.JobListTx(ctx, tx, river.NewJobListParams().First(1).
-		Kinds((AdvanceArgs{}).Kind()).Queues(c.advance).Metadata(string(identity)).
-		OrderBy(river.JobListOrderByID, river.SortOrderDesc).States(
-		rivertype.JobStateAvailable, rivertype.JobStateRetryable, rivertype.JobStateScheduled, rivertype.JobStateRunning))
+
+	jobs, err := c.River.JobListTx(
+		ctx,
+		tx,
+		river.NewJobListParams().
+			First(1).
+			Kinds((AdvanceArgs{}).Kind()).
+			Queues(c.advance).
+			Metadata(string(identity)).
+			OrderBy(river.JobListOrderByID, river.SortOrderDesc).
+			States(
+				rivertype.JobStateAvailable,
+				rivertype.JobStateRetryable,
+				rivertype.JobStateScheduled,
+				rivertype.JobStateRunning,
+			),
+	)
 	if err != nil || len(jobs.Jobs) == 0 {
 		return false, err
 	}
+
 	job := jobs.Jobs[0]
 	if job.State != rivertype.JobStateRunning && job.ScheduledAt.After(run.Now) {
 		return false, nil // A backoff delivery cannot carry an immediate wake.
 	}
+
 	var args AdvanceArgs
 	if err := json.Unmarshal(job.EncodedArgs, &args); err != nil {
 		return false, nil //nolint:nilerr // A malformed retained job must not suppress a valid wake; fetch validation rejects it.
 	}
-	if args.Validate() != nil || args.RunID != run.RunID || args.WakeGeneration <= run.AppliedGeneration || args.WakeGeneration > run.WakeGeneration {
+	if args.Validate() != nil ||
+		args.RunID != run.RunID ||
+		args.WakeGeneration <= run.AppliedGeneration ||
+		args.WakeGeneration > run.WakeGeneration {
 		return false, nil //nolint:nilerr // Invalid or consumed retained identities must not suppress a valid wake.
 	}
+
 	return c.hasDelivery(ctx, tx, args, run.Now)
 }
 
@@ -360,18 +391,36 @@ func (c *Client) hasDelivery(ctx context.Context, tx pgx.Tx, args deliveryArgs, 
 	if err != nil {
 		return false, err
 	}
-	jobs, err := c.River.JobListTx(ctx, tx, river.NewJobListParams().First(1).Kinds(args.Kind()).Queues(queue).Metadata(string(identity)).States(
-		rivertype.JobStateAvailable, rivertype.JobStateRetryable, rivertype.JobStateScheduled, rivertype.JobStateRunning))
+
+	jobs, err := c.River.JobListTx(
+		ctx,
+		tx,
+		river.NewJobListParams().
+			First(1).
+			Kinds(args.Kind()).
+			Queues(queue).
+			Metadata(string(identity)).
+			States(
+				rivertype.JobStateAvailable,
+				rivertype.JobStateRetryable,
+				rivertype.JobStateScheduled,
+				rivertype.JobStateRunning,
+			),
+	)
 	if err != nil || len(jobs.Jobs) == 0 {
 		return false, err
 	}
+
 	job := jobs.Jobs[0]
 	if job.State == rivertype.JobStateRunning {
 		if job.AttemptedAt == nil || !job.AttemptedAt.Add(timeout).After(now) {
 			return false, nil
 		}
 		if len(job.AttemptedBy) > 0 {
-			heartbeat, err := db.New(tx).ReadDeliveryWorkerHeartbeat(ctx, db.ReadDeliveryWorkerHeartbeatParams{EngineID: c.engineID, DeliveryClientID: new(job.AttemptedBy[len(job.AttemptedBy)-1])})
+			heartbeat, err := db.New(tx).ReadDeliveryWorkerHeartbeat(
+				ctx,
+				db.ReadDeliveryWorkerHeartbeatParams{EngineID: c.engineID, DeliveryClientID: new(job.AttemptedBy[len(job.AttemptedBy)-1])},
+			)
 			if err == nil {
 				return heartbeat.Add(execution.LeaseDuration).After(now), nil
 			}
@@ -381,5 +430,6 @@ func (c *Client) hasDelivery(ctx context.Context, tx pgx.Tx, args deliveryArgs, 
 		}
 		return true, nil
 	}
+
 	return true, nil
 }

@@ -1,6 +1,14 @@
 -- name: LockLostAttempt :one
-SELECT a.state,a.owner,a.ownership_generation,a.lease_expires_at,a.outcome_key,a.outcome,
-    n.state AS node_state,n.attempt_number,n.execution_request
+SELECT
+    a.state,
+    a.owner,
+    a.ownership_generation,
+    a.lease_expires_at,
+    a.outcome_key,
+    a.outcome,
+    n.state AS node_state,
+    n.attempt_number,
+    n.execution_request
 FROM knotra_execution_nodes n JOIN knotra_execution_attempts a
     ON a.run_id=n.run_id AND a.instance_id=n.id
 WHERE a.run_id=$1 AND a.instance_id=$2 AND a.number=$3

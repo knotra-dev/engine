@@ -154,10 +154,12 @@ func (c *compiler) admit(file string, ceiling *Permissions, parent Limits, depth
 	if depth > 32 {
 		return
 	}
+
 	p := c.plan.Pipelines[file]
 	if p == nil {
 		return
 	}
+
 	spec := &p.Spec
 	profile := c.plan.Profile.Spec
 	limits, err := narrowLimits(parent, spec.Limits)
@@ -261,6 +263,7 @@ func (c *compiler) admit(file string, ceiling *Permissions, parent Limits, depth
 			c.add("RESOURCE_UNKNOWN", "admission", file, where, fmt.Errorf("unknown MCP alias %q", alias))
 			return
 		}
+
 		connection := profile.MCP[resource.Connection]
 		if !contains(connection.AllowedTools, tool) {
 			c.add(
@@ -447,10 +450,12 @@ func (c *compiler) offlineDelegation(file string, parent *Permissions, upper Lim
 	if depth > 32 {
 		return
 	}
+
 	pipeline := c.plan.Pipelines[file]
 	if pipeline == nil {
 		return
 	}
+
 	spec := pipeline.Spec
 	limits, err := narrowLimits(upper, spec.Limits)
 	c.semantic(file, "/spec/limits", err)

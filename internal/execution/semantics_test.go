@@ -20,7 +20,11 @@ func TestPermissionIntersectionCannotEscalate(t *testing.T) {
 		Secrets:   []string{"safe", "root"},
 	}
 	actual := IntersectPermissions(parent, child)
-	if len(actual.Models) != 1 || len(actual.MCP["server"]) != 1 || len(actual.MCP["extra"]) != 0 || len(actual.Sandboxes) != 1 || len(actual.Secrets) != 1 {
+	if len(actual.Models) != 1 ||
+		len(actual.MCP["server"]) != 1 ||
+		len(actual.MCP["extra"]) != 0 ||
+		len(actual.Sandboxes) != 1 ||
+		len(actual.Secrets) != 1 {
 		t.Fatalf("escalated permissions: %+v", actual)
 	}
 }

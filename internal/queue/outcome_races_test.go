@@ -27,7 +27,17 @@ func TestRuntimePhysicalOutcomeArbitratesWithStopAndDeadline(t *testing.T) {
 	if os.Getenv("KNOTRA_TEST_HELPER") == "" {
 		t.Skip("set KNOTRA_TEST_HELPER for physical result/stop contention checks")
 	}
-	for _, mode := range []string{"result_then_cancel", "cancel_then_result", "duplicate_result", "result_then_failure", "failure_then_result", "node_deadline_before_stage", "root_deadline_before_stage", "node_deadline_during_commit", "root_deadline_during_commit"} {
+	for _, mode := range []string{
+		"result_then_cancel",
+		"cancel_then_result",
+		"duplicate_result",
+		"result_then_failure",
+		"failure_then_result",
+		"node_deadline_before_stage",
+		"root_deadline_before_stage",
+		"node_deadline_during_commit",
+		"root_deadline_during_commit",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			r := newTestRuntime(t)
 			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
@@ -45,9 +55,16 @@ func TestRuntimePhysicalOutcomeArbitratesWithStopAndDeadline(t *testing.T) {
 			plan := resourceCodePlan(t, r, 0)
 			spec := &plan.Pipelines[plan.Root].Spec
 			node := spec.Nodes["a"]
-			report := contract.Port{Artifact: &contract.ArtifactPort{MediaTypes: []string{"text/plain"}}, Collect: &contract.Collect{Path: "report.txt", MediaType: "text/plain"}}
+			report := contract.Port{
+				Artifact: &contract.ArtifactPort{MediaTypes: []string{"text/plain"}},
+				Collect:  &contract.Collect{Path: "report.txt", MediaType: "text/plain"},
+			}
 			node.Outputs = map[string]contract.Port{"nonce": {Schema: json.RawMessage(`{"type":"string"}`)}, "report": report}
-			node.Code = &contract.CodeNode{Command: []string{"python", "-c", `import json,os,pathlib,uuid; nonce=uuid.uuid4().hex; pathlib.Path('report.txt').write_text(nonce); json.dump({'nonce':nonce},open(os.environ['KNOTRA_OUTPUT_JSON'],'w'))`}}
+			node.Code = &contract.CodeNode{Command: []string{
+				"python",
+				"-c",
+				`import json,os,pathlib,uuid; nonce=uuid.uuid4().hex; pathlib.Path('report.txt').write_text(nonce); json.dump({'nonce':nonce},open(os.environ['KNOTRA_OUTPUT_JSON'],'w'))`,
+			}}
 			beforeStage := strings.HasSuffix(mode, "before_stage")
 			deadlineCase := strings.Contains(mode, "deadline")
 			rootExpiry := strings.HasPrefix(mode, "root_deadline")
@@ -60,7 +77,11 @@ func TestRuntimePhysicalOutcomeArbitratesWithStopAndDeadline(t *testing.T) {
 			after := node
 			after.Dependencies = []string{"a"}
 			after.Code = &contract.CodeNode{Command: []string{"python", "-c", `raise RuntimeError('downstream must not execute')`}}
-			wait := contract.Node{Type: "human", Human: &contract.HumanNode{Prompt: contract.TextSource{Text: "Hold root open"}}, Outputs: map[string]contract.Port{"approved": {Schema: json.RawMessage(`{"type":"boolean"}`)}}}
+			wait := contract.Node{
+				Type:    "human",
+				Human:   &contract.HumanNode{Prompt: contract.TextSource{Text: "Hold root open"}},
+				Outputs: map[string]contract.Port{"approved": {Schema: json.RawMessage(`{"type":"boolean"}`)}},
+			}
 			spec.Nodes = map[string]contract.Node{"a": node, "after": after, "wait": wait}
 			export := report
 			export.Collect, export.Bind = nil, &contract.Binding{From: "nodes.a.outputs.report"}
@@ -68,9 +89,18 @@ func TestRuntimePhysicalOutcomeArbitratesWithStopAndDeadline(t *testing.T) {
 			failureCase := strings.HasSuffix(mode, "failure") || mode == "failure_then_result"
 			if failureCase {
 				plan.Profile.Spec.Limits.MaxConcurrentNodes = 2
-				plan.Profile.Spec.Models = map[string]contract.ModelConnection{"cloud": {Provider: "openai", Model: "fixture-model", BaseURL: provider.URL, Auth: map[string]contract.Credential{"key": {Value: new("fixture-key")}}}}
+				plan.Profile.Spec.Models = map[string]contract.ModelConnection{"cloud": {
+					Provider: "openai",
+					Model:    "fixture-model",
+					BaseURL:  provider.URL,
+					Auth:     map[string]contract.Credential{"key": {Value: new("fixture-key")}},
+				}}
 				spec.Models = map[string]contract.Model{"writer": {Connection: "cloud", Requires: []string{"structuredOutput"}}}
-				spec.Nodes["fail"] = contract.Node{Type: "llm", LLM: &contract.LLMNode{Model: "writer", Prompt: contract.TextSource{Text: "fixture permanent rejection"}}, Outputs: map[string]contract.Port{"answer": {Schema: json.RawMessage(`{"type":"integer"}`)}}}
+				spec.Nodes["fail"] = contract.Node{
+					Type:    "llm",
+					LLM:     &contract.LLMNode{Model: "writer", Prompt: contract.TextSource{Text: "fixture permanent rejection"}},
+					Outputs: map[string]contract.Port{"answer": {Schema: json.RawMessage(`{"type":"integer"}`)}},
+				}
 			}
 			if err := r.Host.Runner.Prepare(ctx, &plan); err != nil {
 				t.Fatal(err)
@@ -87,7 +117,13 @@ func TestRuntimePhysicalOutcomeArbitratesWithStopAndDeadline(t *testing.T) {
 						return err
 					}
 					var err error
-					owned, err = r.Store.ClaimAttempt(ctx, tx, execution.AttemptID{RunID: id, InstanceID: execution.StableID("n", id+"/root/"+name), Number: 1}, 1, r.WorkerID)
+					owned, err = r.Store.ClaimAttempt(
+						ctx,
+						tx,
+						execution.AttemptID{RunID: id, InstanceID: execution.StableID("n", id+"/root/"+name), Number: 1},
+						1,
+						r.WorkerID,
+					)
 					return err
 				}); err != nil || owned == nil {
 					t.Fatalf("claim %s=%+v error=%v", name, owned, err)
@@ -98,7 +134,15 @@ func TestRuntimePhysicalOutcomeArbitratesWithStopAndDeadline(t *testing.T) {
 			save := func(owned *execution.Claim) execution.Outcome {
 				t.Helper()
 				result := r.Host.Execute(ctx, owned.Request)
-				outcome := execution.Outcome{FormatVersion: execution.StateFormatVersion, Ownership: owned.Ownership, PlanID: owned.PlanID, CompletedAt: time.Now().UTC(), Outputs: result.Outputs, Failure: result.Failure, Artifacts: outcomeArtifacts(result.Outputs)}
+				outcome := execution.Outcome{
+					FormatVersion: execution.StateFormatVersion,
+					Ownership:     owned.Ownership,
+					PlanID:        owned.PlanID,
+					CompletedAt:   time.Now().UTC(),
+					Outputs:       result.Outputs,
+					Failure:       result.Failure,
+					Artifacts:     outcomeArtifacts(result.Outputs),
+				}
 				key, err := r.Outcomes.Put(outcome)
 				if err != nil {
 					t.Fatal(err)
@@ -126,7 +170,11 @@ func TestRuntimePhysicalOutcomeArbitratesWithStopAndDeadline(t *testing.T) {
 				}
 			}
 			var rootDeadline, nodeDeadline time.Time
-			if err := r.Store.Pool.QueryRow(ctx, "SELECT execution_deadline,(SELECT deadline FROM knotra_execution_nodes WHERE run_id=$1 AND node_id='a') FROM knotra_runs WHERE id=$1", id).Scan(&rootDeadline, &nodeDeadline); err != nil {
+			if err := r.Store.Pool.QueryRow(
+				ctx,
+				"SELECT execution_deadline,(SELECT deadline FROM knotra_execution_nodes WHERE run_id=$1 AND node_id='a') FROM knotra_runs WHERE id=$1",
+				id,
+			).Scan(&rootDeadline, &nodeDeadline); err != nil {
 				t.Fatal(err)
 			}
 			handler := (&api.Server{Store: r.Store, Artifacts: r.Host.Artifacts, Wake: r.CommandWake}).Handler()
@@ -184,8 +232,15 @@ func TestRuntimePhysicalOutcomeArbitratesWithStopAndDeadline(t *testing.T) {
 				if mode == "cancel_then_result" {
 					table, when = "knotra_runs", "NOT OLD.cancel_requested AND NEW.cancel_requested"
 				}
-				if _, err := r.Store.Pool.Exec(ctx, fmt.Sprintf(`CREATE FUNCTION outcome_race_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273654); RETURN NEW; END $$;
-					CREATE TRIGGER outcome_race_barrier BEFORE UPDATE ON %s FOR EACH ROW WHEN (%s) EXECUTE FUNCTION outcome_race_barrier()`, table, when)); err != nil {
+				if _, err := r.Store.Pool.Exec(
+					ctx,
+					fmt.Sprintf(
+						`CREATE FUNCTION outcome_race_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273654); RETURN NEW; END $$;
+					CREATE TRIGGER outcome_race_barrier BEFORE UPDATE ON %s FOR EACH ROW WHEN (%s) EXECUTE FUNCTION outcome_race_barrier()`,
+						table,
+						when,
+					),
+				); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -200,7 +255,12 @@ func TestRuntimePhysicalOutcomeArbitratesWithStopAndDeadline(t *testing.T) {
 			}
 			var firstPID int32
 			await(t, 5*time.Second, func() (bool, error) {
-				err := r.Store.Pool.QueryRow(ctx, `SELECT COALESCE((SELECT pid FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)) AND query LIKE '%'||$2||'%' LIMIT 1),0)`, barrierPID, waitSQL).Scan(&firstPID)
+				err := r.Store.Pool.QueryRow(
+					ctx,
+					`SELECT COALESCE((SELECT pid FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)) AND query LIKE '%'||$2||'%' LIMIT 1),0)`,
+					barrierPID,
+					waitSQL,
+				).Scan(&firstPID)
 				return firstPID != 0, err
 			})
 			if !beforeStage {
@@ -211,7 +271,12 @@ func TestRuntimePhysicalOutcomeArbitratesWithStopAndDeadline(t *testing.T) {
 				}
 				await(t, 5*time.Second, func() (bool, error) {
 					var blocked bool
-					err := r.Store.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)) AND query LIKE '%'||$2||'%')`, firstPID, waitSQL).Scan(&blocked)
+					err := r.Store.Pool.QueryRow(
+						ctx,
+						`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)) AND query LIKE '%'||$2||'%')`,
+						firstPID,
+						waitSQL,
+					).Scan(&blocked)
 					return blocked, err
 				})
 			}
@@ -262,7 +327,13 @@ func TestRuntimePhysicalOutcomeArbitratesWithStopAndDeadline(t *testing.T) {
 			consumeTestWakes(t, r, plan, id)
 			if mode != "duplicate_result" {
 				if err := pgx.BeginFunc(ctx, r.Store.Pool, func(tx pgx.Tx) error {
-					late, err := r.Store.ClaimAttempt(ctx, tx, execution.AttemptID{RunID: id, InstanceID: execution.StableID("n", id+"/root/after"), Number: 1}, 1, r.WorkerID)
+					late, err := r.Store.ClaimAttempt(
+						ctx,
+						tx,
+						execution.AttemptID{RunID: id, InstanceID: execution.StableID("n", id+"/root/after"), Number: 1},
+						1,
+						r.WorkerID,
+					)
 					if late != nil {
 						return errors.New("stopped run admitted downstream work")
 					}
@@ -274,7 +345,9 @@ func TestRuntimePhysicalOutcomeArbitratesWithStopAndDeadline(t *testing.T) {
 			var nodeState, attemptState, runState, stopCode, afterState, storedNonce string
 			var slots, attempts, claimedAfter, tools, models, completedTools, successes, published, resources, sandboxRecords, open, evidence, results int
 			var finalRootDeadline, finalNodeDeadline time.Time
-			if err := r.Store.Pool.QueryRow(ctx, `SELECT n.state,a.state,r.document->>'status',COALESCE(r.stop_cause->>'code',''),
+			if err := r.Store.Pool.QueryRow(
+				ctx,
+				`SELECT n.state,a.state,r.document->>'status',COALESCE(r.stop_cause->>'code',''),
 				(SELECT state FROM knotra_execution_nodes WHERE run_id=$1 AND node_id='after'),COALESCE(n.outputs->'nonce'->>'json',''),
 				(SELECT sum(active_attempts) FROM knotra_execution_scopes WHERE run_id=$1),
 				(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1),
@@ -289,8 +362,33 @@ func TestRuntimePhysicalOutcomeArbitratesWithStopAndDeadline(t *testing.T) {
 				(SELECT count(*) FROM knotra_requests WHERE run_id=$1 AND status='open'),
 				(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1 AND outcome IS NOT NULL AND evidence_key IS NOT NULL),
 				(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1 AND instance_id=$2 AND result IS NOT NULL),r.execution_deadline,n.deadline
-				FROM knotra_runs r JOIN knotra_execution_nodes n ON n.run_id=r.id AND n.id=$2 JOIN knotra_execution_attempts a ON a.run_id=n.run_id AND a.instance_id=n.id WHERE r.id=$1`, id, owned.InstanceID).
-				Scan(&nodeState, &attemptState, &runState, &stopCode, &afterState, &storedNonce, &slots, &attempts, &claimedAfter, &tools, &models, &completedTools, &successes, &published, &resources, &sandboxRecords, &open, &evidence, &results, &finalRootDeadline, &finalNodeDeadline); err != nil {
+				FROM knotra_runs r JOIN knotra_execution_nodes n ON n.run_id=r.id AND n.id=$2 JOIN knotra_execution_attempts a ON a.run_id=n.run_id AND a.instance_id=n.id WHERE r.id=$1`,
+				id,
+				owned.InstanceID,
+			).
+				Scan(
+					&nodeState,
+					&attemptState,
+					&runState,
+					&stopCode,
+					&afterState,
+					&storedNonce,
+					&slots,
+					&attempts,
+					&claimedAfter,
+					&tools,
+					&models,
+					&completedTools,
+					&successes,
+					&published,
+					&resources,
+					&sandboxRecords,
+					&open,
+					&evidence,
+					&results,
+					&finalRootDeadline,
+					&finalNodeDeadline,
+				); err != nil {
 				t.Fatal(err)
 			}
 			won := mode == "result_then_cancel" || mode == "duplicate_result" || mode == "result_then_failure"
@@ -316,11 +414,59 @@ func TestRuntimePhysicalOutcomeArbitratesWithStopAndDeadline(t *testing.T) {
 					wantAttempt, wantResults = "completed", 1
 				}
 			}
-			if nodeState != wantNode || attemptState != wantAttempt || runState != wantRun || stopCode != wantStop || afterState != wantAfter || storedNonce != wantNonce || slots != 0 || attempts != wantAttempts || claimedAfter != 0 || tools != 1 || models != wantModels || modelCalls.Load() != int32(wantModels) || completedTools != 1 || successes != wantSuccesses || published != wantPublished || resources != 0 || sandboxRecords != 1 || open != wantOpen || evidence != wantEvidence || results != wantResults || !rootDeadline.Equal(finalRootDeadline) || !nodeDeadline.Equal(finalNodeDeadline) {
-				t.Fatalf("node/attempt/run=%s/%s/%s cause=%s after=%s nonce=%s slots=%d attempts=%d afterClaims=%d budgets=%d/%d calls=%d journals=%d successes=%d published=%d resources=%d/%d open=%d evidence=%d results=%d deadlines=%v/%v", nodeState, attemptState, runState, stopCode, afterState, storedNonce, slots, attempts, claimedAfter, tools, models, modelCalls.Load(), completedTools, successes, published, resources, sandboxRecords, open, evidence, results, rootDeadline.Equal(finalRootDeadline), nodeDeadline.Equal(finalNodeDeadline))
+			if nodeState != wantNode ||
+				attemptState != wantAttempt ||
+				runState != wantRun ||
+				stopCode != wantStop ||
+				afterState != wantAfter ||
+				storedNonce != wantNonce ||
+				slots != 0 ||
+				attempts != wantAttempts ||
+				claimedAfter != 0 ||
+				tools != 1 ||
+				models != wantModels ||
+				modelCalls.Load() != int32(wantModels) ||
+				completedTools != 1 ||
+				successes != wantSuccesses ||
+				published != wantPublished ||
+				resources != 0 ||
+				sandboxRecords != 1 ||
+				open != wantOpen ||
+				evidence != wantEvidence ||
+				results != wantResults ||
+				!rootDeadline.Equal(finalRootDeadline) ||
+				!nodeDeadline.Equal(finalNodeDeadline) {
+				t.Fatalf(
+					"node/attempt/run=%s/%s/%s cause=%s after=%s nonce=%s slots=%d attempts=%d afterClaims=%d budgets=%d/%d calls=%d journals=%d successes=%d published=%d resources=%d/%d open=%d evidence=%d results=%d deadlines=%v/%v",
+					nodeState,
+					attemptState,
+					runState,
+					stopCode,
+					afterState,
+					storedNonce,
+					slots,
+					attempts,
+					claimedAfter,
+					tools,
+					models,
+					modelCalls.Load(),
+					completedTools,
+					successes,
+					published,
+					resources,
+					sandboxRecords,
+					open,
+					evidence,
+					results,
+					rootDeadline.Equal(finalRootDeadline),
+					nodeDeadline.Equal(finalNodeDeadline),
+				)
 			}
 			retained, err := r.Outcomes.Get(owned.OutcomeKey)
-			if err != nil || string(retained.Outputs["nonce"].JSON) != string(outcome.Outputs["nonce"].JSON) || len(retained.Artifacts) != 1 || retained.Artifacts[0].ID != artifact.ID {
+			if err != nil ||
+				string(retained.Outputs["nonce"].JSON) != string(outcome.Outputs["nonce"].JSON) ||
+				len(retained.Artifacts) != 1 ||
+				retained.Artifacts[0].ID != artifact.ID {
 				t.Fatalf("original outcome evidence was not retained: error=%v outcome=%+v", err, retained)
 			}
 			data, err := r.Host.Artifacts.Get(ctx, artifact.ID)

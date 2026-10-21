@@ -65,8 +65,14 @@ func TestReadExecutionAttemptsOmitsDuplicateOutcome(t *testing.T) {
 		t.Fatalf("attempt records=%d: %v", len(attempts), err)
 	}
 	got := attempts[0]
-	if got.AttemptID != claim.AttemptID || got.State != "completed" || got.DispatchGeneration != 1 || got.DispatchPending ||
-		got.Ownership == nil || *got.Ownership != claim.Ownership || got.OutcomeKey != claim.OutcomeKey || !got.LeaseExpiresAt.Equal(claim.LeaseExpiresAt) {
+	if got.AttemptID != claim.AttemptID ||
+		got.State != "completed" ||
+		got.DispatchGeneration != 1 ||
+		got.DispatchPending ||
+		got.Ownership == nil ||
+		*got.Ownership != claim.Ownership ||
+		got.OutcomeKey != claim.OutcomeKey ||
+		!got.LeaseExpiresAt.Equal(claim.LeaseExpiresAt) {
 		t.Fatal("scheduler payload lost attempt identity or scheduling metadata")
 	}
 	if !reflect.DeepEqual(got.Result, &result) {

@@ -20,6 +20,7 @@ func modelConfig(req Request, alias string) (contract.ModelConnection, error) {
 	if !ok {
 		return contract.ModelConnection{}, fmt.Errorf("unknown model alias %q", alias)
 	}
+
 	c, ok := req.Plan.Profile.Spec.Models[resource.Connection]
 	if !ok {
 		return c, fmt.Errorf("model connection missing")
@@ -55,9 +56,12 @@ func modelConfig(req Request, alias string) (contract.ModelConnection, error) {
 	if !ok {
 		return c, fmt.Errorf("unsupported model adapter %q", c.Provider)
 	}
-	if c.Model == "" || strings.ContainsAny(c.Model, " \t\r\n?#") || (c.Provider != "ollama" && c.Provider != "openai_compatible" && strings.Contains(c.Model, "/")) {
+	if c.Model == "" ||
+		strings.ContainsAny(c.Model, " \t\r\n?#") ||
+		(c.Provider != "ollama" && c.Provider != "openai_compatible" && strings.Contains(c.Model, "/")) {
 		return c, fmt.Errorf("invalid %s model identifier", c.Provider)
 	}
+
 	for name := range c.Auth {
 		if name != "key" {
 			return c, fmt.Errorf("unsupported %s auth field %q", c.Provider, name)
@@ -94,6 +98,7 @@ func modelConfig(req Request, alias string) (contract.ModelConnection, error) {
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.Fragment != "" || u.RawQuery != "" {
 		return c, fmt.Errorf("invalid %s baseUrl", c.Provider)
 	}
+
 	return c, nil
 }
 
@@ -123,6 +128,7 @@ func validateCloudOption(provider, name string, value any) error {
 		}
 		return nil
 	}
+
 	maximum := "max_output_tokens"
 	if provider == "anthropic" {
 		maximum = "max_tokens"
@@ -136,11 +142,13 @@ func validateCloudOption(provider, name string, value any) error {
 	if name != "temperature" && name != "top_p" && name != maximum && (provider != "anthropic" || name != "top_k") {
 		return fmt.Errorf("unsupported %s parameter %q", provider, name)
 	}
+
 	data, err := json.Marshal(value)
 	var number float64
 	if err != nil || json.Unmarshal(data, &number) != nil || math.IsNaN(number) || math.IsInf(number, 0) {
 		return invalid()
 	}
+
 	switch name {
 	case "temperature":
 		upper := 2.0
@@ -174,6 +182,7 @@ func (r *Runner) modelAuth(profile contract.Profile, c contract.ModelConnection,
 	if !ok {
 		return nil
 	}
+
 	secret, err := r.credential(profile, key)
 	if err != nil {
 		return err

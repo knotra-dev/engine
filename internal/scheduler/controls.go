@@ -54,9 +54,15 @@ func advanceControl(plan contract.Plan, run execution.RunState, graph execution.
 	if control.RunID != node.RunID || control.InstanceID != node.ID || control.Kind != definition.Type {
 		return failedControl("PLAN_INVALID", "control does not match its admitted instance"), false
 	}
-	if control.ElementCount < 0 || control.NextPosition < 0 || control.NextPosition > control.ElementCount || control.CollectionPosition < 0 || control.CollectionPosition > control.NextPosition || control.Iteration < 0 {
+	if control.ElementCount < 0 ||
+		control.NextPosition < 0 ||
+		control.NextPosition > control.ElementCount ||
+		control.CollectionPosition < 0 ||
+		control.CollectionPosition > control.NextPosition ||
+		control.Iteration < 0 {
 		return failedControl("PLAN_INVALID", "control position is inconsistent"), false
 	}
+
 	var child *execution.GraphRecord
 	active := control.ActiveChildren
 	for i := range children {
@@ -80,7 +86,10 @@ func advanceControl(plan contract.Plan, run execution.RunState, graph execution.
 		if control.Concurrency != definition.Foreach.Concurrency {
 			return failedControl("PLAN_INVALID", "foreach concurrency differs from its admitted definition"), false
 		}
-		if control.ActiveChildren < 0 || control.SucceededChildren < 0 || control.FailedChildren < 0 || control.ActiveChildren+control.SucceededChildren+control.FailedChildren != control.NextPosition {
+		if control.ActiveChildren < 0 ||
+			control.SucceededChildren < 0 ||
+			control.FailedChildren < 0 ||
+			control.ActiveChildren+control.SucceededChildren+control.FailedChildren != control.NextPosition {
 			return failedControl("PLAN_INVALID", "foreach child summary is inconsistent"), false
 		}
 		if control.NextPosition == control.ElementCount && active == 0 {
@@ -98,11 +107,13 @@ func advanceControl(plan contract.Plan, run execution.RunState, graph execution.
 				changes.More = true
 				return nil, true
 			}
+
 			outputs, present := collected[node.ID]
 			if !present {
 				changes.ForeachCollections = append(changes.ForeachCollections, node.ID)
 				return nil, true
 			}
+
 			return &execution.ExecuteResult{Outputs: outputs}, false
 		}
 		if run.Paused || active >= control.Concurrency || control.NextPosition == control.ElementCount {
@@ -115,6 +126,7 @@ func advanceControl(plan contract.Plan, run execution.RunState, graph execution.
 		if definition.Type == "pipeline" {
 			return &execution.ExecuteResult{Outputs: child.Outputs}, false
 		}
+
 		scope := contract.Scope{Args: node.Inputs, State: control.Carry, Body: child.Outputs, IterationIndex: control.Iteration}
 		done, present, err := contract.EvalBool(definition.Loop.Until, scope)
 		if err != nil {
@@ -143,6 +155,7 @@ func advanceControl(plan contract.Plan, run execution.RunState, graph execution.
 		if err != nil {
 			return &execution.ExecuteResult{Failure: asFailure(err)}, false
 		}
+
 		control.Carry, control.Iteration, control.ChildGraphID = carry, control.Iteration+1, ""
 		control.Revision++
 		changes.Controls = append(changes.Controls, control)
@@ -152,6 +165,7 @@ func advanceControl(plan contract.Plan, run execution.RunState, graph execution.
 	if run.Paused {
 		return nil, false
 	}
+
 	newChild, scope, err := controlChild(plan, graph, node, control)
 	if err != nil {
 		return &execution.ExecuteResult{Failure: asFailure(err)}, false
@@ -185,6 +199,7 @@ func validateForeachPage(body contract.Graph, parentID string, position, count i
 		if child.IterationIndex == nil || *child.IterationIndex != position || position >= count || child.State != "succeeded" {
 			return start, failure("PLAN_INVALID", "foreach child position is inconsistent")
 		}
+
 		for name, port := range body.Outputs {
 			value, present := child.Outputs[name]
 			if !present {
@@ -199,6 +214,7 @@ func validateForeachPage(body contract.Graph, parentID string, position, count i
 	if position == start {
 		return start, failure("PLAN_INVALID", "admitted foreach child is missing")
 	}
+
 	return position, nil
 }
 
@@ -237,7 +253,10 @@ func controlChild(plan contract.Plan, graph execution.GraphRecord, node executio
 		child.IterationIndex = &index
 		child.Address = node.ID + "/item/" + strconv.Itoa(index)
 		child.GraphPath = graph.GraphPath + "/nodes/" + node.NodeID + "/body"
-		child.Inputs, err = execution.BindWith(definition.Foreach.With, contract.Scope{Args: node.Inputs, IterationItem: control.CurrentElement, IterationIndex: index})
+		child.Inputs, err = execution.BindWith(
+			definition.Foreach.With,
+			contract.Scope{Args: node.Inputs, IterationItem: control.CurrentElement, IterationIndex: index},
+		)
 	case "loop":
 		index := control.Iteration
 		child.IterationIndex = &index

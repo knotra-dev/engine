@@ -261,7 +261,10 @@ func TestObservationPreviewIsBoundedAndRemovesNestedReasoning(t *testing.T) {
 	o.finish(context.Background())
 	event := hooks.snapshot()[0]
 	data, _ := json.Marshal(event.Data)
-	if len(data) > 64<<10 || event.Data["truncated"] != true || strings.Contains(string(data), "private") || strings.Contains(string(data), "password value") {
+	if len(data) > 64<<10 ||
+		event.Data["truncated"] != true ||
+		strings.Contains(string(data), "private") ||
+		strings.Contains(string(data), "password value") {
 		t.Fatalf("unsafe preview (%d bytes): %.200s", len(data), data)
 	}
 }
@@ -279,7 +282,10 @@ func TestStreamingToolCallsPreserveAgentFollowupContext(t *testing.T) {
 	req := testRequest(server.URL)
 	req.observation = runner.newObservation(context.Background(), req)
 	response, err := runner.chat(context.Background(), req, "model", 0, []message{{Role: "user", Content: "Do task"}}, nil, nil)
-	if err != nil || len(response.ToolCalls) != 2 || response.ToolCalls[1].Function.Name != "knotra_files_write" || response.Thinking != "private internal context" {
+	if err != nil ||
+		len(response.ToolCalls) != 2 ||
+		response.ToolCalls[1].Function.Name != "knotra_files_write" ||
+		response.Thinking != "private internal context" {
 		t.Fatalf("streamed conversation was not assembled: %#v %v", response, err)
 	}
 	req.observation.finish(context.Background())
@@ -339,7 +345,10 @@ func TestObservationsPreserveUnsupportedNumbersAsExplicitText(t *testing.T) {
 			t.Fatalf("number %s was rounded or not marked: %#v", key, result[key])
 		}
 	}
-	if result["safe"] != json.Number("9007199254740991") || result["fraction"] != json.Number("1.25") || event.Data["pointer"] != "[unsupported number: -9007199254740993]" || event.Data["floating"] != "[unsupported number: -1e+30]" {
+	if result["safe"] != json.Number("9007199254740991") ||
+		result["fraction"] != json.Number("1.25") ||
+		event.Data["pointer"] != "[unsupported number: -9007199254740993]" ||
+		event.Data["floating"] != "[unsupported number: -1e+30]" {
 		t.Fatalf("scalar or pointer normalization failed: %#v", event.Data)
 	}
 	encoded, err := json.Marshal(event)
@@ -363,7 +372,9 @@ func TestProviderTokenCountsCannotPoisonObservationHistory(t *testing.T) {
 		t.Fatalf("provider diagnostics changed outputs: %v %v", values, err)
 	}
 	completed := waitObservation(t, hooks, "model.completed")
-	if completed.Data["inputTokens"] != "[unsupported number: 9007199254740993]" || completed.Data["outputTokens"] != "[unsupported number: -9007199254740993]" || completed.Data["truncated"] != true {
+	if completed.Data["inputTokens"] != "[unsupported number: 9007199254740993]" ||
+		completed.Data["outputTokens"] != "[unsupported number: -9007199254740993]" ||
+		completed.Data["truncated"] != true {
 		t.Fatalf("provider counts were exposed as unsafe numbers: %#v", completed.Data)
 	}
 }
@@ -375,7 +386,13 @@ type heldObservationHooks struct {
 }
 
 func newHeldObservationHooks() *heldObservationHooks {
-	return &heldObservationHooks{observationHooks: newObservationHooks(), entered: make(chan struct{}), release: make(chan struct{}), returned: make(chan struct{}), durable: make(chan struct{})}
+	return &heldObservationHooks{
+		observationHooks: newObservationHooks(),
+		entered:          make(chan struct{}),
+		release:          make(chan struct{}),
+		returned:         make(chan struct{}),
+		durable:          make(chan struct{}),
+	}
 }
 
 func (h *heldObservationHooks) Observe(ctx context.Context, event ExecutionEvent) error {

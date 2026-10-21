@@ -48,9 +48,16 @@ func TestMCPCleanupCancelsRecordedCallBeforeDeleting(t *testing.T) {
 			}
 			defer func() { _ = files.Close() }()
 			runner := &Runner{EngineID: "engine", HostID: "replacement-host", ResourceEvidence: files}
-			resource := execution.ResourceRecord{ID: uuid.NewString(), EngineID: "engine", HostID: "host", Kind: "mcp_http", Lifetime: "run", State: "cleaning",
+			resource := execution.ResourceRecord{
+				ID:        uuid.NewString(),
+				EngineID:  "engine",
+				HostID:    "host",
+				Kind:      "mcp_http",
+				Lifetime:  "run",
+				State:     "cleaning",
 				Ownership: execution.Ownership{AttemptID: execution.AttemptID{RunID: "run", InstanceID: "node", Number: 1}, WorkerID: "worker", Generation: 1},
-				MCP:       &execution.MCPSessionRecord{Connection: "tools", SessionID: "original", ProtocolVersion: "2025-11-25"}}
+				MCP:       &execution.MCPSessionRecord{Connection: "tools", SessionID: "original", ProtocolVersion: "2025-11-25"},
+			}
 			if err := files.PutMCPSession(resource); err != nil {
 				t.Fatal(err)
 			}
@@ -62,7 +69,12 @@ func TestMCPCleanupCancelsRecordedCallBeforeDeleting(t *testing.T) {
 				return nil
 			}}
 			// The ID precedes potentially large arguments in the actual SDK envelope.
-			request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://fixture.invalid", strings.NewReader(`{"jsonrpc":"2.0","id":42,"method":"tools/call","params":{"arguments":"`+strings.Repeat("x", 1<<20)+`"}}`))
+			request, err := http.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
+				"http://fixture.invalid",
+				strings.NewReader(`{"jsonrpc":"2.0","id":42,"method":"tools/call","params":{"arguments":"`+strings.Repeat("x", 1<<20)+`"}}`),
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -71,7 +83,9 @@ func TestMCPCleanupCancelsRecordedCallBeforeDeleting(t *testing.T) {
 			}
 			var methods []string
 			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-				if request.Header.Get("Mcp-Session-Id") != "original" || request.Header.Get("Mcp-Protocol-Version") != "2025-11-25" || request.Header.Get("X-Key") != "pinned" {
+				if request.Header.Get("Mcp-Session-Id") != "original" ||
+					request.Header.Get("Mcp-Protocol-Version") != "2025-11-25" ||
+					request.Header.Get("X-Key") != "pinned" {
 					t.Error("cleanup lost its original session, protocol or credential")
 				}
 				methods = append(methods, request.Method)
@@ -92,7 +106,11 @@ func TestMCPCleanupCancelsRecordedCallBeforeDeleting(t *testing.T) {
 			}))
 			defer remote.Close()
 			credential := "pinned"
-			profile := contract.Profile{Spec: contract.ProfileSpec{MCP: map[string]contract.MCPConnection{"tools": {Transport: "streamable_http", URL: remote.URL, Headers: map[string]contract.Credential{"X-Key": {Value: &credential}}}}}}
+			profile := contract.Profile{Spec: contract.ProfileSpec{MCP: map[string]contract.MCPConnection{"tools": {
+				Transport: "streamable_http",
+				URL:       remote.URL,
+				Headers:   map[string]contract.Credential{"X-Key": {Value: &credential}},
+			}}}}
 			err = runner.CleanupMCPSession(t.Context(), resource, profile)
 			want := []string{http.MethodPost}
 			if status == http.StatusAccepted {
@@ -150,7 +168,15 @@ func TestSandboxClosePreservesFailedAndUnansweredCreationEvidence(t *testing.T) 
 			defer server.Close()
 			hooks := &resourceCloseHooks{memoryHooks: newHooks()}
 			resource := execution.ResourceRecord{ID: uuid.NewString(), Kind: "sandbox", Lifetime: "attempt"}
-			sandbox := &sandbox{docker: &dockerClient{client: server.Client(), base: server.URL}, id: "known-container", dir: directory, dirCreated: true, creationAttempted: true, resource: resource, hooks: hooks}
+			sandbox := &sandbox{
+				docker:            &dockerClient{client: server.Client(), base: server.URL},
+				id:                "known-container",
+				dir:               directory,
+				dirCreated:        true,
+				creationAttempted: true,
+				resource:          resource,
+				hooks:             hooks,
+			}
 			if mode == "creation_unanswered" {
 				sandbox.id = ""
 			}

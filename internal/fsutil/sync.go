@@ -19,6 +19,7 @@ func OpenPrivateRoot(directory string) (*os.Root, error) {
 	if err := os.MkdirAll(absolute, 0700); err != nil {
 		return nil, err
 	}
+
 	info, err := os.Lstat(absolute)
 	if err != nil {
 		return nil, err
@@ -43,6 +44,7 @@ func OpenPrivateRoot(directory string) (*os.Root, error) {
 		_ = root.Close()
 		return nil, err
 	}
+
 	return root, nil
 }
 

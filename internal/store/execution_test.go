@@ -46,7 +46,12 @@ func executionAdmissionFixture(t *testing.T, s *Store) (protocol.Run, contract.P
 		_, err := c.InsertTx(ctx, tx, executionWakeFixture{RunID: id, Generation: generation}, nil)
 		return err
 	}
-	return protocol.Run{ID: uuid.NewString(), DefinitionID: definition, Status: "pending", CreatedAt: time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)}, plan, enqueue
+	return protocol.Run{
+		ID:           uuid.NewString(),
+		DefinitionID: definition,
+		Status:       "pending",
+		CreatedAt:    time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+	}, plan, enqueue
 }
 
 func TestRiverAdmissionRollsBackQueueFailureEvenIfCallerCommits(t *testing.T) {
@@ -107,7 +112,12 @@ func TestRiverAdmissionProjectionAndGenerationTransactions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.Backend != execution.BackendRiver || state.SchedulerVersion != execution.SchedulerVersion || state.StateFormatVersion != execution.StateFormatVersion || state.WakeGeneration != 1 || state.AppliedGeneration != 0 || !state.Deadline.Equal(state.AdmittedAt.Add(time.Hour)) {
+	if state.Backend != execution.BackendRiver ||
+		state.SchedulerVersion != execution.SchedulerVersion ||
+		state.StateFormatVersion != execution.StateFormatVersion ||
+		state.WakeGeneration != 1 ||
+		state.AppliedGeneration != 0 ||
+		!state.Deadline.Equal(state.AdmittedAt.Add(time.Hour)) {
 		t.Fatalf("admission metadata=%+v", state)
 	}
 	if generation, err := WakeExecution(ctx, tx, run.ID, enqueue); err != nil || generation != 2 {
@@ -121,8 +131,12 @@ func TestRiverAdmissionProjectionAndGenerationTransactions(t *testing.T) {
 	}
 	var wake, jobs, events int
 	var status string
-	if err := s.Pool.QueryRow(ctx, `SELECT wake_generation,document->>'status',(SELECT count(*) FROM river_job),
-		(SELECT count(*) FROM knotra_events WHERE run_id=$1) FROM knotra_runs WHERE id=$1`, run.ID).Scan(&wake, &status, &jobs, &events); err != nil {
+	if err := s.Pool.QueryRow(
+		ctx,
+		`SELECT wake_generation,document->>'status',(SELECT count(*) FROM river_job),
+		(SELECT count(*) FROM knotra_events WHERE run_id=$1) FROM knotra_runs WHERE id=$1`,
+		run.ID,
+	).Scan(&wake, &status, &jobs, &events); err != nil {
 		t.Fatal(err)
 	}
 	if wake != 1 || status != "pending" || jobs != 1 || events != 0 {
@@ -212,7 +226,11 @@ func TestExecutionClockIsCapturedAfterRunLockWait(t *testing.T) {
 		t.Fatal(err)
 	}
 	var deadline time.Time
-	if err := owner.QueryRow(ctx, "UPDATE knotra_runs SET execution_deadline=clock_timestamp()+interval '100 milliseconds' WHERE id=$1 RETURNING execution_deadline", run.ID).Scan(&deadline); err != nil {
+	if err := owner.QueryRow(
+		ctx,
+		"UPDATE knotra_runs SET execution_deadline=clock_timestamp()+interval '100 milliseconds' WHERE id=$1 RETURNING execution_deadline",
+		run.ID,
+	).Scan(&deadline); err != nil {
 		t.Fatal(err)
 	}
 	ready := make(chan struct{})

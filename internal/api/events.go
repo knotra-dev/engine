@@ -18,17 +18,20 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 		s.err(w, e)
 		return
 	}
+
 	cursor := r.Header.Get("Last-Event-ID")
 	batch, e := s.Store.Events(r.Context(), id, cursor)
 	if e != nil {
 		s.err(w, e)
 		return
 	}
+
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		s.fail(w, 500, "UNAVAILABLE", "streaming is unavailable", nil)
 		return
 	}
+
 	controller := http.NewResponseController(w)
 	deadlineDone := make(chan struct{})
 	stopDeadline := context.AfterFunc(r.Context(), func() {
@@ -56,6 +59,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 		if r.Context().Err() != nil {
 			return
 		}
+
 		for _, ev := range batch {
 			b, e := json.Marshal(ev)
 			if e != nil {

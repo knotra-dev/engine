@@ -45,8 +45,13 @@ func TestRuntimeFocusedGraphPreservesScanAndRecoversSiblingAnswers(t *testing.T)
 	answer(0, 3)
 	answer(1, 1)
 	var cursor string
-	if err := r.Store.Pool.QueryRow(ctx, `SELECT g.address FROM knotra_execution_graphs g
-		JOIN knotra_execution_nodes n ON n.run_id=g.run_id AND n.graph_id=g.id WHERE n.run_id=$1 AND n.id=$2`, id, instance(1)).Scan(&cursor); err != nil {
+	if err := r.Store.Pool.QueryRow(
+		ctx,
+		`SELECT g.address FROM knotra_execution_graphs g
+		JOIN knotra_execution_nodes n ON n.run_id=g.run_id AND n.graph_id=g.id WHERE n.run_id=$1 AND n.id=$2`,
+		id,
+		instance(1),
+	).Scan(&cursor); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := r.Store.Pool.Exec(ctx, "UPDATE knotra_runs SET graph_cursor=$2,graph_scan_again=false WHERE id=$1", id, cursor); err != nil {
@@ -65,9 +70,15 @@ func TestRuntimeFocusedGraphPreservesScanAndRecoversSiblingAnswers(t *testing.T)
 		t.Helper()
 		var focus, sibling, gotCursor string
 		var again bool
-		if err := r.Store.Pool.QueryRow(ctx, `SELECT a.state,b.state,r.graph_cursor,r.graph_scan_again
+		if err := r.Store.Pool.QueryRow(
+			ctx,
+			`SELECT a.state,b.state,r.graph_cursor,r.graph_scan_again
 			FROM knotra_runs r JOIN knotra_execution_nodes a ON a.run_id=r.id AND a.id=$2
-			JOIN knotra_execution_nodes b ON b.run_id=r.id AND b.id=$3 WHERE r.id=$1`, id, instance(0), instance(1)).Scan(&focus, &sibling, &gotCursor, &again); err != nil {
+			JOIN knotra_execution_nodes b ON b.run_id=r.id AND b.id=$3 WHERE r.id=$1`,
+			id,
+			instance(0),
+			instance(1),
+		).Scan(&focus, &sibling, &gotCursor, &again); err != nil {
 			t.Fatal(err)
 		}
 		if focus != wantFocus || sibling != "waiting_human" || gotCursor != cursor || again != wantAgain {
@@ -219,7 +230,12 @@ func TestRuntimeLargeGraphSelectsBoundedNodesAndRecoversReadiness(t *testing.T) 
 			}
 			// Completion means all 1,004 upstream states, not just the selected page.
 			var terminal int
-			if err := tx.QueryRow(ctx, "SELECT count(*) FROM knotra_execution_nodes WHERE run_id=$1 AND state='succeeded' AND id<>$2", id, joinID).Scan(&terminal); err != nil {
+			if err := tx.QueryRow(
+				ctx,
+				"SELECT count(*) FROM knotra_execution_nodes WHERE run_id=$1 AND state='succeeded' AND id<>$2",
+				id,
+				joinID,
+			).Scan(&terminal); err != nil {
 				return err
 			}
 			completed = terminal == count
@@ -253,7 +269,14 @@ func TestRuntimeLargeGraphSelectsBoundedNodesAndRecoversReadiness(t *testing.T) 
 		err = json.Unmarshal(run.Outputs["complete"], &output)
 	}
 	if err != nil || run.Status != "succeeded" || string(run.Outputs["result"]) != `"complete"` || output != full {
-		t.Fatalf("status=%s result=%s output bytes=%d diagnostics=%+v error=%v", run.Status, run.Outputs["result"], len(output), run.Diagnostics, err)
+		t.Fatalf(
+			"status=%s result=%s output bytes=%d diagnostics=%+v error=%v",
+			run.Status,
+			run.Outputs["result"],
+			len(output),
+			run.Diagnostics,
+			err,
+		)
 	}
 	assertReadiness(0)
 }
@@ -340,9 +363,13 @@ func TestRuntimeNodeSelectionSkipsIdleHumanWaitsAndCancelsInPages(t *testing.T) 
 	run, err := r.Store.Run(ctx, id)
 	var open, active int
 	if err == nil {
-		err = r.Store.Pool.QueryRow(ctx, `SELECT
+		err = r.Store.Pool.QueryRow(
+			ctx,
+			`SELECT
 			(SELECT count(*) FROM knotra_requests WHERE run_id=$1 AND status='open'),
-			(SELECT count(*) FROM knotra_execution_nodes WHERE run_id=$1 AND state NOT IN ('succeeded','skipped','failed','cancelled'))`, id).Scan(&open, &active)
+			(SELECT count(*) FROM knotra_execution_nodes WHERE run_id=$1 AND state NOT IN ('succeeded','skipped','failed','cancelled'))`,
+			id,
+		).Scan(&open, &active)
 	}
 	if err != nil || run.Status != "cancelled" || open != 0 || active != 0 {
 		t.Fatalf("status=%s open=%d active=%d error=%v", run.Status, open, active, err)

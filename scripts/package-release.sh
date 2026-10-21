@@ -7,8 +7,13 @@ if [[ ! "$version" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
   echo 'Version must contain only letters, numbers, dots, underscores and hyphens.' >&2
   exit 1
 fi
+
 root="$(cd "$(dirname "$0")/.." && pwd)"
-command -v zip >/dev/null || { echo 'Install zip to package Windows bundles.' >&2; exit 1; }
+command -v zip >/dev/null || {
+  echo 'Install zip to package Windows bundles.' >&2
+  exit 1
+}
+
 mkdir -p "$output"
 output="$(cd "$output" && pwd)"
 build_dir="$(mktemp -d)"
@@ -32,6 +37,7 @@ for platform in darwin-amd64 darwin-arm64 linux-amd64 linux-arm64 windows-amd64 
     binary=knotra.exe
     launch='.\knotra.exe'
   fi
+
   CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -mod=readonly -trimpath \
     -ldflags "-X main.version=$version" -o "$bundle/$binary" ./cmd/knotra
   cp "$build_dir/sandbox-helper-linux-amd64" "$build_dir/sandbox-helper-linux-arm64" "$bundle/"
@@ -61,6 +67,7 @@ Quickstart is for development and evaluation.
 
 Project and full instructions: https://github.com/knotra-dev/engine
 GUIDE
+
   if [[ "$os" == windows ]]; then
     rm -f "$output/$name.zip"
     (cd "$build_dir" && zip -Xqr "$output/$name.zip" "$name")

@@ -47,7 +47,11 @@ func TestCloudRealStructuredAndAgent(t *testing.T) {
 				req.InstanceID = "live-agent"
 				req.Plan.Pipelines[req.Pipeline].Spec.Sandboxes = testRequest("").Plan.Pipelines[req.Pipeline].Spec.Sandboxes
 				req.Node.Type, req.Node.Sandbox, req.Node.LLM = "agent", "box", nil
-				req.Node.Agent = &contract.AgentNode{Model: "model", Prompt: contract.TextSource{Text: "Immediately call knotra_finish with the JSON argument {\"answer\":42}."}, MaxSteps: 3}
+				req.Node.Agent = &contract.AgentNode{
+					Model:    "model",
+					Prompt:   contract.TextSource{Text: "Immediately call knotra_finish with the JSON argument {\"answer\":42}."},
+					MaxSteps: 3,
+				}
 				if err := agentRunner.Prepare(ctx, req.Plan); err != nil {
 					t.Fatal(err)
 				}

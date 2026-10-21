@@ -34,23 +34,28 @@ func PutRiverRun(ctx context.Context, tx pgx.Tx, run protocol.Run, plan contract
 	if plan.Version != "knotra/v1" || plan.CompilerVersion != contract.CompilerVersion || plan.CELVersion != contract.CELVersion {
 		return run, ErrExecutionVersion
 	}
+
 	root := plan.Pipelines[plan.Root]
 	if root == nil || plan.Digest == "" {
 		return run, errors.New("river admission requires a frozen root plan and digest")
 	}
+
 	inputs, err := contract.ValidatePorts(root.Spec.Inputs, inputs, true)
 	if err != nil {
 		return run, err
 	}
+
 	limits := execution.RestrictLimits(plan.Profile.Spec.Limits, root.Spec.Limits)
 	duration, err := contract.Duration(limits.Timeout)
 	if err != nil || duration <= 0 {
 		return run, errors.New("invalid admitted execution timeout")
 	}
+
 	inner, err := tx.Begin(ctx)
 	if err != nil {
 		return run, err
 	}
+
 	defer func() { _ = inner.Rollback(ctx) }()
 	var admitted time.Time
 	storedDatabaseTime, err := db.New(inner).DatabaseTime(ctx)
@@ -66,6 +71,7 @@ func PutRiverRun(ctx context.Context, tx pgx.Tx, run protocol.Run, plan contract
 	if err := insertRun(ctx, inner, run, plan, inputs, admitted, deadline); err != nil {
 		return run, err
 	}
+
 	b, err := json.Marshal(limits)
 	if err != nil {
 		return run, err
@@ -82,6 +88,7 @@ func PutRiverRun(ctx context.Context, tx pgx.Tx, run protocol.Run, plan contract
 	if err := enqueue(ctx, inner, run.ID, 1); err != nil {
 		return run, err
 	}
+
 	return run, inner.Commit(ctx)
 }
 
@@ -116,6 +123,7 @@ func LockExecutionRun(ctx context.Context, tx pgx.Tx, id string) (execution.RunS
 	if err != nil {
 		return r, classify(err)
 	}
+
 	r.Deadline = storedExecutionRun.ExecutionDeadline
 	if len(storedExecutionRun.StopCause) > 0 {
 		if err := json.Unmarshal(storedExecutionRun.StopCause, &r.StopCause); err != nil {
@@ -141,10 +149,12 @@ func WakeExecution(ctx context.Context, tx pgx.Tx, id string, enqueue EnqueueWak
 	if enqueue == nil {
 		return 0, errors.New("wake requires transactional enqueue")
 	}
+
 	inner, err := tx.Begin(ctx)
 	if err != nil {
 		return 0, err
 	}
+
 	defer func() { _ = inner.Rollback(ctx) }()
 	run, err := LockExecutionRun(ctx, inner, id)
 	if err != nil {
@@ -156,6 +166,7 @@ func WakeExecution(ctx context.Context, tx pgx.Tx, id string, enqueue EnqueueWak
 	if protocol.Terminal(run.Status) {
 		return run.WakeGeneration, nil
 	}
+
 	var generation int64
 	storedWakeExecution, err := db.New(inner).WakeExecution(ctx, id)
 	if err != nil {
@@ -167,6 +178,7 @@ func WakeExecution(ctx context.Context, tx pgx.Tx, id string, enqueue EnqueueWak
 	if err := enqueue(ctx, inner, id, generation); err != nil {
 		return 0, err
 	}
+
 	return generation, inner.Commit(ctx)
 }
 
@@ -205,6 +217,7 @@ func (s *Store) ProjectExecution(ctx context.Context, tx pgx.Tx, p execution.Pro
 	if p.Sequence != 0 {
 		return fmt.Errorf("scheduler projections must allocate their sequence in the transaction")
 	}
+
 	storedExecutionEventSequence, err := db.New(tx).NextExecutionEventSequence(ctx, p.RunID)
 	if err != nil {
 		return err

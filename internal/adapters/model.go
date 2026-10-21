@@ -66,6 +66,7 @@ func (r *Runner) chat(
 	if err != nil {
 		return message{}, err
 	}
+
 	var path string
 	var data []byte
 	if !cliModelProvider(c.Provider) {
@@ -123,6 +124,7 @@ func (r *Runner) chat(
 		if err := admit(); err != nil {
 			return nil, err
 		}
+
 		started := time.Now()
 		startedAt = started
 		executed = true
@@ -157,11 +159,13 @@ func (r *Runner) chat(
 			}
 			return nil, err
 		}
+
 		return json.Marshal(result)
 	})
 	if err != nil {
 		return message{}, err
 	}
+
 	var result chatResponse
 	if err = json.Unmarshal(response, &result); err != nil {
 		return message{}, failure("OUTPUT_INVALID", err)
@@ -192,14 +196,17 @@ func initialMessages(req Request, instructions, prompt contract.TextSource) ([]m
 	if err != nil {
 		return nil, err
 	}
+
 	task, err := textSource(req, prompt)
 	if err != nil {
 		return nil, err
 	}
+
 	envelope, err := json.Marshal(contract.ContextEnvelope(req.Inputs))
 	if err != nil {
 		return nil, err
 	}
+
 	msgs := []message{}
 	if system != "" {
 		msgs = append(msgs, message{Role: "system", Content: system})
@@ -218,6 +225,7 @@ func (r *Runner) llm(ctx context.Context, req Request) (contract.Values, error) 
 	if err != nil {
 		return nil, err
 	}
+
 	schema := contract.PortObjectSchema(req.Node.Outputs)
 	response, err := r.chat(ctx, req, n.Model, 0, msgs, nil, schema)
 	if err != nil {
@@ -226,6 +234,7 @@ func (r *Runner) llm(ctx context.Context, req Request) (contract.Values, error) 
 	if len(response.ToolCalls) > 0 {
 		return nil, failure("OUTPUT_INVALID", fmt.Errorf("llm returned tool calls"))
 	}
+
 	id := operationID(req, "model/0", true)
 	req.observation.emit(ctx, "output.validating", id, map[string]any{"step": 1})
 	values, err := jsonOutputs(req.Node.Outputs, []byte(response.Content))
@@ -242,10 +251,12 @@ func jsonOutputs(ports map[string]contract.Port, data []byte) (contract.Values, 
 	if err != nil {
 		return nil, failure("OUTPUT_INVALID", err)
 	}
+
 	obj, ok := v.(map[string]any)
 	if !ok {
 		return nil, failure("OUTPUT_INVALID", fmt.Errorf("outputs must be an object"))
 	}
+
 	values := contract.Values{}
 
 	for name, value := range obj {

@@ -39,7 +39,10 @@ func TestRuntimeHumanCommandIsAtomicAndFirstValidAnswerWins(t *testing.T) {
 		Outputs: map[string]contract.Port{"approved": port}, Execution: contract.Execution{Timeout: "30s"}}
 	export := port
 	export.Bind = &contract.Binding{From: "nodes.review.outputs.approved"}
-	plan.Pipelines[plan.Root].Spec.Graph = contract.Graph{Nodes: map[string]contract.Node{"review": human, "wait": human}, Outputs: map[string]contract.Port{"result": export}}
+	plan.Pipelines[plan.Root].Spec.Graph = contract.Graph{
+		Nodes:   map[string]contract.Node{"review": human, "wait": human},
+		Outputs: map[string]contract.Port{"result": export},
+	}
 	if err := r.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -128,9 +131,14 @@ func TestRuntimeHumanCommandIsAtomicAndFirstValidAnswerWins(t *testing.T) {
 	}
 	var value string
 	var successes int
-	if err := r.Store.Pool.QueryRow(ctx, `SELECT outputs->'approved'->>'json',
+	if err := r.Store.Pool.QueryRow(
+		ctx,
+		`SELECT outputs->'approved'->>'json',
 		(SELECT count(*) FROM knotra_events WHERE run_id=$1 AND document->>'instanceId'=$2 AND document->>'message'='succeeded')
-		FROM knotra_execution_nodes WHERE run_id=$1 AND id=$2`, id, instance).Scan(&value, &successes); err != nil || value != "true" || successes != 1 {
+		FROM knotra_execution_nodes WHERE run_id=$1 AND id=$2`,
+		id,
+		instance,
+	).Scan(&value, &successes); err != nil || value != "true" || successes != 1 {
 		t.Fatalf("terminal answer changed: value=%s successes=%d error=%v", value, successes, err)
 	}
 }
@@ -180,7 +188,11 @@ func TestRuntimeResolutionClearsPauseOnlyAfterEveryDecision(t *testing.T) {
 	t.Cleanup(func() {
 		if t.Failed() {
 			var state []byte
-			_ = r.Store.Pool.QueryRow(ctx, `SELECT jsonb_build_object('requests',(SELECT jsonb_agg(to_jsonb(q)) FROM knotra_requests q WHERE run_id=$1),'nodes',(SELECT jsonb_agg(to_jsonb(n)) FROM knotra_execution_nodes n WHERE run_id=$1),'attempts',(SELECT jsonb_agg(to_jsonb(a)) FROM knotra_execution_attempts a WHERE run_id=$1))`, id).Scan(&state)
+			_ = r.Store.Pool.QueryRow(
+				ctx,
+				`SELECT jsonb_build_object('requests',(SELECT jsonb_agg(to_jsonb(q)) FROM knotra_requests q WHERE run_id=$1),'nodes',(SELECT jsonb_agg(to_jsonb(n)) FROM knotra_execution_nodes n WHERE run_id=$1),'attempts',(SELECT jsonb_agg(to_jsonb(a)) FROM knotra_execution_attempts a WHERE run_id=$1))`,
+				id,
+			).Scan(&state)
 			t.Logf("runtime state: %s", state)
 		}
 	})
@@ -201,10 +213,22 @@ func TestRuntimeResolutionClearsPauseOnlyAfterEveryDecision(t *testing.T) {
 	}
 	handler := (&api.Server{Store: r.Store, Artifacts: r.Host.Artifacts, Wake: r.CommandWake}).Handler()
 	path := func(instance string) string { return "/v1/runs/" + id + "/instances/" + instance + "/resolve" }
-	if w := runtimeCommand(t, handler, path(instances[0]), "invalid-resolution", `{"outcome":"succeeded","evidence":"record","outputs":{"answer":42}}`); w.Code != 422 {
+	if w := runtimeCommand(
+		t,
+		handler,
+		path(instances[0]),
+		"invalid-resolution",
+		`{"outcome":"succeeded","evidence":"record","outputs":{"answer":42}}`,
+	); w.Code != 422 {
 		t.Fatalf("invalid resolution=%d %s", w.Code, w.Body.String())
 	}
-	first := runtimeCommand(t, handler, path(instances[0]), "resolve-first", `{"outcome":"succeeded","evidence":"external record 1","outputs":{"answer":"confirmed"}}`)
+	first := runtimeCommand(
+		t,
+		handler,
+		path(instances[0]),
+		"resolve-first",
+		`{"outcome":"succeeded","evidence":"external record 1","outputs":{"answer":"confirmed"}}`,
+	)
 	if first.Code != 202 {
 		t.Fatalf("first resolution=%d %s", first.Code, first.Body.String())
 	}
@@ -216,13 +240,25 @@ func TestRuntimeResolutionClearsPauseOnlyAfterEveryDecision(t *testing.T) {
 	if err != nil || run.Status != "waiting_resolution" || !paused || calls.Load() != 2 {
 		t.Fatalf("first decision resumed root: status=%s paused=%v calls=%d error=%v", run.Status, paused, calls.Load(), err)
 	}
-	if w := runtimeCommand(t, handler, path(instances[0]), "resolve-closed", `{"outcome":"succeeded","evidence":"different","outputs":{"answer":"changed"}}`); w.Code != 409 {
+	if w := runtimeCommand(
+		t,
+		handler,
+		path(instances[0]),
+		"resolve-closed",
+		`{"outcome":"succeeded","evidence":"different","outputs":{"answer":"changed"}}`,
+	); w.Code != 409 {
 		t.Fatalf("closed resolution on a paused run=%d %s", w.Code, w.Body.String())
 	}
 	if w := runtimeCommand(t, handler, path("missing-instance"), "resolve-missing", `{"outcome":"failed","evidence":"record"}`); w.Code != 404 {
 		t.Fatalf("missing resolution=%d %s", w.Code, w.Body.String())
 	}
-	if w := runtimeCommand(t, handler, path(instances[1]), "resolve-last", `{"outcome":"succeeded","evidence":"external record 2","outputs":{"answer":"confirmed"}}`); w.Code != 202 {
+	if w := runtimeCommand(
+		t,
+		handler,
+		path(instances[1]),
+		"resolve-last",
+		`{"outcome":"succeeded","evidence":"external record 2","outputs":{"answer":"confirmed"}}`,
+	); w.Code != 202 {
 		t.Fatalf("last resolution=%d %s", w.Code, w.Body.String())
 	}
 	await(t, 10*time.Second, func() (bool, error) {
@@ -233,10 +269,22 @@ func TestRuntimeResolutionClearsPauseOnlyAfterEveryDecision(t *testing.T) {
 	if err != nil || run.Status != "succeeded" || calls.Load() != 3 {
 		t.Fatalf("resolved run=%+v calls=%d error=%v", run, calls.Load(), err)
 	}
-	if w := runtimeCommand(t, handler, path(instances[0]), "resolve-again", `{"outcome":"succeeded","evidence":"different","outputs":{"answer":"changed"}}`); w.Code != 409 {
+	if w := runtimeCommand(
+		t,
+		handler,
+		path(instances[0]),
+		"resolve-again",
+		`{"outcome":"succeeded","evidence":"different","outputs":{"answer":"changed"}}`,
+	); w.Code != 409 {
 		t.Fatalf("operator decision was replaced: %d %s", w.Code, w.Body.String())
 	}
-	duplicate := runtimeCommand(t, handler, path(instances[0]), "resolve-first", `{"outcome":"succeeded","evidence":"external record 1","outputs":{"answer":"confirmed"}}`)
+	duplicate := runtimeCommand(
+		t,
+		handler,
+		path(instances[0]),
+		"resolve-first",
+		`{"outcome":"succeeded","evidence":"external record 1","outputs":{"answer":"confirmed"}}`,
+	)
 	if duplicate.Code != first.Code || duplicate.Body.String() != first.Body.String() {
 		t.Fatalf("resolution receipt changed: %d %s", duplicate.Code, duplicate.Body.String())
 	}

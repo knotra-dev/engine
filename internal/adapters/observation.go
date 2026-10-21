@@ -51,6 +51,7 @@ func (r *Runner) newObservation(ctx context.Context, req Request) *executionObse
 	if !ok {
 		return nil
 	}
+
 	o := &executionObservation{hook: hook}
 	profile := req.Plan.Profile
 	for name := range profile.Spec.Secrets {
@@ -112,6 +113,7 @@ func (o *executionObservation) finish(ctx context.Context) {
 	if o == nil {
 		return
 	}
+
 	o.finishOnce.Do(func() {
 		close(o.queue)
 		drain := observationDrainTimeout
@@ -167,6 +169,7 @@ func (o *executionObservation) emit(_ context.Context, typ, operationID string, 
 		o.incomplete.Store(true)
 		return
 	}
+
 	var normalized map[string]any
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
@@ -174,6 +177,7 @@ func (o *executionObservation) emit(_ context.Context, typ, operationID string, 
 		o.incomplete.Store(true)
 		return
 	}
+
 	remaining := maxObservationBytes
 	truncated := false
 	clean, ok := o.clean(normalized, 0, &remaining, &truncated).(map[string]any)
@@ -182,7 +186,19 @@ func (o *executionObservation) emit(_ context.Context, typ, operationID string, 
 		return
 	}
 	// Large prompts/tool results must not consume the correlation metadata.
-	for _, key := range []string{"step", "maxSteps", "model", "name", "providerName", "valid", "isError", "durationMs", "inputTokens", "outputTokens", "firstTokenMs"} {
+	for _, key := range []string{
+		"step",
+		"maxSteps",
+		"model",
+		"name",
+		"providerName",
+		"valid",
+		"isError",
+		"durationMs",
+		"inputTokens",
+		"outputTokens",
+		"firstTokenMs",
+	} {
 		if value, ok := normalized[key]; ok {
 			budget := 512
 			clean[key] = o.clean(value, 0, &budget, &truncated)
@@ -221,6 +237,7 @@ func (o *executionObservation) clean(value any, depth int, remaining *int, trunc
 		*truncated = true
 		return "[truncated]"
 	}
+
 	switch value := value.(type) {
 	case json.Number:
 		parsed, err := value.Float64()
@@ -303,6 +320,7 @@ func (o *executionObservation) safePrefix(value string) int {
 	if o == nil {
 		return cut
 	}
+
 	for _, secret := range o.redactions {
 		for length := min(len(secret)-1, len(value)); length > 0; length-- {
 			if strings.HasSuffix(value, secret[:length]) {

@@ -67,6 +67,7 @@ func orderedRange(value ref.Val) ref.Val {
 	if _, ok := value.(*orderedMap); ok {
 		return value
 	}
+
 	mapping, ok := value.(traits.Mapper)
 	if !ok {
 		return value

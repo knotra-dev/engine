@@ -25,7 +25,11 @@ import (
 const fixtureDesktopToken = "private-desktop-control-token-0123456789abcdef"
 
 func TestDesktopToolErrorsDescribeRetryScope(t *testing.T) {
-	for code, want := range map[string]string{"busy": "new requestId", "storage": "confirming that the earlier change was not applied", "unavailable": "wait for the workspace to load"} {
+	for code, want := range map[string]string{
+		"busy":        "new requestId",
+		"storage":     "confirming that the earlier change was not applied",
+		"unavailable": "wait for the workspace to load",
+	} {
 		result := desktopToolError(code)
 		content, ok := result.Content[0].(*mcp.TextContent)
 		if !ok {
@@ -138,7 +142,10 @@ func TestDesktopBridgeReloadsDescriptorAndSanitizesFailures(t *testing.T) {
 	for _, name := range []string{"redirect", "error", "large", "echo"} {
 		result := bridge.call(t.Context(), name, []byte(`{"apiKey":"private-provider-key"}`))
 		data, _ := json.Marshal(result)
-		if !result.IsError || strings.Contains(string(data), fixtureDesktopToken) || strings.Contains(string(data), "private-provider-key") || redirects.Load() != 0 {
+		if !result.IsError ||
+			strings.Contains(string(data), fixtureDesktopToken) ||
+			strings.Contains(string(data), "private-provider-key") ||
+			redirects.Load() != 0 {
 			t.Fatalf("unsafe failure %s: %s", name, data)
 		}
 	}
@@ -174,7 +181,13 @@ func TestDesktopControlActualCLIStdioProtocol(t *testing.T) {
 	var sourceCreates int
 	var source string
 	revision := "revision-a"
-	publicSource := map[string]any{"id": "source-fixture", "provider": "openai", "revision": 1, "hasCredential": true, "models": []any{map[string]any{"id": "fixture-model"}}}
+	publicSource := map[string]any{
+		"id":            "source-fixture",
+		"provider":      "openai",
+		"revision":      1,
+		"hasCredential": true,
+		"models":        []any{map[string]any{"id": "fixture-model"}},
+	}
 	memo := map[string][]byte{}
 	fingerprints := map[string]string{}
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -263,7 +276,10 @@ func TestDesktopControlActualCLIStdioProtocol(t *testing.T) {
 	writeDesktopDescriptor(t, path, remote.URL, fixtureDesktopToken)
 	command := exec.CommandContext(ctx, binary, "mcp", "serve", "--desktop", "--bridge-file", path)
 	command.Env = []string{"HOME=" + work, "PATH=" + os.Getenv("PATH")}
-	client := mcp.NewClient(&mcp.Implementation{Name: "desktop-control-proof", Version: "1"}, &mcp.ClientOptions{Capabilities: &mcp.ClientCapabilities{}})
+	client := mcp.NewClient(
+		&mcp.Implementation{Name: "desktop-control-proof", Version: "1"},
+		&mcp.ClientOptions{Capabilities: &mcp.ClientCapabilities{}},
+	)
 	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: command}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -289,7 +305,10 @@ func TestDesktopControlActualCLIStdioProtocol(t *testing.T) {
 		t.Helper()
 		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
 		encoded, _ := json.Marshal(result)
-		if err != nil || result.IsError != wantError || strings.Contains(string(encoded), fixtureDesktopToken) || strings.Contains(string(encoded), "private-provider-key") {
+		if err != nil ||
+			result.IsError != wantError ||
+			strings.Contains(string(encoded), fixtureDesktopToken) ||
+			strings.Contains(string(encoded), "private-provider-key") {
 			t.Fatalf("%s: err=%v result=%s", name, err, encoded)
 		}
 		return result
@@ -301,14 +320,41 @@ func TestDesktopControlActualCLIStdioProtocol(t *testing.T) {
 	if !strings.Contains(string(encoded), "revision-a") {
 		t.Fatalf("get lost its revision: %s", encoded)
 	}
-	call("pipeline_update", map[string]any{"id": "workspace-fixture", "expectedRevision": "revision-a", "source": minimalPipeline + "\n", "requestId": "update-pipeline-001"}, false)
-	call("pipeline_update", map[string]any{"id": "workspace-fixture", "expectedRevision": "revision-a", "source": minimalPipeline, "requestId": "update-pipeline-stale"}, true)
+	call(
+		"pipeline_update",
+		map[string]any{
+			"id":               "workspace-fixture",
+			"expectedRevision": "revision-a",
+			"source":           minimalPipeline + "\n",
+			"requestId":        "update-pipeline-001",
+		},
+		false,
+	)
+	call(
+		"pipeline_update",
+		map[string]any{
+			"id":               "workspace-fixture",
+			"expectedRevision": "revision-a",
+			"source":           minimalPipeline,
+			"requestId":        "update-pipeline-stale",
+		},
+		true,
+	)
 	newSource := map[string]any{"provider": "openai", "apiKey": "private-provider-key", "requestId": "create-source-001"}
 	call("model_source_save", newSource, false)
 	call("model_source_save", newSource, false)
 	call("model_source_list", map[string]any{}, false)
 	call("engine_call", map[string]any{"op": "resources"}, false)
-	call("engine_call", map[string]any{"op": "respond", "requestId": "human-request-fixture", "outputs": map[string]any{"approved": true}, "operationId": "durable-response-operation"}, false)
+	call(
+		"engine_call",
+		map[string]any{
+			"op":          "respond",
+			"requestId":   "human-request-fixture",
+			"outputs":     map[string]any{"approved": true},
+			"operationId": "durable-response-operation",
+		},
+		false,
+	)
 	mu.Lock()
 	before := requests
 	mu.Unlock()

@@ -54,10 +54,12 @@ for item in comparison["ranked"]:
     lines.extend(f"> {quote}" for quote in item["quotes"])
     lines.append("")
     lines.extend(f"- Limitation: {limitation}" for limitation in item["limitations"])
+
 document = "\n".join(lines) + "\n"
 data = json.dumps(comparison, ensure_ascii=False, indent=2) + "\n"
 Path("dossier.md").write_text(document, encoding="utf-8")
 Path("comparison.json").write_text(data, encoding="utf-8")
+
 entries = {"dossier.md": document.encode(), "comparison.json": data.encode()}
 for item in comparison["ranked"]:
     entries[item["source"]] = (Path("/package") / item["source"]).read_bytes()
@@ -66,4 +68,5 @@ with zipfile.ZipFile("dossier.zip", "w") as archive:
         info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
         info.compress_type = zipfile.ZIP_DEFLATED
         archive.writestr(info, content)
+
 Path(os.environ["KNOTRA_OUTPUT_JSON"]).write_text("{}")

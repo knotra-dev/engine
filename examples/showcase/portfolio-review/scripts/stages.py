@@ -16,10 +16,12 @@ def verify(values, package_root):
     evidence = values["evidence"]
     if evidence["source"] not in SOURCES:
         raise ValueError("Evidence must refer to a declared source")
+
     source = (package_root / evidence["source"]).read_text(encoding="utf-8")
     normalized = " ".join(source.split())
     if any(" ".join(quote.split()) not in normalized for quote in evidence["quotes"]):
         raise ValueError("A quotation does not occur in the supplied source")
+
     expected = (
         float(re.search(r"Monthly cost: ([0-9.]+) USD", source).group(1)),
         int(re.search(r"Estimated setup time: ([0-9]+) working days", source).group(1)),
@@ -31,6 +33,7 @@ def verify(values, package_root):
     )
     if actual != expected:
         raise ValueError("Extracted facts disagree with the supplied source")
+
     return {"evidence": evidence}
 
 
@@ -49,6 +52,7 @@ def score(values, package_root):
         package_root,
     )
     comparison["scenario"] = scenario
+
     return {"comparison": comparison}
 
 
@@ -56,6 +60,7 @@ def report(values, _package_root):
     comparison = values["comparison"]
     scenario = comparison["scenario"]
     decision = comparison["decision"]
+
     lines = [
         f"## {scenario['title']}",
         "",
@@ -92,6 +97,7 @@ def report(values, _package_root):
             "Labor and taxes are excluded.",
         ]
     )
+
     text = "\n".join(lines) + "\n"
     Path("scenario.md").write_text(text, encoding="utf-8")
     return {"summary": {"comparison": comparison, "markdown": text}}
@@ -102,6 +108,7 @@ def group(values, _package_root):
     ids = [item["comparison"]["scenario"]["id"] for item in summaries]
     if len(set(ids)) != 2:
         raise ValueError("A decision brief requires two distinct scenarios")
+
     text = (
         f"# {values['title']}\n\n"
         + values["question"]
@@ -127,6 +134,7 @@ def portfolio(values, package_root):
     ids = [comparison["scenario"]["id"] for comparison in scenarios]
     if len(ids) != 6 or len(set(ids)) != 6:
         raise ValueError("The portfolio must contain six distinct scenarios")
+
     evidence = {item["source"]: item for item in scenarios[0]["ranked"]}
     hashes = {
         source: hashlib.sha256((package_root / source).read_bytes()).hexdigest()
@@ -159,6 +167,7 @@ def portfolio(values, package_root):
         )
     lines.extend(["", "## Source integrity", ""])
     lines.extend(f"- `{source}`: `{digest}`" for source, digest in hashes.items())
+
     document = "\n".join(lines) + "\n"
     comparison_data = {
         "scenarios": scenarios,
@@ -168,6 +177,7 @@ def portfolio(values, package_root):
     data = json.dumps(comparison_data, ensure_ascii=False, indent=2) + "\n"
     Path("dossier.md").write_text(document, encoding="utf-8")
     Path("comparison.json").write_text(data, encoding="utf-8")
+
     entries = {"dossier.md": document.encode(), "comparison.json": data.encode()}
     entries.update({source: (package_root / source).read_bytes() for source in SOURCES})
     for summary in summaries:
@@ -175,11 +185,13 @@ def portfolio(values, package_root):
         entries[f"scenarios/{scenario_id}.md"] = summary["markdown"].encode()
     for brief in groups:
         entries[f"briefs/{brief['id']}.md"] = brief["markdown"].encode()
+
     with zipfile.ZipFile("dossier.zip", "w") as archive:
         for name, content in sorted(entries.items()):
             info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             archive.writestr(info, content)
+
     return {}
 
 

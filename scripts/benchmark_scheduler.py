@@ -126,6 +126,7 @@ def request(base, route, body=None, timeout=120):
     headers = {"Content-Type": "application/json"}
     if body is not None:
         headers["Idempotency-Key"] = uuid.uuid4().hex
+
     try:
         with urllib.request.urlopen(
             urllib.request.Request(base + "/v1" + route, data=data, headers=headers),
@@ -155,6 +156,7 @@ def wait_run(base, run_id, status, timeout=600):
                 f"run {run_id}: expected {status}, got {run['status']}: {run.get('diagnostics')}"
             )
         time.sleep(0.25)
+
     raise TimeoutError(f"run {run_id}: {status}")
 
 
@@ -298,6 +300,7 @@ def workload(name):
         )
     else:
         raise ValueError(f"unknown workload: {name}")
+
     pipeline = {
         "apiVersion": "knotra/v1",
         "kind": "Pipeline",
@@ -318,6 +321,7 @@ def workload(name):
         pipeline["spec"]["mcp"] = {
             "metrics": {"connection": "metrics", "session": "node"}
         }
+
     return pipeline, expected, calls, 73 if name == "nested_foreach" else len(nodes)
 
 
@@ -360,6 +364,7 @@ def main():
     parser.add_argument("--wait-seconds", type=int, default=15)
     parser.add_argument("--output", type=pathlib.Path, required=True)
     args = parser.parse_args()
+
     if "queue_retention" in args.workloads and not args.profile_sql:
         parser.error("queue_retention requires --profile-sql")
     if (
@@ -367,16 +372,19 @@ def main():
         or min(args.repeats, args.idle_seconds, args.wait_seconds) < 1
     ):
         parser.error("requires POSIX and positive repeat/observation counts")
+
     args.binary = args.binary.resolve()
     args.output = args.output.resolve()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     work = args.output.parent / ("work-" + uuid.uuid4().hex)
     work.mkdir()
+
     docker_host = os.environ.get("DOCKER_HOST") or command(
         "docker", "context", "inspect", "--format", "{{.Endpoints.docker.Host}}"
     )
     if not docker_host.startswith("unix://"):
         parser.error("requires a local Unix Docker socket")
+
     docker_path = urllib.parse.urlparse(docker_host).path
     lock = threading.Lock()
     physical = []
@@ -392,6 +400,7 @@ def main():
                 self.send_header("Content-Length", "0")
                 self.end_headers()
                 return
+
             data = b'{"id":"fixture-model"}'
             self.send_response(200)
             self.send_header("Content-Length", str(len(data)))
@@ -403,6 +412,7 @@ def main():
             if self.path == "/mcp":
                 self.mcp_response(body)
                 return
+
             answer, delay = 42, 0.01
             for item in body["input"]:
                 content = item.get("content", "")
@@ -444,9 +454,11 @@ def main():
                 call_id = str(step)
                 arguments = {"value": step} if step < 32 else {"answer": sum(values)}
                 delay = 1
+
             with lock:
                 physical.append(time.monotonic())
             time.sleep(delay)
+
             data = json.dumps(
                 {
                     "status": "completed",
@@ -473,6 +485,7 @@ def main():
                 self.send_header("Content-Length", "0")
                 self.end_headers()
                 return
+
             schema = {
                 "type": "object",
                 "properties": {"value": {"type": "integer"}},
@@ -513,8 +526,10 @@ def main():
                 result = {}
             else:
                 response["error"] = {"code": -32601, "message": "Method not found"}
+
             if "error" not in response:
                 response["result"] = result
+
             data = json.dumps(response).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -524,6 +539,7 @@ def main():
 
     provider = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Provider)
     threading.Thread(target=provider.serve_forever, daemon=True).start()
+
     profile = {
         "apiVersion": "knotra/v1",
         "kind": "EngineProfile",
@@ -570,6 +586,7 @@ def main():
     }
     profile_path = work / "profile.json"
     profile_path.write_text(json.dumps(profile))
+
     report = {
         "complete": False,
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -652,6 +669,7 @@ def main():
         dsn = urllib.parse.urlunsplit(
             parsed._replace(query=urllib.parse.urlencode(params))
         )
+
         data_dir = work / "river"
         base = f"http://127.0.0.1:{free_port()}"
         log = (work / "river.log").open("w")
@@ -763,6 +781,7 @@ def main():
                     tool_start = len(physical_tools)
                 started = time.monotonic()
                 record = {"workload": name, "repeat": repeat + 1}
+
                 if name == "idle":
                     time.sleep(args.idle_seconds)
                 elif name == "queue_retention":
@@ -1070,6 +1089,7 @@ def main():
                     """,
                         )
                     )
+
                 if name == "idle":
                     finished = time.monotonic()
                 after = sample()
@@ -1079,6 +1099,7 @@ def main():
                     )
                     for container in containers
                 }
+
                 if args.profile_sql:
                     deltas = []
                     for query_id, row in statement_stats(args).items():
@@ -1110,6 +1131,7 @@ def main():
                             and "finalized_at <" in row["query"]
                         ]
                         assert record["cleaner_statement_deltas"]
+
                 window = (
                     [before]
                     + [
@@ -1213,10 +1235,12 @@ def main():
                     record["nodes_per_second"] = node_count / elapsed
                 report["measurements"].append(record)
                 write_report()
+
                 print(
                     f"  {elapsed:.3f}s, engine peak RSS {record['engine_peak_rss_bytes'] / 2**20:.1f} MiB",
                     flush=True,
                 )
+
             if report["sample_errors"]:
                 raise RuntimeError(
                     f"resource samples failed: {report['sample_errors']}"
@@ -1234,12 +1258,14 @@ def main():
             log.close()
             sql(args, "DROP SCHEMA " + schema + " CASCADE")
             write_report()
+
         report["complete"] = True
         report["completed_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     finally:
         provider.shutdown()
         provider.server_close()
         write_report()
+
     print(args.output, flush=True)
 
 

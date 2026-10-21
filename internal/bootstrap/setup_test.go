@@ -18,7 +18,10 @@ import (
 
 func testSetup(t *testing.T) *Setup {
 	t.Helper()
-	return &Setup{Config: Config{Dir: t.TempDir(), Provider: "openai", Model: "fixture-model", PostgresPort: 25432}, Getenv: func(string) string { return "fixture-key" }}
+	return &Setup{
+		Config: Config{Dir: t.TempDir(), Provider: "openai", Model: "fixture-model", PostgresPort: 25432},
+		Getenv: func(string) string { return "fixture-key" },
+	}
 }
 
 func TestSetupPreservesEditedFilesAndStableIdentity(t *testing.T) {
@@ -152,7 +155,10 @@ func TestSetupNormalizesProvidersAndValidatesConnection(t *testing.T) {
 				}
 				return
 			}
-			if err != nil || s.Config.Provider != test.wantProvider || s.Config.Model != test.wantModel || s.Config.BaseURL != strings.TrimRight(test.baseURL, "/") {
+			if err != nil ||
+				s.Config.Provider != test.wantProvider ||
+				s.Config.Model != test.wantModel ||
+				s.Config.BaseURL != strings.TrimRight(test.baseURL, "/") {
 				t.Fatalf("config=%+v err=%v", s.Config, err)
 			}
 		})
@@ -234,7 +240,10 @@ func TestSetupPreservesCustomEndpointAndRejectsChangingIt(t *testing.T) {
 		t.Fatal(diagnostics)
 	}
 	model := profile.Spec.Models["model_main"]
-	if model.Provider != "anthropic" || model.BaseURL != "https://gateway.example/v1" || profile.Spec.Secrets["model_key"].Env != "ANTHROPIC_API_KEY" || strings.Contains(string(data), "fixture-key") {
+	if model.Provider != "anthropic" ||
+		model.BaseURL != "https://gateway.example/v1" ||
+		profile.Spec.Secrets["model_key"].Env != "ANTHROPIC_API_KEY" ||
+		strings.Contains(string(data), "fixture-key") {
 		t.Fatalf("incorrect saved connection: %s", data)
 	}
 	s.Config.BaseURL = "https://different.example/v1"

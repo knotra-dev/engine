@@ -39,11 +39,13 @@ func (s *commandState) watchRun(ctx context.Context, runID, cursor string, fromS
 	if info.Protocol != protocol.Version || info.EngineID == "" || info.PrincipalID == "" {
 		return fmt.Errorf("engine identity or protocol is incompatible")
 	}
+
 	digest := sha256.Sum256([]byte(strings.TrimRight(s.endpoint, "/") + "\x00" + info.EngineID + "\x00" + info.PrincipalID + "\x00" + runID))
 	dir := filepath.Join(s.stateDir, "events")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
+
 	path := filepath.Join(dir, hex.EncodeToString(digest[:])+".json")
 	journal := eventJournal{
 		EngineID:    info.EngineID,
@@ -75,6 +77,7 @@ func (s *commandState) watchRun(ctx context.Context, runID, cursor string, fromS
 			if journal.Cursor == event.ID {
 				return nil
 			}
+
 			journal.Cursor = event.ID
 			journal.Events = append(journal.Events, event)
 			if len(journal.Events) > 1000 {
@@ -96,6 +99,7 @@ func (s *commandState) watchRun(ctx context.Context, runID, cursor string, fromS
 			if err = atomicFile(path, data, true); err != nil {
 				return err
 			}
+
 			lastEvent.Store(time.Now().UnixNano())
 			if s.json {
 				err = s.printJSON(event)
@@ -115,6 +119,7 @@ func (s *commandState) watchRun(ctx context.Context, runID, cursor string, fromS
 			if event.InstanceID == "" && protocol.Terminal(event.Message) {
 				return errWatchComplete
 			}
+
 			return nil
 		})
 	}()

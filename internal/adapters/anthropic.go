@@ -76,7 +76,14 @@ func anthropicRequest(c contract.ModelConnection, messages []message, tools []fu
 	if len(tools) > 0 {
 		definitions := []any{}
 		for _, tool := range tools {
-			definitions = append(definitions, map[string]any{"name": tool.Function.Name, "description": tool.Function.Description, "input_schema": tool.Function.Parameters})
+			definitions = append(
+				definitions,
+				map[string]any{
+					"name":         tool.Function.Name,
+					"description":  tool.Function.Description,
+					"input_schema": tool.Function.Parameters,
+				},
+			)
 		}
 		body["tools"] = definitions
 		choice := map[string]any{"type": "auto", "disable_parallel_tool_use": true}
@@ -105,12 +112,19 @@ func normalizeAnthropic(response anthropicResponse) (chatResponse, error) {
 	if response.Type != "message" || response.Role != "assistant" {
 		return chatResponse{}, invalidModelResponse()
 	}
+
 	switch response.StopReason {
 	case "end_turn", "tool_use", "stop_sequence":
 	default:
 		return chatResponse{}, invalidModelResponse()
 	}
-	result := chatResponse{Done: true, DoneReason: response.StopReason, Message: message{Role: "assistant"}, PromptEvalCount: response.Usage.InputTokens + response.Usage.CacheCreationInputTokens + response.Usage.CacheReadInputTokens, EvalCount: response.Usage.OutputTokens}
+	result := chatResponse{
+		Done:            true,
+		DoneReason:      response.StopReason,
+		Message:         message{Role: "assistant"},
+		PromptEvalCount: response.Usage.InputTokens + response.Usage.CacheCreationInputTokens + response.Usage.CacheReadInputTokens,
+		EvalCount:       response.Usage.OutputTokens,
+	}
 	ids := map[string]bool{}
 	for _, block := range response.Content {
 		switch block.Type {
@@ -139,10 +153,12 @@ func normalizeAnthropic(response anthropicResponse) (chatResponse, error) {
 	if result.Message.Content == "" && len(result.Message.ToolCalls) == 0 {
 		return chatResponse{}, invalidModelResponse()
 	}
+
 	data, err := json.Marshal(response.Content)
 	if err != nil {
 		return chatResponse{}, err
 	}
+
 	result.Message.ProviderContext = data
 	return result, nil
 }
@@ -156,6 +172,7 @@ func readAnthropicResponse(ctx context.Context, res *http.Response, started time
 		result, err := normalizeAnthropic(response)
 		return result, 0, err
 	}
+
 	var response anthropicResponse
 	startedMessage, receivedStop := false, false
 	open := map[int]bool{}
@@ -178,6 +195,7 @@ func readAnthropicResponse(ctx context.Context, res *http.Response, started time
 		if json.Unmarshal(data, &event) != nil {
 			return "", nil, invalidModelResponse()
 		}
+
 		switch event.Type {
 		case "ping":
 			return "", nil, nil

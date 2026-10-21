@@ -180,7 +180,12 @@ func TestLiteralExecutionAndNestedBudgets(t *testing.T) {
 				}
 				encoded, _ := json.Marshal(args)
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = fmt.Fprintf(w, `{"status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":%q,"arguments":%s}]}`, name, encoded)
+				_, _ = fmt.Fprintf(
+					w,
+					`{"status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":%q,"arguments":%s}]}`,
+					name,
+					encoded,
+				)
 			}))
 			defer model.Close()
 			writesPath := filepath.Join(work, "external-writes")
@@ -190,30 +195,53 @@ func TestLiteralExecutionAndNestedBudgets(t *testing.T) {
 				Label  string `json:"label"`
 			}
 			server := mcp.NewServer(&mcp.Implementation{Name: "literal", Version: "1"}, nil)
-			mcp.AddTool(server, &mcp.Tool{Name: "record", Description: "Persist an external write"}, func(_ context.Context, _ *mcp.CallToolRequest, input record) (*mcp.CallToolResult, record, error) {
-				if input.Value != 42 || input.Marker != marker || (input.Label != "agent" && input.Label != "tool") {
-					return nil, input, fmt.Errorf("invalid external write")
-				}
-				file, err := os.OpenFile(writesPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
-				if err != nil {
-					return nil, input, err
-				}
-				defer func() { _ = file.Close() }()
-				if _, err := fmt.Fprintln(file, input.Label); err != nil {
-					return nil, input, err
-				}
-				return nil, input, file.Sync()
-			})
+			mcp.AddTool(
+				server,
+				&mcp.Tool{Name: "record", Description: "Persist an external write"},
+				func(_ context.Context, _ *mcp.CallToolRequest, input record) (*mcp.CallToolResult, record, error) {
+					if input.Value != 42 || input.Marker != marker || (input.Label != "agent" && input.Label != "tool") {
+						return nil, input, fmt.Errorf("invalid external write")
+					}
+					file, err := os.OpenFile(writesPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+					if err != nil {
+						return nil, input, err
+					}
+					defer func() { _ = file.Close() }()
+					if _, err := fmt.Fprintln(file, input.Label); err != nil {
+						return nil, input, err
+					}
+					return nil, input, file.Sync()
+				},
+			)
 			remote := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil))
 			defer remote.Close()
 			profile := recoveryProfile()
 			profile.Spec.Limits.MaxModelCalls, profile.Spec.Limits.MaxToolCalls = 3, 3
 			profile.Spec.Secrets = map[string]contract.SecretSource{"key": {Env: "KNOTRA_LITERAL_KEY"}}
-			profile.Spec.Models = map[string]contract.ModelConnection{"cloud": {Provider: "openai", Model: "fixture-model", BaseURL: model.URL, Auth: map[string]contract.Credential{"key": {SecretRef: "key"}}}}
-			profile.Spec.MCP = map[string]contract.MCPConnection{"data": {Transport: "streamable_http", URL: remote.URL, AllowedTools: []string{"record"}, AllowRunSession: true, ToolPolicies: map[string]contract.ToolPolicy{"record": {Effect: "write"}}}}
+			profile.Spec.Models = map[string]contract.ModelConnection{"cloud": {
+				Provider: "openai",
+				Model:    "fixture-model",
+				BaseURL:  model.URL,
+				Auth:     map[string]contract.Credential{"key": {SecretRef: "key"}},
+			}}
+			profile.Spec.MCP = map[string]contract.MCPConnection{"data": {
+				Transport:       "streamable_http",
+				URL:             remote.URL,
+				AllowedTools:    []string{"record"},
+				AllowRunSession: true,
+				ToolPolicies:    map[string]contract.ToolPolicy{"record": {Effect: "write"}},
+			}}
 			profilePath := filepath.Join(work, "profile.json")
 			writeJSON(t, profilePath, profile)
-			options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), DataDir: filepath.Join(work, "engine"), DockerHost: os.Getenv("DOCKER_HOST"), HelperPath: os.Getenv("KNOTRA_TEST_HELPER"), Profiles: []string{profilePath}, Version: "literal-test"}
+			options := app.Options{
+				Listen:      unusedAddress(t),
+				DatabaseURL: databaseSchema(t, ctx),
+				DataDir:     filepath.Join(work, "engine"),
+				DockerHost:  os.Getenv("DOCKER_HOST"),
+				HelperPath:  os.Getenv("KNOTRA_TEST_HELPER"),
+				Profiles:    []string{profilePath},
+				Version:     "literal-test",
+			}
 			optionsPath := filepath.Join(work, "server.json")
 			writeJSON(t, optionsPath, options)
 			api := &client.Client{BaseURL: "http://" + options.Listen, StateDir: filepath.Join(work, "client")}
@@ -221,9 +249,21 @@ func TestLiteralExecutionAndNestedBudgets(t *testing.T) {
 			source := fmt.Sprintf(literalRoot, test.rootModels, test.rootTools)
 			childLimits := ""
 			if test.childModels != 0 {
-				childLimits = fmt.Sprintf("  limits: {timeout: 2m, maxConcurrentNodes: 2, maxNodeInstances: 16, maxModelCalls: %d, maxToolCalls: %d}", test.childModels, test.childTools)
+				childLimits = fmt.Sprintf(
+					"  limits: {timeout: 2m, maxConcurrentNodes: 2, maxNodeInstances: 16, maxModelCalls: %d, maxToolCalls: %d}",
+					test.childModels,
+					test.childTools,
+				)
 			}
-			pkg := contract.Package{Entrypoint: "pipeline.yaml", Source: source, Files: []contract.File{{Path: "pipeline.yaml", Content: []byte(source)}, {Path: "child.yaml", Content: []byte(fmt.Sprintf(literalChild, childLimits))}, {Path: "literal.py", Content: []byte(literalPython)}}}
+			pkg := contract.Package{
+				Entrypoint: "pipeline.yaml",
+				Source:     source,
+				Files: []contract.File{
+					{Path: "pipeline.yaml", Content: []byte(source)},
+					{Path: "child.yaml", Content: []byte(fmt.Sprintf(literalChild, childLimits))},
+					{Path: "literal.py", Content: []byte(literalPython)},
+				},
+			}
 			if _, diagnostics := contract.Compile(pkg, &profile); len(diagnostics) != 0 {
 				t.Fatalf("literal package diagnostics: %+v", diagnostics)
 			}
@@ -232,7 +272,17 @@ func TestLiteralExecutionAndNestedBudgets(t *testing.T) {
 				t.Fatal(err)
 			}
 			var accepted struct{ Run protocol.Run }
-			if err := api.Command(ctx, "/runs", map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name, "inputs": map[string]any{"marker": marker}}, uuid.NewString(), &accepted); err != nil {
+			if err := api.Command(
+				ctx,
+				"/runs",
+				map[string]any{
+					"definitionId": definition.Definition.ID,
+					"profile":      profile.Metadata.Name,
+					"inputs":       map[string]any{"marker": marker},
+				},
+				uuid.NewString(),
+				&accepted,
+			); err != nil {
 				t.Fatal(err)
 			}
 			if test.name == "exact" {
@@ -248,7 +298,11 @@ func TestLiteralExecutionAndNestedBudgets(t *testing.T) {
 				if node.NodeID == "nested" {
 					childScope = node.ID
 				}
-				if node.NodeType == "llm" || node.NodeType == "agent" || node.NodeType == "tool" || node.NodeType == "code" || node.NodeType == "human" {
+				if node.NodeType == "llm" ||
+					node.NodeType == "agent" ||
+					node.NodeType == "tool" ||
+					node.NodeType == "code" ||
+					node.NodeType == "human" {
 					got.Leaves[node.NodeID] = node.Status
 				}
 			}
@@ -265,13 +319,23 @@ func TestLiteralExecutionAndNestedBudgets(t *testing.T) {
 			for name, scope := range map[string]string{"root": final.ID, "child": childScope} {
 				for kind, want := range map[string]int{"model": test.models, "tool": test.tools} {
 					var used int
-					if err := admin.Pool.QueryRow(ctx, `SELECT COALESCE(sum(used),0) FROM knotra_budgets WHERE run_id=$1 AND scope=$2 AND kind=$3`, final.ID, scope, kind).Scan(&used); err != nil || used != want {
+					if err := admin.Pool.QueryRow(
+						ctx,
+						`SELECT COALESCE(sum(used),0) FROM knotra_budgets WHERE run_id=$1 AND scope=$2 AND kind=$3`,
+						final.ID,
+						scope,
+						kind,
+					).Scan(&used); err != nil || used != want {
 						t.Fatalf("%s %s budget=%d want=%d error=%v", name, kind, used, want, err)
 					}
 					got.Budgets[name+"/"+kind] = used
 				}
 			}
-			if err := admin.Pool.QueryRow(ctx, `SELECT count(*) FROM knotra_operations WHERE run_id=$1 AND kind IN ('model','tool') AND completed`, final.ID).Scan(&got.Confirmed); err != nil || got.Confirmed != test.models+test.tools {
+			if err := admin.Pool.QueryRow(
+				ctx,
+				`SELECT count(*) FROM knotra_operations WHERE run_id=$1 AND kind IN ('model','tool') AND completed`,
+				final.ID,
+			).Scan(&got.Confirmed); err != nil || got.Confirmed != test.models+test.tools {
 				t.Fatalf("confirmed physical operations=%d want=%d error=%v", got.Confirmed, test.models+test.tools, err)
 			}
 			wantWrites := "agent\n"
@@ -305,15 +369,35 @@ func TestLiteralExecutionAndNestedBudgets(t *testing.T) {
 			}
 			if test.name == "exact" {
 				var outputMarker string
-				if err := json.Unmarshal(final.Outputs["marker"], &outputMarker); err != nil || outputMarker != marker || final.Status != "succeeded" || string(final.Outputs["answer"]) != "42" || string(final.Outputs["approved"]) != "true" || len(final.Artifacts) != 1 {
-					t.Fatalf("literal exports: status=%s marker bytes=%d artifacts=%d error=%v", final.Status, len(outputMarker), len(final.Artifacts), err)
+				if err := json.Unmarshal(final.Outputs["marker"], &outputMarker); err != nil ||
+					outputMarker != marker ||
+					final.Status != "succeeded" ||
+					string(final.Outputs["answer"]) != "42" ||
+					string(final.Outputs["approved"]) != "true" ||
+					len(final.Artifacts) != 1 {
+					t.Fatalf(
+						"literal exports: status=%s marker bytes=%d artifacts=%d error=%v",
+						final.Status,
+						len(outputMarker),
+						len(final.Artifacts),
+						err,
+					)
 				}
 				content, err := api.Bytes(ctx, "/artifacts/"+final.Artifacts[0].ID+"/content")
 				if err != nil || string(content) != marker {
 					t.Fatalf("real Docker artifact: bytes=%d error=%v", len(content), err)
 				}
-			} else if final.Status != "failed" || !strings.Contains(fmt.Sprint(final.Diagnostics), "BUDGET_EXCEEDED") || len(final.Outputs) != 0 || len(final.Artifacts) != 0 {
-				t.Fatalf("budget exhaustion result: status=%s diagnostics=%v exports=%d artifacts=%d", final.Status, final.Diagnostics, len(final.Outputs), len(final.Artifacts))
+			} else if final.Status != "failed" ||
+				!strings.Contains(fmt.Sprint(final.Diagnostics), "BUDGET_EXCEEDED") ||
+				len(final.Outputs) != 0 ||
+				len(final.Artifacts) != 0 {
+				t.Fatalf(
+					"budget exhaustion result: status=%s diagnostics=%v exports=%d artifacts=%d",
+					final.Status,
+					final.Diagnostics,
+					len(final.Outputs),
+					len(final.Artifacts),
+				)
 			}
 			if test.name != "exact" {
 				exhaustedScope := final.ID
@@ -325,7 +409,14 @@ func TestLiteralExecutionAndNestedBudgets(t *testing.T) {
 				}
 			}
 			process.kill(t)
-			t.Logf("physical models=%d MCP writes=%d confirmed=%d root/child budgets=%v terminal leaves=%v", got.Models, test.writes, got.Confirmed, got.Budgets, got.Leaves)
+			t.Logf(
+				"physical models=%d MCP writes=%d confirmed=%d root/child budgets=%v terminal leaves=%v",
+				got.Models,
+				test.writes,
+				got.Confirmed,
+				got.Budgets,
+				got.Leaves,
+			)
 		})
 	}
 }

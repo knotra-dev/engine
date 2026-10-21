@@ -36,6 +36,7 @@ func (s *commandState) mcpCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			runner := &adapters.Runner{LookupEnv: func(name string) (string, bool) {
 				value := s.options.Getenv(name)
 				return value, value != ""
@@ -54,6 +55,7 @@ func (s *commandState) mcpCommand() *cobra.Command {
 				// A remote error may contain credentials; never send its text to the UI.
 				return fmt.Errorf("MCP discovery failed; check the URL, access token and server availability")
 			}
+
 			type tool struct {
 				Name string `json:"name"`
 				contract.ToolSnapshot
@@ -85,30 +87,39 @@ func (s *commandState) mcpDiscoveryProfile() (contract.Profile, contract.MCPConn
 	if _, err := contract.ParseDocument(data); err != nil {
 		return empty, connection, fmt.Errorf("MCP discovery configuration is invalid")
 	}
+
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&input); err != nil {
 		return empty, connection, fmt.Errorf("MCP discovery expects only url, headers and secrets")
 	}
+
 	u, err := url.Parse(input.URL)
 	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.Contains(input.URL, "#") {
 		return empty, connection, fmt.Errorf("MCP URL must be an absolute HTTPS URL without credentials, query or fragment")
 	}
+
 	ip := net.ParseIP(u.Hostname())
 	loopback := strings.EqualFold(u.Hostname(), "localhost") || (ip != nil && ip.IsLoopback())
 	if u.Scheme != "https" && (u.Scheme != "http" || !loopback) {
 		return empty, connection, fmt.Errorf("MCP URL requires HTTPS; HTTP is allowed only on loopback")
 	}
+
 	for _, credential := range input.Headers {
 		if credential.Value != nil || credential.SecretRef == "" {
 			return empty, connection, fmt.Errorf("MCP header credentials must use environment references")
 		}
 	}
 	connection = contract.MCPConnection{Transport: "streamable_http", URL: input.URL, Headers: input.Headers, AllowedTools: []string{}}
-	profile := contract.Profile{APIVersion: "knotra/v1", Kind: "EngineProfile", Metadata: contract.Metadata{Name: "discovery"}, Spec: contract.ProfileSpec{
-		Secrets: input.Secrets, MCP: map[string]contract.MCPConnection{"discovery": connection},
-		Limits: contract.Limits{Timeout: "20s", MaxConcurrentNodes: 1, MaxNodeInstances: 1, MaxModelCalls: 1, MaxToolCalls: 1},
-	}}
+	profile := contract.Profile{
+		APIVersion: "knotra/v1",
+		Kind:       "EngineProfile",
+		Metadata:   contract.Metadata{Name: "discovery"},
+		Spec: contract.ProfileSpec{
+			Secrets: input.Secrets, MCP: map[string]contract.MCPConnection{"discovery": connection},
+			Limits: contract.Limits{Timeout: "20s", MaxConcurrentNodes: 1, MaxNodeInstances: 1, MaxModelCalls: 1, MaxToolCalls: 1},
+		},
+	}
 	encoded, err := json.Marshal(profile)
 	if err != nil {
 		return empty, connection, fmt.Errorf("MCP discovery configuration is invalid")
@@ -116,6 +127,7 @@ func (s *commandState) mcpDiscoveryProfile() (contract.Profile, contract.MCPConn
 	if _, diagnostics := contract.ParseProfile(encoded); contract.HasErrors(diagnostics) {
 		return empty, connection, fmt.Errorf("MCP discovery headers or environment references are invalid")
 	}
+
 	for _, credential := range input.Headers {
 		value := s.options.Getenv(input.Secrets[credential.SecretRef].Env)
 		if value == "" || strings.ContainsAny(value, "\r\n\x00") {

@@ -113,7 +113,9 @@ func (s *Setup) Validate() error {
 		if s.Config.Model == "" {
 			return fmt.Errorf("--model is required for %s; copy a model ID from your provider's model catalog and pass --model MODEL_ID", s.Config.Provider)
 		}
-		if strings.ContainsAny(s.Config.Model, " \t\r\n?#") || strings.HasPrefix(s.Config.Model, "-") || (s.Config.Provider != "ollama" && s.Config.Provider != "openai_compatible" && strings.Contains(s.Config.Model, "/")) {
+		if strings.ContainsAny(s.Config.Model, " \t\r\n?#") ||
+			strings.HasPrefix(s.Config.Model, "-") ||
+			(s.Config.Provider != "ollama" && s.Config.Provider != "openai_compatible" && strings.Contains(s.Config.Model, "/")) {
 			return fmt.Errorf("--model must be a model ID, not a URL or display name")
 		}
 		if s.Config.BaseURL != "" {
@@ -121,7 +123,11 @@ func (s *Setup) Validate() error {
 				return fmt.Errorf("--base-url is not used by %s; sign in through its CLI instead", s.Config.Provider)
 			}
 			u, err := url.Parse(s.Config.BaseURL)
-			if err != nil || u.Hostname() == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || strings.ContainsAny(s.Config.BaseURL, "?#") {
+			if err != nil ||
+				u.Hostname() == "" ||
+				(u.Scheme != "https" && u.Scheme != "http") ||
+				u.User != nil ||
+				strings.ContainsAny(s.Config.BaseURL, "?#") {
 				return fmt.Errorf("--base-url must be an absolute HTTP(S) URL without credentials, query or fragment")
 			}
 			s.Config.BaseURL = strings.TrimRight(s.Config.BaseURL, "/")
@@ -136,10 +142,12 @@ func (s *Setup) Validate() error {
 	if s.Config.Dir == "" {
 		return fmt.Errorf("quickstart directory is required")
 	}
+
 	dir, err := filepath.Abs(s.Config.Dir)
 	if err != nil {
 		return err
 	}
+
 	s.Config.Dir = dir
 	if s.Config.ConnectionsFile != "" {
 		connections, err := readConnections(s.Config.ConnectionsFile)
@@ -176,17 +184,26 @@ func (s *Setup) Doctor(ctx context.Context) error {
 			if s.Config.Provider == "anthropic" {
 				keyURL = "https://platform.claude.com/settings/keys"
 			}
-			return fmt.Errorf("%s is missing; create an API key at %s, set %s in the same terminal, then rerun this command (macOS/Linux: export %s='YOUR_API_KEY'; PowerShell: $env:%s='YOUR_API_KEY')", key, keyURL, key, key, key)
+			return fmt.Errorf(
+				"%s is missing; create an API key at %s, set %s in the same terminal, then rerun this command (macOS/Linux: export %s='YOUR_API_KEY'; PowerShell: $env:%s='YOUR_API_KEY')",
+				key,
+				keyURL,
+				key,
+				key,
+				key,
+			)
 		}
 	}
 	data, err := s.run(ctx, "docker", []string{"info", "--format", "{{.OSType}} {{.Architecture}}"}, nil)
 	if err != nil {
 		return fmt.Errorf("start Docker first (on macOS: colima start): %w", err)
 	}
+
 	info := strings.Fields(string(data))
 	if len(info) != 2 || info[0] != "linux" {
 		return fmt.Errorf("docker must run Linux containers; on Windows switch Docker Desktop to Linux containers")
 	}
+
 	s.arch = info[1]
 	switch s.arch {
 	case "aarch64":
@@ -222,15 +239,18 @@ func (s *Setup) Doctor(ctx context.Context) error {
 	if len(helper) < 20 || string(helper[:4]) != "\x7fELF" {
 		return fmt.Errorf("sandbox helper must be a Linux ELF executable")
 	}
+
 	machine := uint16(helper[18]) | uint16(helper[19])<<8
 	if (s.arch == "arm64" && machine != 183) || (s.arch == "amd64" && machine != 62) {
 		return fmt.Errorf("sandbox helper architecture does not match Docker (%s)", s.arch)
 	}
+
 	s.helper = helper
 	if s.connections != nil {
 		_, _ = fmt.Fprintf(s.Out, "Ready: Docker %s, Compose, sandbox helper and saved model/MCP connections.\n", s.arch)
 		return nil
 	}
+
 	s.Config.HelperPath, err = filepath.Abs(s.Config.HelperPath)
 	if err != nil {
 		return err
@@ -244,20 +264,24 @@ func (s *Setup) Doctor(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+
 		res, err := (&http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}).Do(req)
 		if err != nil {
 			return fmt.Errorf("cannot reach Ollama at %s; start Ollama (ollama serve) or check --base-url", base)
 		}
+
 		defer func() { _ = res.Body.Close() }()
 		if res.StatusCode != http.StatusOK {
 			return fmt.Errorf("ollama returned HTTP %d", res.StatusCode)
 		}
+
 		var tags struct {
 			Models []struct{ Name, Model string }
 		}
 		if json.NewDecoder(io.LimitReader(res.Body, 4<<20)).Decode(&tags) != nil {
 			return fmt.Errorf("ollama returned an invalid model catalog")
 		}
+
 		found := false
 		for _, model := range tags.Models {
 			if model.Name == s.Config.Model || model.Model == s.Config.Model {
@@ -304,8 +328,18 @@ func (s *Setup) profile() contract.Profile {
 	profile := contract.Profile{APIVersion: "knotra/v1", Kind: "EngineProfile", Metadata: contract.Metadata{Name: "local"}, Spec: contract.ProfileSpec{
 		Models: map[string]contract.ModelConnection{"model_main": c}, Secrets: secrets,
 		Sandboxes: map[string]contract.SandboxProfile{
-			"python_box": {Image: "python:3.13-alpine", Resources: contract.Resources{CPU: 1, MemoryMiB: 512, DiskMiB: 128, Pids: 64}, Network: contract.Network{Mode: "none"}, AllowedTools: []string{"files.read", "files.write", "process.exec"}},
-			"node_box":   {Image: "node:22-alpine", Resources: contract.Resources{CPU: 1, MemoryMiB: 512, DiskMiB: 128, Pids: 64}, Network: contract.Network{Mode: "none"}, AllowedTools: []string{"files.read", "files.write", "process.exec"}},
+			"python_box": {
+				Image:        "python:3.13-alpine",
+				Resources:    contract.Resources{CPU: 1, MemoryMiB: 512, DiskMiB: 128, Pids: 64},
+				Network:      contract.Network{Mode: "none"},
+				AllowedTools: []string{"files.read", "files.write", "process.exec"},
+			},
+			"node_box": {
+				Image:        "node:22-alpine",
+				Resources:    contract.Resources{CPU: 1, MemoryMiB: 512, DiskMiB: 128, Pids: 64},
+				Network:      contract.Network{Mode: "none"},
+				AllowedTools: []string{"files.read", "files.write", "process.exec"},
+			},
 		}, Limits: contract.Limits{Timeout: "30m", MaxConcurrentNodes: 8, MaxNodeInstances: 10000, MaxModelCalls: 200, MaxToolCalls: 1000},
 	}}
 	if s.connections != nil {
@@ -324,6 +358,7 @@ func (s *Setup) WriteOnce() (settings, error) {
 	if err := os.MkdirAll(s.Config.Dir, 0700); err != nil {
 		return settings{}, err
 	}
+
 	file := filepath.Join(s.Config.Dir, "settings.json")
 	var state settings
 	data, err := os.ReadFile(file)
@@ -346,8 +381,15 @@ func (s *Setup) WriteOnce() (settings, error) {
 	if err = json.Unmarshal(data, &state); err != nil {
 		return state, fmt.Errorf("invalid quickstart settings: %w", err)
 	}
-	if (s.connections == nil && (state.Config.Provider != s.Config.Provider || state.Config.Model != s.Config.Model || state.Config.BaseURL != s.Config.BaseURL)) || state.Config.PostgresPort != s.Config.PostgresPort {
-		return state, fmt.Errorf("this directory uses a different provider, model, base URL or ports; reuse its flags or choose another --dir (for example --dir ./knotra-%s)", s.Config.Provider)
+	if (s.connections == nil &&
+		(state.Config.Provider != s.Config.Provider ||
+			state.Config.Model != s.Config.Model ||
+			state.Config.BaseURL != s.Config.BaseURL)) ||
+		state.Config.PostgresPort != s.Config.PostgresPort {
+		return state, fmt.Errorf(
+			"this directory uses a different provider, model, base URL or ports; reuse its flags or choose another --dir (for example --dir ./knotra-%s)",
+			s.Config.Provider,
+		)
 	}
 	if state.Password == "" || state.OperationID == "" {
 		return state, fmt.Errorf("quickstart settings have no password or operation identity")
@@ -355,6 +397,7 @@ func (s *Setup) WriteOnce() (settings, error) {
 	if err := writeNew(filepath.Join(s.Config.Dir, "compose.yaml"), assets.Compose); err != nil {
 		return state, err
 	}
+
 	profile, err := json.MarshalIndent(s.profile(), "", "  ")
 	if err != nil {
 		return state, err
@@ -408,10 +451,12 @@ func writeNewMode(name string, data []byte, mode os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(name), 0700); err != nil {
 		return err
 	}
+
 	file, err := os.CreateTemp(filepath.Dir(name), ".knotra-create-*")
 	if err != nil {
 		return err
 	}
+
 	defer func() { _ = os.Remove(file.Name()) }()
 	if err = file.Chmod(mode); err == nil {
 		_, err = file.Write(data)
@@ -430,6 +475,7 @@ func writeNewMode(name string, data []byte, mode os.FileMode) error {
 	if os.IsExist(err) {
 		return nil
 	}
+
 	return err
 }
 
@@ -438,8 +484,19 @@ func (s *Setup) StartInfrastructure(ctx context.Context) (string, string, error)
 	if err != nil {
 		return "", "", err
 	}
+
 	sum := sha256.Sum256([]byte(s.Config.Dir))
-	args := []string{"--project-name", "knotra-quickstart-" + hex.EncodeToString(sum[:6]), "--file", filepath.Join(s.Config.Dir, "compose.yaml"), "up", "-d", "--wait", "--wait-timeout", "120"}
+	args := []string{
+		"--project-name",
+		"knotra-quickstart-" + hex.EncodeToString(sum[:6]),
+		"--file",
+		filepath.Join(s.Config.Dir, "compose.yaml"),
+		"up",
+		"-d",
+		"--wait",
+		"--wait-timeout",
+		"120",
+	}
 	if s.compose == "docker" {
 		args = append([]string{"compose"}, args...)
 	}
@@ -451,6 +508,7 @@ func (s *Setup) StartInfrastructure(ctx context.Context) (string, string, error)
 	if _, err = s.run(ctx, s.compose, args, env); err != nil {
 		return "", "", fmt.Errorf("infrastructure startup failed; check port conflicts and Docker logs: %w", err)
 	}
+
 	for _, image := range []string{"python:3.13-alpine", "node:22-alpine"} {
 		if _, err = s.run(ctx, "docker", []string{"image", "inspect", image}, nil); err != nil {
 			_, _ = fmt.Fprintf(s.Out, "Downloading %s…\n", image)

@@ -66,7 +66,13 @@ func TestRemoteMCPCleanupSurvivesOwnerHostRemoval(t *testing.T) {
 			return err
 		}
 		var err error
-		claim, err = r.Store.ClaimAttempt(ctx, tx, execution.AttemptID{RunID: id, InstanceID: execution.StableID("n", id+"/root/a"), Number: 1}, 1, owner)
+		claim, err = r.Store.ClaimAttempt(
+			ctx,
+			tx,
+			execution.AttemptID{RunID: id, InstanceID: execution.StableID("n", id+"/root/a"), Number: 1},
+			1,
+			owner,
+		)
 		return err
 	}); err != nil || claim == nil {
 		t.Fatalf("claim=%+v error=%v", claim, err)
@@ -105,12 +111,22 @@ func TestRemoteMCPCleanupSurvivesOwnerHostRemoval(t *testing.T) {
 	if err := r.Store.Pool.QueryRow(ctx, "SELECT args,queue FROM river_job WHERE kind='knotra_cleanup_v1'").Scan(&encoded, &queue); err != nil {
 		t.Fatal(err)
 	}
-	if err := json.Unmarshal(encoded, &args); err != nil || !args.Portable || args.HostID != "removed-host" || args.ResourceID != resource.ID || queue != r.Client.execute {
+	if err := json.Unmarshal(encoded, &args); err != nil ||
+		!args.Portable ||
+		args.HostID != "removed-host" ||
+		args.ResourceID != resource.ID ||
+		queue != r.Client.execute {
 		t.Fatalf("remote cleanup lost original ownership/global routing: %+v queue=%s error=%v", args, queue, err)
 	}
 	for _, portable := range []bool{false, true} {
-		if err := r.cleanup(ctx, &river.Job[CleanupArgs]{Args: CleanupArgs{HostID: sandbox.HostID, Portable: portable, ResourceID: sandbox.ID,
-			WorkerID: sandbox.Ownership.WorkerID, OwnershipGeneration: sandbox.Ownership.Generation, DispatchGeneration: sandbox.DispatchGeneration}}); err == nil {
+		if err := r.cleanup(ctx, &river.Job[CleanupArgs]{Args: CleanupArgs{
+			HostID:              sandbox.HostID,
+			Portable:            portable,
+			ResourceID:          sandbox.ID,
+			WorkerID:            sandbox.Ownership.WorkerID,
+			OwnershipGeneration: sandbox.Ownership.Generation,
+			DispatchGeneration:  sandbox.DispatchGeneration,
+		}}); err == nil {
 			t.Fatalf("foreign sandbox cleanup accepted portable=%t", portable)
 		}
 	}
@@ -138,11 +154,29 @@ func TestRemoteMCPCleanupSurvivesOwnerHostRemoval(t *testing.T) {
 	})
 	var host, worker, sandboxState string
 	var generation int64
-	if err := r.Store.Pool.QueryRow(ctx, "SELECT host_id,worker_id,ownership_generation,(SELECT state FROM knotra_resources WHERE id=$2) FROM knotra_resources WHERE id=$1", resource.ID, sandbox.ID).Scan(&host, &worker, &generation, &sandboxState); err != nil {
+	if err := r.Store.Pool.QueryRow(
+		ctx,
+		"SELECT host_id,worker_id,ownership_generation,(SELECT state FROM knotra_resources WHERE id=$2) FROM knotra_resources WHERE id=$1",
+		resource.ID,
+		sandbox.ID,
+	).Scan(&host, &worker, &generation, &sandboxState); err != nil {
 		t.Fatal(err)
 	}
-	if host != "removed-host" || worker != owner || generation != claim.Generation || sandboxState != "active" || cancellations.Load() != 1 || deletions.Load() != 1 {
-		t.Fatalf("cleanup changed ownership or sandbox locality: host=%s worker=%s generation=%d sandbox=%s cancellations=%d deletions=%d", host, worker, generation, sandboxState, cancellations.Load(), deletions.Load())
+	if host != "removed-host" ||
+		worker != owner ||
+		generation != claim.Generation ||
+		sandboxState != "active" ||
+		cancellations.Load() != 1 ||
+		deletions.Load() != 1 {
+		t.Fatalf(
+			"cleanup changed ownership or sandbox locality: host=%s worker=%s generation=%d sandbox=%s cancellations=%d deletions=%d",
+			host,
+			worker,
+			generation,
+			sandboxState,
+			cancellations.Load(),
+			deletions.Load(),
+		)
 	}
 }
 
@@ -161,7 +195,13 @@ func TestResourceScannerPagesPastLiveSessionsAndRepairsNativeDelivery(t *testing
 			return err
 		}
 		var err error
-		claim, err = r.Store.ClaimAttempt(ctx, tx, execution.AttemptID{RunID: id, InstanceID: execution.StableID("n", id+"/root/a"), Number: 1}, 1, owner)
+		claim, err = r.Store.ClaimAttempt(
+			ctx,
+			tx,
+			execution.AttemptID{RunID: id, InstanceID: execution.StableID("n", id+"/root/a"), Number: 1},
+			1,
+			owner,
+		)
 		return err
 	}); err != nil || claim == nil {
 		t.Fatalf("claim=%+v error=%v", claim, err)
@@ -200,10 +240,14 @@ func TestResourceScannerPagesPastLiveSessionsAndRepairsNativeDelivery(t *testing
 			t.Fatal(err)
 		}
 		var queued, live, attempts int
-		if err := r.Store.Pool.QueryRow(ctx, `SELECT
+		if err := r.Store.Pool.QueryRow(
+			ctx,
+			`SELECT
 			(SELECT count(*) FROM river_job WHERE kind='knotra_cleanup_v1' AND state='available'),
 			(SELECT count(*) FROM knotra_resources WHERE lifetime='run' AND state='active'),
-			(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1)`, id).Scan(&queued, &live, &attempts); err != nil || queued != 1 || live != 65 || attempts != 1 {
+			(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1)`,
+			id,
+		).Scan(&queued, &live, &attempts); err != nil || queued != 1 || live != 65 || attempts != 1 {
 			t.Fatalf("native state=%s queued=%d live=%d attempts=%d error=%v", state, queued, live, attempts, err)
 		}
 	}
@@ -255,7 +299,13 @@ func TestRuntimeCodeRegistersSandboxOwnerBeforeCreationAndClosesIt(t *testing.T)
 		err = json.Unmarshal(output, &labels)
 		return err == nil, err
 	})
-	if labels["io.knotra.resource"] != resource || labels["io.knotra.worker"] != worker || labels["io.knotra.host"] != host || labels["io.knotra.engine"] != r.Store.EngineID || labels["io.knotra.run"] != id || labels["io.knotra.generation"] != "1" || labels["io.knotra.attempt"] != "1" {
+	if labels["io.knotra.resource"] != resource ||
+		labels["io.knotra.worker"] != worker ||
+		labels["io.knotra.host"] != host ||
+		labels["io.knotra.engine"] != r.Store.EngineID ||
+		labels["io.knotra.run"] != id ||
+		labels["io.knotra.generation"] != "1" ||
+		labels["io.knotra.attempt"] != "1" {
 		t.Fatalf("incomplete sandbox identity: %+v", labels)
 	}
 	await(t, 20*time.Second, func() (bool, error) {
@@ -268,7 +318,11 @@ func TestRuntimeCodeRegistersSandboxOwnerBeforeCreationAndClosesIt(t *testing.T)
 	}
 	var state string
 	var budget int
-	if err := r.Store.Pool.QueryRow(ctx, "SELECT state,(SELECT used FROM knotra_budgets WHERE run_id=$1 AND kind='tool' AND scope=$1) FROM knotra_resources WHERE run_id=$1", id).Scan(&state, &budget); err != nil || state != "closed" || budget != 1 {
+	if err := r.Store.Pool.QueryRow(
+		ctx,
+		"SELECT state,(SELECT used FROM knotra_budgets WHERE run_id=$1 AND kind='tool' AND scope=$1) FROM knotra_resources WHERE run_id=$1",
+		id,
+	).Scan(&state, &budget); err != nil || state != "closed" || budget != 1 {
 		t.Fatalf("resource state=%s budget=%d error=%v", state, budget, err)
 	}
 	if output, err := exec.CommandContext(ctx, "docker", "inspect", "sandbox-"+resource).CombinedOutput(); err == nil {
@@ -292,11 +346,23 @@ func resourceCodePlan(t *testing.T, r *Runtime, delay time.Duration) contract.Pl
 	spec.Models = nil
 	plan.Profile.Spec.Models = nil
 	spec.Sandboxes = map[string]contract.SandboxResource{"box": {Profile: "local"}}
-	plan.Profile.Spec.Sandboxes = map[string]contract.SandboxProfile{"local": {Image: "python:3.13-alpine", Resources: contract.Resources{CPU: 1, MemoryMiB: 256, DiskMiB: 64, Pids: 64}, Network: contract.Network{Mode: "none"}, AllowedTools: []string{"process.exec", "files.read", "files.write"}}}
+	plan.Profile.Spec.Sandboxes = map[string]contract.SandboxProfile{"local": {
+		Image:        "python:3.13-alpine",
+		Resources:    contract.Resources{CPU: 1, MemoryMiB: 256, DiskMiB: 64, Pids: 64},
+		Network:      contract.Network{Mode: "none"},
+		AllowedTools: []string{"process.exec", "files.read", "files.write"},
+	}}
 	node := spec.Nodes["a"]
 	node.Type, node.LLM, node.Sandbox = "code", nil, "box"
 	node.Execution.Timeout = "50s"
-	node.Code = &contract.CodeNode{Command: []string{"python", "-c", fmt.Sprintf(`import json,os,time;time.sleep(%g);json.dump({"answer":"confirmed"},open(os.environ["KNOTRA_OUTPUT_JSON"],"w"))`, delay.Seconds())}}
+	node.Code = &contract.CodeNode{Command: []string{
+		"python",
+		"-c",
+		fmt.Sprintf(
+			`import json,os,time;time.sleep(%g);json.dump({"answer":"confirmed"},open(os.environ["KNOTRA_OUTPUT_JSON"],"w"))`,
+			delay.Seconds(),
+		),
+	}}
 	spec.Nodes["a"] = node
 	if err := r.Host.Runner.Prepare(t.Context(), &plan); err != nil {
 		t.Fatal(err)

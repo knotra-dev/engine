@@ -38,36 +38,57 @@ func readDesktopDescriptor(path string) (desktopDescriptor, error) {
 	if !filepath.IsAbs(path) {
 		return descriptor, invalid
 	}
+
 	info, err := os.Lstat(path)
 	if err != nil || !info.Mode().IsRegular() || (runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0) {
 		return descriptor, invalid
 	}
+
 	file, err := os.Open(path)
 	if err != nil {
 		return descriptor, invalid
 	}
+
 	defer func() { _ = file.Close() }()
 	opened, err := file.Stat()
 	if err != nil || !os.SameFile(info, opened) {
 		return descriptor, invalid
 	}
+
 	data, err := io.ReadAll(io.LimitReader(file, (16<<10)+1))
-	if err != nil || len(data) > 16<<10 || json.Unmarshal(data, &descriptor) != nil || descriptor.Protocol != desktopControlProtocol || len(descriptor.Token) < 32 || len(descriptor.Token) > 4096 || strings.ContainsAny(descriptor.Token, "\r\n\x00") {
+	if err != nil ||
+		len(data) > 16<<10 ||
+		json.Unmarshal(data, &descriptor) != nil ||
+		descriptor.Protocol != desktopControlProtocol ||
+		len(descriptor.Token) < 32 ||
+		len(descriptor.Token) > 4096 ||
+		strings.ContainsAny(descriptor.Token, "\r\n\x00") {
 		return desktopDescriptor{}, invalid
 	}
+
 	for _, character := range descriptor.Token {
 		if character < 0x21 || character > 0x7e {
 			return desktopDescriptor{}, invalid
 		}
 	}
 	endpoint, err := url.Parse(descriptor.Endpoint)
-	if err != nil || endpoint.Scheme != "http" || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.ForceQuery || endpoint.Fragment != "" || strings.Contains(descriptor.Endpoint, "#") || (endpoint.Path != "" && endpoint.Path != "/") || endpoint.Port() == "" {
+	if err != nil ||
+		endpoint.Scheme != "http" ||
+		endpoint.User != nil ||
+		endpoint.RawQuery != "" ||
+		endpoint.ForceQuery ||
+		endpoint.Fragment != "" ||
+		strings.Contains(descriptor.Endpoint, "#") ||
+		(endpoint.Path != "" && endpoint.Path != "/") ||
+		endpoint.Port() == "" {
 		return desktopDescriptor{}, invalid
 	}
+
 	ip := net.ParseIP(endpoint.Hostname())
 	if ip == nil || !ip.IsLoopback() {
 		return desktopDescriptor{}, invalid
 	}
+
 	descriptor.Endpoint = strings.TrimRight(descriptor.Endpoint, "/")
 	return descriptor, nil
 }
@@ -142,10 +163,12 @@ func (b *desktopBridge) call(ctx context.Context, name string, arguments json.Ra
 	if err != nil {
 		return desktopToolError("unavailable")
 	}
+
 	var args map[string]json.RawMessage
 	if json.Unmarshal(arguments, &args) != nil {
 		return desktopToolError("invalid")
 	}
+
 	requestID := uuid.NewString()
 	if raw, ok := args["requestId"]; name != "engine_call" && ok {
 		_ = json.Unmarshal(raw, &requestID)
@@ -157,10 +180,12 @@ func (b *desktopBridge) call(ctx context.Context, name string, arguments json.Ra
 	if err != nil {
 		return desktopToolError("invalid")
 	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, descriptor.Endpoint+"/v1/tools/"+name, bytes.NewReader(body))
 	if err != nil {
 		return desktopToolError("unavailable")
 	}
+
 	req.Header.Set("Authorization", "Bearer "+descriptor.Token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Knotra-Request-Id", requestID)
@@ -168,6 +193,7 @@ func (b *desktopBridge) call(ctx context.Context, name string, arguments json.Ra
 	if err != nil {
 		return desktopToolError("timeout")
 	}
+
 	defer func() { _ = response.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(response.Body, maxDesktopControlBytes+1))
 	if err != nil || len(data) > maxDesktopControlBytes {
@@ -176,6 +202,7 @@ func (b *desktopBridge) call(ctx context.Context, name string, arguments json.Ra
 	if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
 		return desktopToolError("unavailable")
 	}
+
 	var envelope struct {
 		Result json.RawMessage `json:"result"`
 		Error  *struct {
@@ -191,10 +218,12 @@ func (b *desktopBridge) call(ctx context.Context, name string, arguments json.Ra
 	if response.StatusCode < 200 || response.StatusCode >= 300 || len(envelope.Result) == 0 {
 		return desktopToolError("control_error")
 	}
+
 	result, err := contract.DecodeJSONLimit(envelope.Result, maxDesktopControlBytes)
 	if err != nil {
 		return desktopToolError("control_error")
 	}
+
 	secrets := []string{descriptor.Token}
 	for _, field := range []string{"apiKey", "token"} {
 		var secret string
@@ -210,6 +239,7 @@ func (b *desktopBridge) call(ctx context.Context, name string, arguments json.Ra
 	if _, ok := result.(map[string]any); !ok {
 		return desktopToolError("control_error")
 	}
+
 	return &mcp.CallToolResult{StructuredContent: result, Content: []mcp.Content{&mcp.TextContent{Text: string(envelope.Result)}}}
 }
 
@@ -218,9 +248,16 @@ func newDesktopControlServer(bridge *desktopBridge, version string) *mcp.Server 
 		Instructions: "Control the running Knotra app. First read knotra://guide and knotra://schema/v1. Read a pipeline before editing it; preserve its revision and unsaved edits. Request-ID replay lasts only for the current app session: after app restart, read and reconcile pipelines/sources before retrying an uncertain action. Engine operationId receipts are durable. Credentials are write-only; engine_call accepts only its closed command vocabulary.",
 	})
 	for _, definition := range desktopControlTools() {
-		server.AddTool(&mcp.Tool{Name: definition.name, Title: definition.title, Description: definition.description, InputSchema: definition.schema, Annotations: &mcp.ToolAnnotations{ReadOnlyHint: definition.readOnly}},
+		server.AddTool(&mcp.Tool{
+			Name:        definition.name,
+			Title:       definition.title,
+			Description: definition.description,
+			InputSchema: definition.schema,
+			Annotations: &mcp.ToolAnnotations{ReadOnlyHint: definition.readOnly},
+		},
 			func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				valid := len(req.Params.Arguments) <= maxDesktopControlBytes && contract.ValidateValue(contract.Port{Schema: definition.schema}, contract.Value{JSON: req.Params.Arguments}) == nil
+				valid := len(req.Params.Arguments) <= maxDesktopControlBytes &&
+					contract.ValidateValue(contract.Port{Schema: definition.schema}, contract.Value{JSON: req.Params.Arguments}) == nil
 				if !valid {
 					return desktopToolError("invalid"), nil
 				}
@@ -258,7 +295,14 @@ func (s *commandState) desktopMCPCommand() *cobra.Command {
 			}
 			bridge := newDesktopBridge(path)
 			defer bridge.client.CloseIdleConnections()
-			return newDesktopControlServer(bridge, s.options.Version).Run(cmd.Context(), &mcp.IOTransport{Reader: io.NopCloser(s.options.In), Writer: desktopMCPWriter{s.options.Out}, MaxLineLength: maxDesktopControlBytes})
+			return newDesktopControlServer(bridge, s.options.Version).Run(
+				cmd.Context(),
+				&mcp.IOTransport{
+					Reader:        io.NopCloser(s.options.In),
+					Writer:        desktopMCPWriter{s.options.Out},
+					MaxLineLength: maxDesktopControlBytes,
+				},
+			)
 		},
 	}
 	cmd.Flags().BoolVar(&desktop, "desktop", false, "Control the running Knotra desktop app")

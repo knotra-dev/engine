@@ -27,11 +27,13 @@ func Start(ctx context.Context, version string) (func(context.Context) error, er
 	if os.Getenv("OTEL_SDK_DISABLED") == "true" {
 		return noop, nil
 	}
+
 	traces := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != "" || os.Getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") != ""
 	metrics := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != "" || os.Getenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT") != ""
 	if !traces && !metrics {
 		return noop, nil
 	}
+
 	res, err := resource.New(
 		ctx,
 		resource.WithFromEnv(),
@@ -40,6 +42,7 @@ func Start(ctx context.Context, version string) (func(context.Context) error, er
 	if err != nil {
 		return nil, err
 	}
+
 	shutdowns := []func(context.Context) error{}
 	stop := func(ctx context.Context) error {
 		var errs []error

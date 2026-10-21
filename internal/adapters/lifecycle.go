@@ -42,10 +42,12 @@ func (r *Runner) ResourcePage(ctx context.Context, before string) ([]execution.R
 	if r.EngineID == "" || r.HostID == "" {
 		return nil, "", fmt.Errorf("resource inventory requires engine and host identity")
 	}
+
 	docker, err := r.docker(ctx)
 	if err != nil {
 		return nil, before, err
 	}
+
 	defer docker.client.CloseIdleConnections()
 	labels := []string{"io.knotra.engine=" + r.EngineID, "io.knotra.host=" + r.HostID}
 	filters := map[string][]string{"label": labels}
@@ -56,6 +58,7 @@ func (r *Runner) ResourcePage(ctx context.Context, before string) ([]execution.R
 	if err != nil {
 		return nil, before, err
 	}
+
 	var containers []struct {
 		ID     string            `json:"Id"`
 		Labels map[string]string `json:"Labels"`
@@ -70,6 +73,7 @@ func (r *Runner) ResourcePage(ctx context.Context, before string) ([]execution.R
 	if len(containers) > 64 {
 		return nil, before, fmt.Errorf("docker exceeded the resource inventory page limit")
 	}
+
 	next := ""
 	if len(containers) == 64 {
 		next = containers[len(containers)-1].ID
@@ -80,9 +84,23 @@ func (r *Runner) ResourcePage(ctx context.Context, before string) ([]execution.R
 		labels := container.Labels
 		number, numberErr := strconv.Atoi(labels["io.knotra.attempt"])
 		generation, generationErr := strconv.ParseInt(labels["io.knotra.generation"], 10, 64)
-		resource := execution.ResourceRecord{ID: labels["io.knotra.resource"], EngineID: labels["io.knotra.engine"], HostID: labels["io.knotra.host"], Kind: "sandbox",
-			Ownership: execution.Ownership{AttemptID: execution.AttemptID{RunID: labels["io.knotra.run"], InstanceID: labels["io.knotra.instance"], Number: number}, WorkerID: labels["io.knotra.worker"], Generation: generation}}
-		if container.ID == "" || resource.EngineID != r.EngineID || resource.HostID != r.HostID || numberErr != nil || generationErr != nil || resource.Validate() != nil {
+		resource := execution.ResourceRecord{
+			ID:       labels["io.knotra.resource"],
+			EngineID: labels["io.knotra.engine"],
+			HostID:   labels["io.knotra.host"],
+			Kind:     "sandbox",
+			Ownership: execution.Ownership{
+				AttemptID:  execution.AttemptID{RunID: labels["io.knotra.run"], InstanceID: labels["io.knotra.instance"], Number: number},
+				WorkerID:   labels["io.knotra.worker"],
+				Generation: generation,
+			},
+		}
+		if container.ID == "" ||
+			resource.EngineID != r.EngineID ||
+			resource.HostID != r.HostID ||
+			numberErr != nil ||
+			generationErr != nil ||
+			resource.Validate() != nil {
 			invalid = errors.Join(invalid, fmt.Errorf("resource inventory received invalid container ownership"))
 			continue
 		}
@@ -100,10 +118,12 @@ func (r *Runner) CleanupResource(ctx context.Context, resource execution.Resourc
 	if resource.Kind != "sandbox" || resource.State != "cleaning" || r.WorkDir == "" || resource.EngineID != r.EngineID || resource.HostID != r.HostID {
 		return fmt.Errorf("resource cleanup does not match this runner and host")
 	}
+
 	docker, err := r.docker(ctx)
 	if err != nil {
 		return err
 	}
+
 	defer docker.client.CloseIdleConnections()
 	labels := resource.Labels()
 	filters, err := json.Marshal(map[string][]string{"label": {
@@ -112,6 +132,7 @@ func (r *Runner) CleanupResource(ctx context.Context, resource execution.Resourc
 	if err != nil {
 		return err
 	}
+
 	var containers []struct {
 		ID     string            `json:"Id"`
 		Labels map[string]string `json:"Labels"`
@@ -119,6 +140,7 @@ func (r *Runner) CleanupResource(ctx context.Context, resource execution.Resourc
 	if err := docker.json(ctx, "GET", "/containers/json?all=true&filters="+url.QueryEscape(string(filters)), nil, &containers); err != nil {
 		return err
 	}
+
 	for _, container := range containers {
 		if container.ID == "" {
 			return fmt.Errorf("resource cleanup received an empty container identity")
@@ -141,6 +163,7 @@ func (r *Runner) CleanupResource(ctx context.Context, resource execution.Resourc
 	if err != nil {
 		return err
 	}
+
 	defer func() { _ = root.Close() }()
 	return root.RemoveAll(resource.Name())
 }
@@ -161,6 +184,7 @@ func (s *sandbox) startLease(deadline time.Time) error {
 	if err != nil {
 		return err
 	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	s.stopLease = cancel
 	s.leaseDone = make(chan struct{})
@@ -198,11 +222,13 @@ func renewLease(dir string) (time.Time, error) {
 	if err != nil {
 		return time.Time{}, err
 	}
+
 	defer func() { _ = os.Remove(file.Name()) }()
 	if _, err = file.WriteString(expires.UTC().Format(time.RFC3339Nano)); err != nil {
 		_ = file.Close()
 		return time.Time{}, err
 	}
+
 	mode := os.FileMode(0444)
 	if runtime.GOOS == "windows" {
 		// A read-only NTFS destination cannot be replaced by the next renewal.
@@ -216,6 +242,7 @@ func renewLease(dir string) (time.Time, error) {
 	if err = file.Close(); err != nil {
 		return time.Time{}, err
 	}
+
 	return expires, os.Rename(file.Name(), filepath.Join(dir, "lease"))
 }
 
@@ -236,6 +263,7 @@ func (s *sandbox) diagnose(original error) error {
 	if inspection.State.OOMKilled {
 		return fmt.Errorf("sandbox exceeded its memory limit")
 	}
+
 	res, err := s.docker.request(ctx, "GET", "/containers/"+s.id+"/logs?stdout=true&stderr=true&tail=8", nil)
 	if err == nil {
 		defer func() { _ = res.Body.Close() }()

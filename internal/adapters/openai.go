@@ -45,7 +45,16 @@ func openAIRequest(c contract.ModelConnection, messages []message, tools []funct
 		for _, tool := range tools {
 			// Knotra validates the full schema locally. Non-strict tools preserve
 			// optional fields and JSON Schema features outside OpenAI's subset.
-			definitions = append(definitions, map[string]any{"type": "function", "name": tool.Function.Name, "description": tool.Function.Description, "parameters": tool.Function.Parameters, "strict": false})
+			definitions = append(
+				definitions,
+				map[string]any{
+					"type":        "function",
+					"name":        tool.Function.Name,
+					"description": tool.Function.Description,
+					"parameters":  tool.Function.Parameters,
+					"strict":      false,
+				},
+			)
 		}
 		body["tools"] = definitions
 		body["parallel_tool_calls"] = false
@@ -69,7 +78,14 @@ func normalizeOpenAI(response openAIResponse) (chatResponse, error) {
 	if response.Status != "completed" {
 		return chatResponse{}, invalidModelResponse()
 	}
-	result := chatResponse{Done: true, DoneReason: "stop", Message: message{Role: "assistant"}, PromptEvalCount: response.Usage.InputTokens, EvalCount: response.Usage.OutputTokens}
+
+	result := chatResponse{
+		Done:            true,
+		DoneReason:      "stop",
+		Message:         message{Role: "assistant"},
+		PromptEvalCount: response.Usage.InputTokens,
+		EvalCount:       response.Usage.OutputTokens,
+	}
 	ids := map[string]bool{}
 	for _, raw := range response.Output {
 		var item struct {
@@ -80,6 +96,7 @@ func normalizeOpenAI(response openAIResponse) (chatResponse, error) {
 		if json.Unmarshal(raw, &item) != nil {
 			return chatResponse{}, invalidModelResponse()
 		}
+
 		switch item.Type {
 		case "message":
 			if item.Role != "assistant" || (item.Status != "" && item.Status != "completed") {
@@ -108,10 +125,12 @@ func normalizeOpenAI(response openAIResponse) (chatResponse, error) {
 	if result.Message.Content == "" && len(result.Message.ToolCalls) == 0 {
 		return chatResponse{}, invalidModelResponse()
 	}
+
 	context, err := json.Marshal(response.Output)
 	if err != nil {
 		return chatResponse{}, err
 	}
+
 	result.Message.ProviderContext = context
 	return result, nil
 }
@@ -125,6 +144,7 @@ func readOpenAIResponse(ctx context.Context, res *http.Response, started time.Ti
 		result, err := normalizeOpenAI(response)
 		return result, 0, err
 	}
+
 	var text, arguments strings.Builder
 	structuredItems := map[int]bool{}
 	return readModelEvents(ctx, res.Body, started, observation, id, step, func(data []byte) (string, *chatResponse, error) {
@@ -137,6 +157,7 @@ func readOpenAIResponse(ctx context.Context, res *http.Response, started time.Ti
 		if json.Unmarshal(data, &event) != nil {
 			return "", nil, invalidModelResponse()
 		}
+
 		switch event.Type {
 		case "response.output_item.added":
 			structuredItems[event.OutputIndex] = event.Item.Type == "function_call" && event.Item.Name == structuredOutputTool

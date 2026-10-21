@@ -73,6 +73,7 @@ func (s *commandState) reportError(cmd *cobra.Command, err error) {
 		})
 		return
 	}
+
 	_, _ = fmt.Fprintln(s.options.Err, "Error:", safeText(err.Error()))
 	for _, item := range diagnostics {
 		_, _ = fmt.Fprintf(s.options.Err, "%s %s: %s\n", safeText(item.Code), safeText(item.Path), safeText(item.Message))

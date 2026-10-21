@@ -45,7 +45,12 @@ func TestRuntimeTimerPumpRotatesPastTerminalRunBacklogs(t *testing.T) {
 	ids := overdueTimerRuns(t, r, 65)
 	ctx := context.Background()
 	for i, status := range []string{"succeeded", "failed", "cancelled", "skipped"} {
-		if _, err := r.Store.Pool.Exec(ctx, `UPDATE knotra_runs SET document=jsonb_set(document::jsonb,'{status}',to_jsonb($2::text)) WHERE id=ANY($1::text[])`, ids[i*16:(i+1)*16], status); err != nil {
+		if _, err := r.Store.Pool.Exec(
+			ctx,
+			`UPDATE knotra_runs SET document=jsonb_set(document::jsonb,'{status}',to_jsonb($2::text)) WHERE id=ANY($1::text[])`,
+			ids[i*16:(i+1)*16],
+			status,
+		); err != nil {
 			t.Fatal(err)
 		}
 	}

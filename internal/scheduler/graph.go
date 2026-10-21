@@ -30,7 +30,8 @@ type Snapshot struct {
 
 	// A non-nil selection contains the only existing nodes eligible to change.
 	// Nodes also includes their complete dependency values and, on demand, exports.
-	SelectedNodeIDs      []string
+	SelectedNodeIDs []string
+
 	ActiveNodesElsewhere bool
 	GraphExportsLoaded   bool
 }
@@ -57,7 +58,8 @@ type Changes struct {
 
 	// Load these complete exports and rerun the pure step before saving changes.
 	ForeachCollections []string
-	GraphExports       bool
+
+	GraphExports bool
 }
 
 func terminal(state string) bool {
@@ -83,22 +85,33 @@ func Step(plan contract.Plan, snapshot Snapshot, maxTransitions int) (Changes, e
 	if maxTransitions < 1 {
 		return changes, errors.New("scheduler step requires a positive transition bound")
 	}
+
 	run, graph := snapshot.Run, snapshot.Graph
-	if run.Backend != execution.BackendRiver || run.SchedulerVersion != execution.SchedulerVersion || run.StateFormatVersion != execution.StateFormatVersion {
+	if run.Backend != execution.BackendRiver ||
+		run.SchedulerVersion != execution.SchedulerVersion ||
+		run.StateFormatVersion != execution.StateFormatVersion {
 		return changes, errors.New("unsupported scheduler execution version")
 	}
 	if terminal(graph.State) {
 		return changes, nil
 	}
+
 	definition, err := execution.GraphDefinition(plan, graph.Pipeline, graph.GraphPath)
 	if err != nil {
 		return changes, err
 	}
+
 	pipeline := plan.Pipelines[graph.Pipeline]
 	ids := make([]string, 0, len(definition.Nodes))
 	for id, node := range definition.Nodes {
 		ids = append(ids, id)
-		if node.Type != "llm" && node.Type != "agent" && node.Type != "code" && node.Type != "tool" && node.Type != "switch" && node.Type != "human" && !composite(node.Type) {
+		if node.Type != "llm" &&
+			node.Type != "agent" &&
+			node.Type != "code" &&
+			node.Type != "tool" &&
+			node.Type != "switch" &&
+			node.Type != "human" &&
+			!composite(node.Type) {
 			return changes, fmt.Errorf("%w: %s (%s)", ErrUnsupportedControl, id, node.Type)
 		}
 	}
@@ -241,8 +254,11 @@ func Step(plan contract.Plan, snapshot Snapshot, maxTransitions int) (Changes, e
 					request := *node.Request
 					request.Attempt = node.AttemptNumber
 					node.Request = &request
-					changes.Attempts = append(changes.Attempts, execution.AttemptRecord{AttemptID: execution.AttemptID{RunID: run.RunID, InstanceID: node.ID, Number: node.AttemptNumber},
-						State: "ready", DispatchGeneration: 1, DispatchPending: true})
+					changes.Attempts = append(
+						changes.Attempts,
+						execution.AttemptRecord{AttemptID: execution.AttemptID{RunID: run.RunID, InstanceID: node.ID, Number: node.AttemptNumber},
+							State: "ready", DispatchGeneration: 1, DispatchPending: true},
+					)
 					appendNode(node, "ready", nil, nil, "waiting for execution capacity")
 					break
 				}
@@ -299,7 +315,10 @@ func Step(plan contract.Plan, snapshot Snapshot, maxTransitions int) (Changes, e
 				Kind: "resolution", Status: "open", Failure: &f, Outputs: node.Request.Node.Outputs, Deadline: node.Deadline})
 			continue
 		}
-		if !composite(node.Request.Node.Type) && !result.Failure.Unknown && result.Failure.Retryable && node.AttemptNumber < node.Request.Node.Execution.Retry.MaxAttempts {
+		if !composite(node.Request.Node.Type) &&
+			!result.Failure.Unknown &&
+			result.Failure.Retryable &&
+			node.AttemptNumber < node.Request.Node.Execution.Retry.MaxAttempts {
 			backoff, err := contract.Duration(node.Request.Node.Execution.Retry.Backoff)
 			if err != nil || backoff < 0 {
 				return Changes{}, errors.New("invalid admitted retry backoff")
@@ -357,8 +376,11 @@ func Step(plan contract.Plan, snapshot Snapshot, maxTransitions int) (Changes, e
 			}
 			if state == "ready" {
 				node.AttemptNumber = 1
-				changes.Attempts = append(changes.Attempts, execution.AttemptRecord{AttemptID: execution.AttemptID{RunID: run.RunID, InstanceID: node.ID, Number: 1},
-					State: "ready", DispatchGeneration: 1, DispatchPending: true})
+				changes.Attempts = append(
+					changes.Attempts,
+					execution.AttemptRecord{AttemptID: execution.AttemptID{RunID: run.RunID, InstanceID: node.ID, Number: 1},
+						State: "ready", DispatchGeneration: 1, DispatchPending: true},
+				)
 			}
 			if state == "waiting_human" {
 				node.AttemptNumber = 1
@@ -462,6 +484,7 @@ func admit(run execution.RunState, graph execution.GraphRecord, defaults contrac
 	if !deadline.After(run.Now) {
 		return "failed", nil, failure("DEADLINE_EXCEEDED", "node deadline exceeded"), ""
 	}
+
 	request := &execution.ExecuteRequest{RunID: run.RunID, InstanceID: node.ID, NodeID: node.NodeID, Pipeline: graph.Pipeline, Attempt: 1,
 		Node: definition, Inputs: args, Scopes: graph.Scopes, Permissions: graph.Permissions, Deadline: deadline}
 	if definition.Type == "tool" {
@@ -484,5 +507,6 @@ func admit(run execution.RunState, graph execution.GraphRecord, defaults contrac
 		}
 		return "waiting_human", request, nil, "waiting for a human response"
 	}
+
 	return "ready", request, nil, "waiting for execution capacity"
 }

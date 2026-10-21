@@ -93,8 +93,14 @@ func setupDefinition(t *testing.T, s *Store) (string, contract.Plan) {
 		CompilerVersion: contract.CompilerVersion,
 		CELVersion:      contract.CELVersion,
 		Digest:          "frozen-plan",
-		Profile:         contract.Profile{Spec: contract.ProfileSpec{Limits: contract.Limits{Timeout: "1h", MaxConcurrentNodes: 2, MaxNodeInstances: 100, MaxModelCalls: 10, MaxToolCalls: 10}}},
-		Root:            "pipeline.yaml",
+		Profile: contract.Profile{Spec: contract.ProfileSpec{Limits: contract.Limits{
+			Timeout:            "1h",
+			MaxConcurrentNodes: 2,
+			MaxNodeInstances:   100,
+			MaxModelCalls:      10,
+			MaxToolCalls:       10,
+		}}},
+		Root: "pipeline.yaml",
 		Pipelines: map[string]*contract.Pipeline{"pipeline.yaml": {Spec: contract.Spec{Graph: contract.Graph{
 			Inputs:  map[string]contract.Port{},
 			Outputs: map[string]contract.Port{},
@@ -258,7 +264,11 @@ func TestHumanFirstValidResponseWins(t *testing.T) {
 	}
 	var response []byte
 	var generation int64
-	if err := s.Pool.QueryRow(ctx, `SELECT q.response,r.wake_generation FROM knotra_requests q JOIN knotra_runs r ON r.id=q.run_id WHERE q.id=$1 AND q.status='answered'`, request.ID).Scan(&response, &generation); err != nil {
+	if err := s.Pool.QueryRow(
+		ctx,
+		`SELECT q.response,r.wake_generation FROM knotra_requests q JOIN knotra_runs r ON r.id=q.run_id WHERE q.id=$1 AND q.status='answered'`,
+		request.ID,
+	).Scan(&response, &generation); err != nil {
 		t.Fatal(err)
 	}
 	var accepted contract.Values
@@ -581,10 +591,34 @@ func TestSQLCPageBytesRetainCursorMarker(t *testing.T) {
 			if _, err := PutDefinition(ctx, tx, protocol.Definition{ID: id, PackageDigest: id, Name: strings.Repeat("large", 256)}); err != nil {
 				return err
 			}
-			if err := s.SaveRequestTx(ctx, tx, execution.Request{ID: id, RunID: runID, Kind: "human", Status: "open", Prompt: strings.Repeat("large", 256), Deadline: time.Now().Add(time.Minute)}); err != nil {
+			if err := s.SaveRequestTx(
+				ctx,
+				tx,
+				execution.Request{
+					ID:       id,
+					RunID:    runID,
+					Kind:     "human",
+					Status:   "open",
+					Prompt:   strings.Repeat("large", 256),
+					Deadline: time.Now().Add(time.Minute),
+				},
+			); err != nil {
 				return err
 			}
-			if err := insertRun(ctx, tx, protocol.Run{ID: id, DefinitionID: id, Status: "succeeded", Outputs: map[string]json.RawMessage{"large": json.RawMessage(`"` + strings.Repeat("large", 256) + `"`)}}, contract.Plan{}, contract.Values{}, now(), now().Add(time.Hour)); err != nil {
+			if err := insertRun(
+				ctx,
+				tx,
+				protocol.Run{
+					ID:           id,
+					DefinitionID: id,
+					Status:       "succeeded",
+					Outputs:      map[string]json.RawMessage{"large": json.RawMessage(`"` + strings.Repeat("large", 256) + `"`)},
+				},
+				contract.Plan{},
+				contract.Values{},
+				now(),
+				now().Add(time.Hour),
+			); err != nil {
 				return err
 			}
 		}
@@ -682,7 +716,10 @@ func TestInitialSchemaOpensConcurrentlyAndPreservesData(t *testing.T) {
 	defer reopened.Close()
 	var marker string
 	var noMigrations bool
-	if err := reopened.Pool.QueryRow(ctx, "SELECT value,to_regclass('knotra_migrations') IS NULL FROM knotra_settings WHERE key='initialization-test'").Scan(&marker, &noMigrations); err != nil {
+	if err := reopened.Pool.QueryRow(
+		ctx,
+		"SELECT value,to_regclass('knotra_migrations') IS NULL FROM knotra_settings WHERE key='initialization-test'",
+	).Scan(&marker, &noMigrations); err != nil {
 		t.Fatal(err)
 	}
 	if reopened.EngineID != first.EngineID || marker != "preserved" || !noMigrations {

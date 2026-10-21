@@ -127,9 +127,14 @@ func TestSplitRolesExecuteDAGThroughIndependentClients(t *testing.T) {
 		t.Fatalf("split-role result=%+v error=%v", run, err)
 	}
 	var used, owners int
-	if err := base.Store.Pool.QueryRow(ctx, `SELECT
+	if err := base.Store.Pool.QueryRow(
+		ctx,
+		`SELECT
 		(SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='model'),
-		(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1 AND owner=$2 AND state='completed')`, id, worker.WorkerID).Scan(&used, &owners); err != nil {
+		(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1 AND owner=$2 AND state='completed')`,
+		id,
+		worker.WorkerID,
+	).Scan(&used, &owners); err != nil {
 		t.Fatal(err)
 	}
 	if calls.Load() != 3 || used != 3 || owners != 3 {

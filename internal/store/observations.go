@@ -22,6 +22,7 @@ func (s *Store) Observe(ctx context.Context, event protocol.Event) error {
 	if event.RunID == "" || event.InstanceID == "" || event.Type == "" {
 		return fmt.Errorf("observation requires run, instance and event type")
 	}
+
 	event.ID, event.At = "", now()
 	event.Message = shortEventText(event.Message)
 	data, err := json.Marshal(event.Data)
@@ -31,7 +32,18 @@ func (s *Store) Observe(ctx context.Context, event protocol.Event) error {
 	if len(data) > maxObservationBytes {
 		summary := map[string]any{"truncated": true, "originalBytes": len(data)}
 		if fields, ok := event.Data.(map[string]any); ok {
-			for _, key := range []string{"step", "name", "model", "valid", "isError", "durationMs", "firstTokenMs", "inputTokens", "outputTokens", "observationIncomplete"} {
+			for _, key := range []string{
+				"step",
+				"name",
+				"model",
+				"valid",
+				"isError",
+				"durationMs",
+				"firstTokenMs",
+				"inputTokens",
+				"outputTokens",
+				"observationIncomplete",
+			} {
 				if value, ok := fields[key]; ok {
 					if encoded, err := json.Marshal(value); err == nil && len(encoded) <= 512 {
 						summary[key] = value
@@ -48,10 +60,12 @@ func (s *Store) Observe(ctx context.Context, event protocol.Event) error {
 	if len(b) > 128<<10 {
 		return fmt.Errorf("observation metadata exceeds limit")
 	}
+
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
+
 	defer func() { _ = tx.Rollback(ctx) }()
 	if _, _, err = lockRun(ctx, tx, event.RunID); err != nil {
 		return err
@@ -59,6 +73,7 @@ func (s *Store) Observe(ctx context.Context, event protocol.Event) error {
 	if _, err = db.New(tx).Observe(ctx, db.ObserveParams{RunID: event.RunID, Document: b}); err != nil {
 		return err
 	}
+
 	return tx.Commit(ctx)
 }
 
@@ -68,6 +83,7 @@ func observationContext(values contract.Values) (map[string]any, bool) {
 	if values == nil {
 		return nil, false
 	}
+
 	bounded := contract.Values{}
 	truncated, size := false, 0
 	for _, key := range sortedKeys(values) {

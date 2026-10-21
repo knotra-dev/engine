@@ -21,6 +21,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
+
         try:
             self.wfile.write(data)
         except (BrokenPipeError, ConnectionResetError):
@@ -29,7 +30,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/control":
             with self.condition:
-                self.reply({"calls": Handler.calls, "waiting": Handler.waiting, "hold": Handler.hold})
+                self.reply(
+                    {
+                        "calls": Handler.calls,
+                        "waiting": Handler.waiting,
+                        "hold": Handler.hold,
+                    }
+                )
         elif self.path == "/api/tags":
             self.reply({"models": [{"name": "fixture", "digest": "fixture-digest"}]})
         else:
@@ -46,6 +53,7 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(value, dict) or type(value.get("hold")) is not bool:
                 self.reply({"error": "expected JSON hold boolean"}, 400)
                 return
+
             with self.condition:
                 Handler.hold = value["hold"]
                 self.condition.notify_all()
@@ -60,11 +68,22 @@ class Handler(BaseHTTPRequestHandler):
                     self.condition.wait_for(lambda: not Handler.hold)
                 finally:
                     Handler.waiting -= 1
-            self.reply({"message": {"role": "assistant", "content": '{"answer":"shared remote result"}'},
-                        "done": True, "done_reason": "stop"})
+            self.reply(
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": '{"answer":"shared remote result"}',
+                    },
+                    "done": True,
+                    "done_reason": "stop",
+                }
+            )
         else:
             self.reply({"error": "unknown fixture route"}, 404)
 
 
 if __name__ == "__main__":
-    ThreadingHTTPServer(("0.0.0.0", int(os.environ.get("PORT", "11434"))), Handler).serve_forever()
+    ThreadingHTTPServer(
+        ("0.0.0.0", int(os.environ.get("PORT", "11434"))),
+        Handler,
+    ).serve_forever()

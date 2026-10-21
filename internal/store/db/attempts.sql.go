@@ -84,7 +84,13 @@ func (q *Queries) IncrementRunRevision(ctx context.Context, id string) (pgconn.C
 
 const lockAttemptLease = `-- name: LockAttemptLease :one
 SELECT lease_expires_at FROM knotra_execution_attempts
-		WHERE run_id=$1 AND instance_id=$2 AND number=$3 AND state='claimed' AND owner=$4 AND ownership_generation=$5 FOR UPDATE
+WHERE run_id=$1
+    AND instance_id=$2
+    AND number=$3
+    AND state='claimed'
+    AND owner=$4
+    AND ownership_generation=$5
+FOR UPDATE
 `
 
 type LockAttemptLeaseParams struct {
@@ -110,7 +116,7 @@ func (q *Queries) LockAttemptLease(ctx context.Context, arg LockAttemptLeasePara
 
 const lockClaimAttempt = `-- name: LockClaimAttempt :one
 SELECT state,dispatch_generation,ownership_generation FROM knotra_execution_attempts
-		WHERE run_id=$1 AND instance_id=$2 AND number=$3 FOR UPDATE
+WHERE run_id=$1 AND instance_id=$2 AND number=$3 FOR UPDATE
 `
 
 type LockClaimAttemptParams struct {
@@ -133,11 +139,23 @@ func (q *Queries) LockClaimAttempt(ctx context.Context, arg LockClaimAttemptPara
 }
 
 const lockClaimNode = `-- name: LockClaimNode :one
-SELECT n.state AS node_state,n.attempt_number,n.execution_request,n.deadline,g.state AS graph_state,g.scopes,
-		n.node_id,g.pipeline,g.graph_path,g.parent_instance_id,g.iteration_index,n.started_at,(r.plan->>'digest')::text AS plan_digest
-		FROM knotra_execution_nodes n JOIN knotra_execution_graphs g ON g.run_id=n.run_id AND g.id=n.graph_id
-		JOIN knotra_runs r ON r.id=n.run_id
-		WHERE n.run_id=$1 AND n.id=$2 FOR UPDATE OF n
+SELECT
+    n.state AS node_state,
+    n.attempt_number,
+    n.execution_request,
+    n.deadline,
+    g.state AS graph_state,
+    g.scopes,
+    n.node_id,
+    g.pipeline,
+    g.graph_path,
+    g.parent_instance_id,
+    g.iteration_index,
+    n.started_at,
+    (r.plan->>'digest')::text AS plan_digest
+FROM knotra_execution_nodes n JOIN knotra_execution_graphs g ON g.run_id=n.run_id AND g.id=n.graph_id
+JOIN knotra_runs r ON r.id=n.run_id
+WHERE n.run_id=$1 AND n.id=$2 FOR UPDATE OF n
 `
 
 type LockClaimNodeParams struct {
@@ -184,7 +202,7 @@ func (q *Queries) LockClaimNode(ctx context.Context, arg LockClaimNodeParams) (L
 
 const lockClaimScopes = `-- name: LockClaimScopes :many
 SELECT id,limits,active_attempts FROM knotra_execution_scopes
-		WHERE run_id=$1 AND id=ANY($2::text[]) ORDER BY id FOR UPDATE
+WHERE run_id=$1 AND id=ANY($2::text[]) ORDER BY id FOR UPDATE
 `
 
 type LockClaimScopesParams struct {
@@ -220,7 +238,7 @@ func (q *Queries) LockClaimScopes(ctx context.Context, arg LockClaimScopesParams
 
 const lockCompletedAttempt = `-- name: LockCompletedAttempt :one
 SELECT state FROM knotra_execution_attempts WHERE run_id=$1 AND instance_id=$2 AND number=$3
-		AND owner=$4 AND ownership_generation=$5 FOR UPDATE
+    AND owner=$4 AND ownership_generation=$5 FOR UPDATE
 `
 
 type LockCompletedAttemptParams struct {
@@ -268,8 +286,8 @@ func (q *Queries) LockOwnedNode(ctx context.Context, arg LockOwnedNodeParams) (L
 
 const lockReservedScopeIDs = `-- name: LockReservedScopeIDs :many
 SELECT s.id FROM knotra_execution_scopes s JOIN knotra_execution_slots r
-		ON r.run_id=s.run_id AND r.scope_id=s.id WHERE r.run_id=$1 AND r.instance_id=$2 AND r.attempt_number=$3
-		AND r.ownership_generation=$4 AND r.released_at IS NULL ORDER BY s.id FOR UPDATE OF s
+ON r.run_id=s.run_id AND r.scope_id=s.id WHERE r.run_id=$1 AND r.instance_id=$2 AND r.attempt_number=$3
+    AND r.ownership_generation=$4 AND r.released_at IS NULL ORDER BY s.id FOR UPDATE OF s
 `
 
 type LockReservedScopeIDsParams struct {
@@ -322,7 +340,7 @@ func (q *Queries) LockWorkerHeartbeat(ctx context.Context, arg LockWorkerHeartbe
 
 const markAttemptForDispatch = `-- name: MarkAttemptForDispatch :execresult
 UPDATE knotra_execution_attempts SET dispatch_pending=true
-			WHERE run_id=$1 AND instance_id=$2 AND number=$3
+WHERE run_id=$1 AND instance_id=$2 AND number=$3
 `
 
 type MarkAttemptForDispatchParams struct {
@@ -337,7 +355,7 @@ func (q *Queries) MarkAttemptForDispatch(ctx context.Context, arg MarkAttemptFor
 
 const markPausedAttemptForDispatch = `-- name: MarkPausedAttemptForDispatch :execresult
 UPDATE knotra_execution_attempts SET dispatch_pending=true
-			WHERE run_id=$1 AND instance_id=$2 AND number=$3 AND state='ready' AND dispatch_generation=$4
+WHERE run_id=$1 AND instance_id=$2 AND number=$3 AND state='ready' AND dispatch_generation=$4
 `
 
 type MarkPausedAttemptForDispatchParams struct {
@@ -372,7 +390,7 @@ func (q *Queries) PinRunSessionWorker(ctx context.Context, arg PinRunSessionWork
 const readClaimWorker = `-- name: ReadClaimWorker :one
 SELECT heartbeat_at,draining,($1::integer=ANY(scheduler_versions) AND $2::integer=ANY(state_format_versions)
     AND COALESCE(capabilities->>'role','all') IN ('all','executor')) AS compatible
-		FROM knotra_workers WHERE id=$3 AND engine_id=$4 FOR SHARE
+FROM knotra_workers WHERE id=$3 AND engine_id=$4 FOR SHARE
 `
 
 type ReadClaimWorkerParams struct {
@@ -402,7 +420,9 @@ func (q *Queries) ReadClaimWorker(ctx context.Context, arg ReadClaimWorkerParams
 
 const readOwnedWorkerHeartbeat = `-- name: ReadOwnedWorkerHeartbeat :one
 SELECT heartbeat_at FROM knotra_workers WHERE id=$1 AND engine_id=$2
-		AND $3::integer=ANY(scheduler_versions) AND $4::integer=ANY(state_format_versions) FOR SHARE
+    AND $3::integer=ANY(scheduler_versions)
+    AND $4::integer=ANY(state_format_versions)
+FOR SHARE
 `
 
 type ReadOwnedWorkerHeartbeatParams struct {
@@ -449,7 +469,15 @@ func (q *Queries) ReadSessionWorker(ctx context.Context, id string) (time.Time, 
 
 const registerWorker = `-- name: RegisterWorker :execresult
 INSERT INTO knotra_workers(id,engine_id,host_id,scheduler_versions,state_format_versions,capabilities)
-		VALUES($1,$2,$3,ARRAY[$4::integer]::integer[],ARRAY[$5::integer]::integer[],$6::jsonb) ON CONFLICT DO NOTHING
+VALUES(
+    $1,
+    $2,
+    $3,
+    ARRAY[$4::integer]::integer[],
+    ARRAY[$5::integer]::integer[],
+    $6::jsonb
+)
+ON CONFLICT DO NOTHING
 `
 
 type RegisterWorkerParams struct {
@@ -474,7 +502,7 @@ func (q *Queries) RegisterWorker(ctx context.Context, arg RegisterWorkerParams) 
 
 const releaseReservedSlots = `-- name: ReleaseReservedSlots :execresult
 UPDATE knotra_execution_slots SET released_at=clock_timestamp()
-		WHERE run_id=$1 AND instance_id=$2 AND attempt_number=$3 AND ownership_generation=$4 AND released_at IS NULL
+WHERE run_id=$1 AND instance_id=$2 AND attempt_number=$3 AND ownership_generation=$4 AND released_at IS NULL
 `
 
 type ReleaseReservedSlotsParams struct {
@@ -495,8 +523,11 @@ func (q *Queries) ReleaseReservedSlots(ctx context.Context, arg ReleaseReservedS
 
 const renewAttempt = `-- name: RenewAttempt :one
 UPDATE knotra_execution_attempts SET lease_expires_at=LEAST($1,$2,
-		(SELECT n.deadline FROM knotra_execution_nodes n WHERE n.run_id=$3 AND n.id=$4))
-		WHERE run_id=$3 AND instance_id=$4 AND number=$5 RETURNING lease_expires_at
+    (SELECT n.deadline FROM knotra_execution_nodes n WHERE n.run_id=$3 AND n.id=$4))
+WHERE run_id=$3
+    AND instance_id=$4
+    AND number=$5
+RETURNING lease_expires_at
 `
 
 type RenewAttemptParams struct {
@@ -522,7 +553,7 @@ func (q *Queries) RenewAttempt(ctx context.Context, arg RenewAttemptParams) (*ti
 
 const reserveAttemptSlot = `-- name: ReserveAttemptSlot :execresult
 INSERT INTO knotra_execution_slots(run_id,instance_id,attempt_number,scope_id,ownership_generation)
-			VALUES($1,$2,$3,$4,$5)
+VALUES($1,$2,$3,$4,$5)
 `
 
 type ReserveAttemptSlotParams struct {
@@ -545,7 +576,7 @@ func (q *Queries) ReserveAttemptSlot(ctx context.Context, arg ReserveAttemptSlot
 
 const setAttemptClaimed = `-- name: SetAttemptClaimed :execresult
 UPDATE knotra_execution_attempts SET state='claimed',dispatch_pending=false,owner=$4,
-		ownership_generation=$5,lease_expires_at=$6,outcome_key=$7 WHERE run_id=$1 AND instance_id=$2 AND number=$3
+    ownership_generation=$5,lease_expires_at=$6,outcome_key=$7 WHERE run_id=$1 AND instance_id=$2 AND number=$3
 `
 
 type SetAttemptClaimedParams struct {

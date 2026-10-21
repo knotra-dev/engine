@@ -27,6 +27,7 @@ func TestRealProcessRecovery(t *testing.T) {
 	if os.Getenv("KNOTRA_TEST_REAL") != "1" && os.Getenv("KNOTRA_TEST_RECOVERY") != "1" {
 		t.Skip("set KNOTRA_TEST_RECOVERY=1 for Docker/PostgreSQL process recovery")
 	}
+
 	root, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)
@@ -213,21 +214,26 @@ func TestRecoveryScenarioCompiles(t *testing.T) {
 }
 
 func recoveryProfile() contract.Profile {
-	return contract.Profile{APIVersion: "knotra/v1", Kind: "EngineProfile", Metadata: contract.Metadata{Name: "recovery"}, Spec: contract.ProfileSpec{
-		Sandboxes: map[string]contract.SandboxProfile{"python": {
-			Image:        "python:3.13-alpine",
-			Network:      contract.Network{Mode: "none"},
-			AllowedTools: []string{"process.exec"},
-			Resources:    contract.Resources{CPU: 0.5, MemoryMiB: 128, DiskMiB: 32, Pids: 32},
-		}},
-		Limits: contract.Limits{
-			Timeout:            "10m",
-			MaxConcurrentNodes: 2,
-			MaxNodeInstances:   16,
-			MaxModelCalls:      2,
-			MaxToolCalls:       2,
+	return contract.Profile{
+		APIVersion: "knotra/v1",
+		Kind:       "EngineProfile",
+		Metadata:   contract.Metadata{Name: "recovery"},
+		Spec: contract.ProfileSpec{
+			Sandboxes: map[string]contract.SandboxProfile{"python": {
+				Image:        "python:3.13-alpine",
+				Network:      contract.Network{Mode: "none"},
+				AllowedTools: []string{"process.exec"},
+				Resources:    contract.Resources{CPU: 0.5, MemoryMiB: 128, DiskMiB: 32, Pids: 32},
+			}},
+			Limits: contract.Limits{
+				Timeout:            "10m",
+				MaxConcurrentNodes: 2,
+				MaxNodeInstances:   16,
+				MaxModelCalls:      2,
+				MaxToolCalls:       2,
+			},
 		},
-	}}
+	}
 }
 
 // TestEngineProcess is a subprocess entrypoint, not a substitute engine. It
@@ -416,6 +422,7 @@ func readEventsUntil(t *testing.T, ctx context.Context, api *client.Client, runI
 	t.Helper()
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
+
 	var events []protocol.Event
 	done := errors.New("requested event reached")
 	err := api.Watch(ctx, runID, cursor, func(event protocol.Event) error {

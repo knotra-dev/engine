@@ -33,6 +33,7 @@ func stageOutcome(ctx context.Context, tx pgx.Tx, outcome execution.Outcome) (bo
 	if err := outcome.Validate(); err != nil {
 		return false, err
 	}
+
 	token := outcome.Ownership
 	run, err := LockExecutionRun(ctx, tx, token.RunID)
 	if err != nil {
@@ -41,6 +42,7 @@ func stageOutcome(ctx context.Context, tx pgx.Tx, outcome execution.Outcome) (bo
 	if err := checkExecutionVersion(run); err != nil {
 		return false, err
 	}
+
 	attempt, err := db.New(tx).LockOutcomeAttempt(ctx, db.LockOutcomeAttemptParams{RunID: token.RunID, ID: token.InstanceID, Number: token.Number})
 	if err != nil {
 		return false, classify(err)
@@ -48,6 +50,7 @@ func stageOutcome(ctx context.Context, tx pgx.Tx, outcome execution.Outcome) (bo
 	if attempt.Owner == nil || attempt.OutcomeKey == nil {
 		return false, ErrExecutionOwnership
 	}
+
 	key := *attempt.OutcomeKey
 	// The attempt lock may have waited beyond a deadline; evaluate eligibility
 	// with database time after all ownership records have been locked.
@@ -62,16 +65,23 @@ func stageOutcome(ctx context.Context, tx pgx.Tx, outcome execution.Outcome) (bo
 	if err != nil {
 		return false, err
 	}
-	if key != expectedKey || *attempt.Owner != token.WorkerID || attempt.OwnershipGeneration != token.Generation || attempt.PlanDigest != outcome.PlanID {
+	if key != expectedKey ||
+		*attempt.Owner != token.WorkerID ||
+		attempt.OwnershipGeneration != token.Generation ||
+		attempt.PlanDigest != outcome.PlanID {
 		return false, ErrConflict
 	}
+
 	b, err := json.Marshal(outcome)
 	if err != nil {
 		return false, err
 	}
 	if len(attempt.Outcome) > 0 {
 		var same bool
-		storedOutcomeMatches, err := db.New(tx).OutcomeMatches(ctx, db.OutcomeMatchesParams{RunID: token.RunID, InstanceID: token.InstanceID, Number: token.Number, Outcome: b})
+		storedOutcomeMatches, err := db.New(tx).OutcomeMatches(
+			ctx,
+			db.OutcomeMatchesParams{RunID: token.RunID, InstanceID: token.InstanceID, Number: token.Number, Outcome: b},
+		)
 		if err != nil {
 			return false, err
 		}
@@ -92,7 +102,14 @@ func stageOutcome(ctx context.Context, tx pgx.Tx, outcome execution.Outcome) (bo
 	}
 	// Even ineligible evidence remains inspectable. Cancellation and an already
 	// terminal/superseded node cannot admit its outputs into the graph.
-	if attempt.AttemptNumber != token.Number || attempt.NodeState != "running" || run.Cancelled || protocol.Terminal(run.Status) || run.StopCause != nil || attempt.Deadline == nil || !attempt.Deadline.After(run.Now) || !run.Deadline.After(run.Now) {
+	if attempt.AttemptNumber != token.Number ||
+		attempt.NodeState != "running" ||
+		run.Cancelled ||
+		protocol.Terminal(run.Status) ||
+		run.StopCause != nil ||
+		attempt.Deadline == nil ||
+		!attempt.Deadline.After(run.Now) ||
+		!run.Deadline.After(run.Now) {
 		if attempt.AttemptState == "claimed" {
 			_, err := db.New(tx).CancelAttempt(ctx, db.CancelAttemptParams{RunID: token.RunID, InstanceID: token.InstanceID, Number: token.Number})
 			return false, err
@@ -126,6 +143,7 @@ func stageOutcome(ctx context.Context, tx pgx.Tx, outcome execution.Outcome) (bo
 	if err != nil {
 		return false, err
 	}
+
 	_, err = db.New(tx).SetAttemptCompleted(ctx, db.SetAttemptCompletedParams{
 		RunID:      token.RunID,
 		InstanceID: token.InstanceID,

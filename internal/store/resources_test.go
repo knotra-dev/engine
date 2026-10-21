@@ -22,7 +22,12 @@ func TestOwnedMCPIdentityIsImmutableAndSurvivesAttemptEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Pool.Exec(ctx, "UPDATE knotra_execution_attempts SET state='completed' WHERE run_id=$1 AND instance_id=$2", claim.RunID, claim.InstanceID); err != nil {
+	if _, err := s.Pool.Exec(
+		ctx,
+		"UPDATE knotra_execution_attempts SET state='completed' WHERE run_id=$1 AND instance_id=$2",
+		claim.RunID,
+		claim.InstanceID,
+	); err != nil {
 		t.Fatal(err)
 	}
 	identity := execution.MCPSessionRecord{Connection: "tools", SessionID: "original-session", ProtocolVersion: "2025-11-25"}
@@ -53,7 +58,11 @@ func TestOwnedMCPIdentityIsImmutableAndSurvivesAttemptEnd(t *testing.T) {
 	if got, err := s.ClaimResourceCleanup(ctx, resource.ID, resource.HostID, claim.WorkerID, claim.Generation); err != nil || got != nil {
 		t.Fatalf("completed attempt exposed a live run session to cleanup: resource=%+v error=%v", got, err)
 	}
-	if _, err := s.Pool.Exec(ctx, "UPDATE knotra_workers SET heartbeat_at=clock_timestamp()-interval '21 seconds' WHERE id=$1", claim.WorkerID); err != nil {
+	if _, err := s.Pool.Exec(
+		ctx,
+		"UPDATE knotra_workers SET heartbeat_at=clock_timestamp()-interval '21 seconds' WHERE id=$1",
+		claim.WorkerID,
+	); err != nil {
 		t.Fatal(err)
 	}
 	got, err := s.ClaimResourceCleanup(ctx, resource.ID, resource.HostID, claim.WorkerID, claim.Generation)
@@ -92,13 +101,27 @@ func TestResourceCleanupProtectsLiveOwnersAndSessionLifetime(t *testing.T) {
 			}
 			switch mode {
 			case "attempt_ended":
-				_, err = s.Pool.Exec(ctx, "UPDATE knotra_execution_attempts SET state='completed' WHERE run_id=$1 AND instance_id=$2", claim.RunID, claim.InstanceID)
+				_, err = s.Pool.Exec(
+					ctx,
+					"UPDATE knotra_execution_attempts SET state='completed' WHERE run_id=$1 AND instance_id=$2",
+					claim.RunID,
+					claim.InstanceID,
+				)
 			case "lease_expired":
-				_, err = s.Pool.Exec(ctx, "UPDATE knotra_execution_attempts SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE run_id=$1 AND instance_id=$2", claim.RunID, claim.InstanceID)
+				_, err = s.Pool.Exec(
+					ctx,
+					"UPDATE knotra_execution_attempts SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE run_id=$1 AND instance_id=$2",
+					claim.RunID,
+					claim.InstanceID,
+				)
 			case "worker_dead":
 				_, err = s.Pool.Exec(ctx, "UPDATE knotra_workers SET heartbeat_at=clock_timestamp()-interval '21 seconds' WHERE id=$1", claim.WorkerID)
 			case "run_terminal":
-				_, err = s.Pool.Exec(ctx, "UPDATE knotra_runs SET document=jsonb_set(document::jsonb,'{status}','\"succeeded\"')::json WHERE id=$1", claim.RunID)
+				_, err = s.Pool.Exec(
+					ctx,
+					"UPDATE knotra_runs SET document=jsonb_set(document::jsonb,'{status}','\"succeeded\"')::json WHERE id=$1",
+					claim.RunID,
+				)
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -107,13 +130,19 @@ func TestResourceCleanupProtectsLiveOwnersAndSessionLifetime(t *testing.T) {
 				for _, identity := range []struct {
 					host, worker string
 					generation   int64
-				}{{"other-host", claim.WorkerID, claim.Generation}, {record.HostID, workers[1], claim.Generation}, {record.HostID, claim.WorkerID, claim.Generation + 1}} {
+				}{
+					{"other-host", claim.WorkerID, claim.Generation},
+					{record.HostID, workers[1], claim.Generation},
+					{record.HostID, claim.WorkerID, claim.Generation + 1},
+				} {
 					if got, err := s.ClaimResourceCleanup(ctx, record.ID, identity.host, identity.worker, identity.generation); err != nil || got != nil {
 						t.Fatalf("foreign cleanup=%+v error=%v", got, err)
 					}
 				}
 				got, err := s.ClaimResourceCleanup(ctx, record.ID, record.HostID, claim.WorkerID, claim.Generation)
-				want := mode == "worker_dead" || mode == "run_terminal" || (lifetime == "attempt" && (mode == "attempt_ended" || mode == "lease_expired"))
+				want := mode == "worker_dead" ||
+					mode == "run_terminal" ||
+					(lifetime == "attempt" && (mode == "attempt_ended" || mode == "lease_expired"))
 				if err != nil || (got != nil) != want {
 					t.Fatalf("lifetime=%s cleanup=%+v want=%v error=%v", lifetime, got, want, err)
 				}

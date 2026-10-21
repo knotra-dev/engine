@@ -3,33 +3,63 @@ SELECT to_jsonb(g) FROM knotra_execution_graphs g WHERE run_id=$1 AND id=$2;
 
 -- name: SaveExecutionRequest :execresult
 UPDATE knotra_requests SET status=$3,document=$4
-		WHERE run_id=$1 AND id=$2 AND response_id=$5 AND
-		((kind='human' AND status='answered' AND $3='accepted') OR (kind='resolution' AND status='resolved' AND $3='resolved'));
+WHERE run_id=$1 AND id=$2 AND response_id=$5 AND
+    ((kind='human' AND status='answered' AND $3='accepted') OR (kind='resolution' AND status='resolved' AND $3='resolved'));
 
 -- name: InsertExecutionGraph :execresult
 INSERT INTO knotra_execution_graphs(run_id,id,parent_instance_id,address,pipeline,graph_path,
-		inputs,permissions,scopes,deadline,state,revision,iteration_index) VALUES(sqlc.arg(run_id),sqlc.arg(id),NULLIF(sqlc.arg(parent_instance_id)::text,''),sqlc.arg(address),sqlc.arg(pipeline),sqlc.arg(graph_path),sqlc.arg(inputs),sqlc.arg(permissions),sqlc.arg(scopes),sqlc.arg(deadline),sqlc.arg(state),sqlc.arg(revision),sqlc.arg(iteration_index));
+    inputs,permissions,scopes,deadline,state,revision,iteration_index)
+VALUES(
+    sqlc.arg(run_id),
+    sqlc.arg(id),
+    NULLIF(sqlc.arg(parent_instance_id)::text,''),
+    sqlc.arg(address),
+    sqlc.arg(pipeline),
+    sqlc.arg(graph_path),
+    sqlc.arg(inputs),
+    sqlc.arg(permissions),
+    sqlc.arg(scopes),
+    sqlc.arg(deadline),
+    sqlc.arg(state),
+    sqlc.arg(revision),
+    sqlc.arg(iteration_index)
+);
 
 -- name: SaveExecutionGraph :execresult
-UPDATE knotra_execution_graphs SET state=sqlc.arg(state),materialization_cursor=sqlc.arg(materialization_cursor),
-		inputs=CASE WHEN state='pending' THEN sqlc.arg(inputs)::jsonb ELSE inputs END,outputs=sqlc.arg(outputs),failure=sqlc.arg(failure),revision=sqlc.arg(revision)
-		WHERE run_id=sqlc.arg(run_id) AND id=sqlc.arg(id) AND revision=sqlc.arg(revision)-1 AND state IN ('pending','running');
+UPDATE knotra_execution_graphs SET state=sqlc.arg(state),
+    materialization_cursor=sqlc.arg(materialization_cursor),
+    inputs=CASE WHEN state='pending' THEN sqlc.arg(inputs)::jsonb ELSE inputs END,
+    outputs=sqlc.arg(outputs),
+    failure=sqlc.arg(failure),
+    revision=sqlc.arg(revision)
+WHERE run_id=sqlc.arg(run_id)
+    AND id=sqlc.arg(id)
+    AND revision=sqlc.arg(revision)-1
+    AND state IN ('pending','running');
 
 -- name: SaveExecutionNode :execresult
 INSERT INTO knotra_execution_nodes(run_id,id,graph_id,node_id,address,state,inputs,outputs,failure,
-		execution_request,deadline,attempt_number,revision,started_at,finished_at,reason,node_kind,dependency_node_ids,remaining_dependencies,current_request_id)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,NULLIF(sqlc.arg(current_request_id)::text,''))
-		ON CONFLICT(run_id,id) DO UPDATE SET state=EXCLUDED.state,inputs=EXCLUDED.inputs,outputs=EXCLUDED.outputs,
-		failure=EXCLUDED.failure,execution_request=EXCLUDED.execution_request,deadline=EXCLUDED.deadline,current_request_id=EXCLUDED.current_request_id,
-		attempt_number=EXCLUDED.attempt_number,revision=EXCLUDED.revision,started_at=EXCLUDED.started_at,
-		finished_at=EXCLUDED.finished_at,reason=EXCLUDED.reason
-		WHERE knotra_execution_nodes.revision=EXCLUDED.revision-1
-		AND knotra_execution_nodes.state NOT IN ('succeeded','skipped','failed','cancelled')
-		AND (knotra_execution_nodes.deadline IS NULL OR knotra_execution_nodes.deadline=EXCLUDED.deadline);
+    execution_request,deadline,attempt_number,revision,started_at,finished_at,reason,node_kind,dependency_node_ids,remaining_dependencies,current_request_id)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,NULLIF(sqlc.arg(current_request_id)::text,''))
+ON CONFLICT(run_id,id) DO UPDATE SET state=EXCLUDED.state,
+    inputs=EXCLUDED.inputs,
+    outputs=EXCLUDED.outputs,
+    failure=EXCLUDED.failure,
+    execution_request=EXCLUDED.execution_request,
+    deadline=EXCLUDED.deadline,
+    current_request_id=EXCLUDED.current_request_id,
+    attempt_number=EXCLUDED.attempt_number,
+    revision=EXCLUDED.revision,
+    started_at=EXCLUDED.started_at,
+    finished_at=EXCLUDED.finished_at,
+    reason=EXCLUDED.reason
+WHERE knotra_execution_nodes.revision=EXCLUDED.revision-1
+    AND knotra_execution_nodes.state NOT IN ('succeeded','skipped','failed','cancelled')
+    AND (knotra_execution_nodes.deadline IS NULL OR knotra_execution_nodes.deadline=EXCLUDED.deadline);
 
 -- name: InsertExecutionAttempt :execresult
 INSERT INTO knotra_execution_attempts(run_id,instance_id,number,dispatch_generation,dispatch_pending,state)
-		VALUES($1,$2,$3,$4,$5,'ready');
+VALUES($1,$2,$3,$4,$5,'ready');
 
 -- name: ReadExecutionAttempts :many
 SELECT jsonb_build_object('runId',a.run_id,'instanceId',a.instance_id,'number',a.number,
@@ -42,7 +72,12 @@ WHERE a.run_id=$1 AND n.graph_id=$2 AND a.number=n.attempt_number
     AND (sqlc.narg(instance_ids)::text[] IS NULL OR n.id=ANY(sqlc.narg(instance_ids)::text[])) ORDER BY a.instance_id;
 
 -- name: ReadExecutionScopes :many
-SELECT to_jsonb(s) FROM knotra_execution_scopes s WHERE run_id=sqlc.arg(run_id) AND id=ANY(sqlc.arg(scope_i_ds)::text[]) ORDER BY id FOR UPDATE;
+SELECT to_jsonb(s)
+FROM knotra_execution_scopes s
+WHERE run_id=sqlc.arg(run_id)
+    AND id=ANY(sqlc.arg(scope_i_ds)::text[])
+ORDER BY id
+FOR UPDATE;
 
 -- name: ReadExecutionRetryTimers :many
 SELECT to_jsonb(t) FROM knotra_execution_timers t
@@ -105,10 +140,20 @@ ORDER BY children.parent_instance_id,children.iteration_index,children.id;
 -- name: SaveExecutionControl :execresult
 INSERT INTO knotra_execution_controls (
     run_id,instance_id,kind,next_position,collection_position,iteration,elements,carry,child_graph_id,revision,concurrency
-) VALUES (sqlc.arg(run_id),sqlc.arg(instance_id),sqlc.arg(kind),sqlc.arg(next_position),sqlc.arg(collection_position),
-    sqlc.arg(iteration),COALESCE(sqlc.arg(elements)::jsonb,'[]'::jsonb),sqlc.arg(carry),NULLIF(sqlc.arg(child_graph_id)::text,''),sqlc.arg(revision),sqlc.arg(concurrency))
-ON CONFLICT (run_id,instance_id) DO UPDATE SET
-    next_position=EXCLUDED.next_position,
+) VALUES (
+    sqlc.arg(run_id),
+    sqlc.arg(instance_id),
+    sqlc.arg(kind),
+    sqlc.arg(next_position),
+    sqlc.arg(collection_position),
+    sqlc.arg(iteration),
+    COALESCE(sqlc.arg(elements)::jsonb,'[]'::jsonb),
+    sqlc.arg(carry),
+    NULLIF(sqlc.arg(child_graph_id)::text,''),
+    sqlc.arg(revision),
+    sqlc.arg(concurrency)
+)
+ON CONFLICT (run_id,instance_id) DO UPDATE SET next_position=EXCLUDED.next_position,
     collection_position=EXCLUDED.collection_position,
     iteration=EXCLUDED.iteration,
     carry=EXCLUDED.carry,

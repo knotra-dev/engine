@@ -160,6 +160,7 @@ func readBody(w http.ResponseWriter, r *http.Request, v any) ([]byte, error) {
 	if e != nil {
 		return nil, e
 	}
+
 	decoded, e := contract.DecodeJSONLimit(b, maxRequestBytes)
 	if e != nil {
 		return nil, e
@@ -167,6 +168,7 @@ func readBody(w http.ResponseWriter, r *http.Request, v any) ([]byte, error) {
 	if _, ok := decoded.(map[string]any); !ok {
 		return nil, fmt.Errorf("request body must be a JSON object")
 	}
+
 	dec := json.NewDecoder(strings.NewReader(string(b)))
 	dec.DisallowUnknownFields()
 	if e = dec.Decode(v); e != nil {
@@ -179,6 +181,7 @@ func readBody(w http.ResponseWriter, r *http.Request, v any) ([]byte, error) {
 	if e = dec.Decode(&normalized); e != nil {
 		return nil, e
 	}
+
 	return json.Marshal(normalized)
 }
 
@@ -188,11 +191,13 @@ func (s *Server) command(w http.ResponseWriter, r *http.Request, payload []byte,
 		s.fail(w, 400, "IDEMPOTENCY_KEY_REQUIRED", "provide Idempotency-Key (1–128 letters, digits, _ or -)", nil)
 		return
 	}
+
 	status, b, e := s.Store.Command(r.Context(), s.principal(), key, r.Method+" "+r.URL.EscapedPath(), payload, func(tx pgx.Tx) (int, any, error) {
 		nested, err := tx.Begin(r.Context())
 		if err != nil {
 			return 0, nil, err
 		}
+
 		status, value, err := fn(nested)
 		if err == nil {
 			err = nested.Commit(r.Context())
@@ -201,6 +206,7 @@ func (s *Server) command(w http.ResponseWriter, r *http.Request, payload []byte,
 		if rollback := nested.Rollback(r.Context()); rollback != nil {
 			return 0, nil, rollback
 		}
+
 		var code, message string
 		var validation *store.ValidationError
 
@@ -256,7 +262,17 @@ func (s *Server) info(w http.ResponseWriter, _ *http.Request) {
 			"schedulerVersion":   execution.SchedulerVersion,
 			"stateFormatVersion": execution.StateFormatVersion,
 			"executionTimeout":   s.ExecutionTimeout.String(),
-			"capabilities":       []string{"validate", "definitions", "runs", "events", "history", "execution-observations", "human", "artifacts", "resolution"},
+			"capabilities": []string{
+				"validate",
+				"definitions",
+				"runs",
+				"events",
+				"history",
+				"execution-observations",
+				"human",
+				"artifacts",
+				"resolution",
+			},
 		},
 	)
 }

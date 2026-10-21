@@ -41,14 +41,25 @@ func foreachPlan(endpoint string, human bool) contract.Plan {
 	if human {
 		work.Type, work.LLM, work.Human = "human", nil, &contract.HumanNode{Prompt: contract.TextSource{Text: "Echo the item."}}
 	}
-	body := contract.Graph{Inputs: map[string]contract.Port{"item": compositePort(integer, "")},
-		Nodes: map[string]contract.Node{"work": work}, Outputs: map[string]contract.Port{"result": compositePort(integer, "nodes.work.outputs.value")}}
+	body := contract.Graph{
+		Inputs:  map[string]contract.Port{"item": compositePort(integer, "")},
+		Nodes:   map[string]contract.Node{"work": work},
+		Outputs: map[string]contract.Port{"result": compositePort(integer, "nodes.work.outputs.value")},
+	}
 	items := compositePort(array, "")
 	items.Bind = &contract.Binding{Value: json.RawMessage(`[3,1,2]`)}
 	node := contract.Node{Type: "foreach", Inputs: map[string]contract.Port{"items": items},
 		Outputs: map[string]contract.Port{"result": compositePort(array, "")},
-		Foreach: &contract.ForeachNode{Over: "items", Concurrency: 2, With: map[string]contract.Binding{"item": {From: "iteration.item"}}, Body: body}}
-	plan.Pipelines[plan.Root].Spec.Graph = contract.Graph{Nodes: map[string]contract.Node{"map": node}, Outputs: map[string]contract.Port{"result": compositePort(array, "nodes.map.outputs.result")}}
+		Foreach: &contract.ForeachNode{
+			Over:        "items",
+			Concurrency: 2,
+			With:        map[string]contract.Binding{"item": {From: "iteration.item"}},
+			Body:        body,
+		}}
+	plan.Pipelines[plan.Root].Spec.Graph = contract.Graph{
+		Nodes:   map[string]contract.Node{"map": node},
+		Outputs: map[string]contract.Port{"result": compositePort(array, "nodes.map.outputs.result")},
+	}
 	return plan
 }
 
@@ -88,7 +99,14 @@ func TestRuntimeForeachHumanWaitResumesWithoutRematerializingChildren(t *testing
 		t.Fatal(err)
 	}
 	replacement := &Runtime{Store: r.Store, Host: r.Host, Outcomes: r.Outcomes, WorkerID: uuid.NewString(), HostID: r.HostID}
-	replacement.Client = newTestClient(t, testDatabase{pool: r.Store.Pool, schema: schema}, r.Store.EngineID, replacement.HostID, time.Minute, replacement.Handlers())
+	replacement.Client = newTestClient(
+		t,
+		testDatabase{pool: r.Store.Pool, schema: schema},
+		r.Store.EngineID,
+		replacement.HostID,
+		time.Minute,
+		replacement.Handlers(),
+	)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -130,9 +148,13 @@ func TestRuntimeForeachHumanWaitResumesWithoutRematerializingChildren(t *testing
 	}
 	assert(3, 0)
 	var materialized, successes int
-	if err := r.Store.Pool.QueryRow(ctx, `SELECT materialized_instances,
+	if err := r.Store.Pool.QueryRow(
+		ctx,
+		`SELECT materialized_instances,
 		(SELECT count(*) FROM knotra_events WHERE run_id=$1 AND document->>'message'='succeeded' AND document->>'type'='node')
-		FROM knotra_execution_scopes WHERE run_id=$1 AND id=$1`, id).Scan(&materialized, &successes); err != nil || materialized != 4 || successes != 4 {
+		FROM knotra_execution_scopes WHERE run_id=$1 AND id=$1`,
+		id,
+	).Scan(&materialized, &successes); err != nil || materialized != 4 || successes != 4 {
 		t.Fatalf("materialized=%d successes=%d error=%v", materialized, successes, err)
 	}
 }
@@ -171,20 +193,50 @@ func TestRuntimeNestedPipelineLoopForeachUsesAncestorBudgets(t *testing.T) {
 				}
 				calls.Add(1)
 				content, _ := json.Marshal(map[string]int{"value": item})
-				_ = json.NewEncoder(w).Encode(map[string]any{"message": map[string]string{"role": "assistant", "content": string(content)}, "done": true, "done_reason": "stop"})
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"message":     map[string]string{"role": "assistant", "content": string(content)},
+					"done":        true,
+					"done_reason": "stop",
+				})
 			}))
 			defer server.Close()
 			plan := foreachPlan(server.URL, false)
 			array, integer, text := `{"type":"array","items":{"type":"integer"}}`, `{"type":"integer"}`, `{"type":"string"}`
-			loop := contract.Node{Type: "loop", Loop: &contract.LoopNode{MaxIterations: 2, Until: "iteration.index == 1", Body: plan.Pipelines[plan.Root].Spec.Graph},
-				Outputs: map[string]contract.Port{"result": compositePort(array, ""), "iterations": compositePort(integer, ""), "termination": compositePort(text, "")}}
+			loop := contract.Node{
+				Type: "loop",
+				Loop: &contract.LoopNode{
+					MaxIterations: 2,
+					Until:         "iteration.index == 1",
+					Body:          plan.Pipelines[plan.Root].Spec.Graph,
+				},
+				Outputs: map[string]contract.Port{
+					"result":      compositePort(array, ""),
+					"iterations":  compositePort(integer, ""),
+					"termination": compositePort(text, ""),
+				},
+			}
 			child := *plan.Pipelines[plan.Root]
-			child.Spec.Graph = contract.Graph{Nodes: map[string]contract.Node{"repeat": loop}, Outputs: map[string]contract.Port{"result": compositePort(array, "nodes.repeat.outputs.result"), "iterations": compositePort(integer, "nodes.repeat.outputs.iterations")}}
+			child.Spec.Graph = contract.Graph{
+				Nodes: map[string]contract.Node{"repeat": loop},
+				Outputs: map[string]contract.Port{
+					"result":     compositePort(array, "nodes.repeat.outputs.result"),
+					"iterations": compositePort(integer, "nodes.repeat.outputs.iterations"),
+				},
+			}
 			child.Spec.Limits = contract.Limits{MaxConcurrentNodes: 1, MaxModelCalls: cap, MaxNodeInstances: 20, Timeout: "40s"}
 			plan.Pipelines["child.yaml"] = &child
-			node := contract.Node{Type: "pipeline", Pipeline: &contract.PipelineNode{File: "child.yaml", Permissions: contract.Permissions{Models: []string{"model"}}},
-				Outputs: map[string]contract.Port{"result": compositePort(array, ""), "iterations": compositePort(integer, "")}}
-			plan.Pipelines[plan.Root].Spec.Graph = contract.Graph{Nodes: map[string]contract.Node{"child": node}, Outputs: map[string]contract.Port{"result": compositePort(array, "nodes.child.outputs.result"), "iterations": compositePort(integer, "nodes.child.outputs.iterations")}}
+			node := contract.Node{
+				Type:     "pipeline",
+				Pipeline: &contract.PipelineNode{File: "child.yaml", Permissions: contract.Permissions{Models: []string{"model"}}},
+				Outputs:  map[string]contract.Port{"result": compositePort(array, ""), "iterations": compositePort(integer, "")},
+			}
+			plan.Pipelines[plan.Root].Spec.Graph = contract.Graph{
+				Nodes: map[string]contract.Node{"child": node},
+				Outputs: map[string]contract.Port{
+					"result":     compositePort(array, "nodes.child.outputs.result"),
+					"iterations": compositePort(integer, "nodes.child.outputs.iterations"),
+				},
+			}
 			ctx := context.Background()
 			if err := r.Start(ctx); err != nil {
 				t.Fatal(err)
@@ -234,7 +286,11 @@ func TestRuntimeNestedPipelineLoopForeachUsesAncestorBudgets(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				if len(children) != 1 || len(children[0].Scopes) != 2 || children[0].Scopes[1].ID != parent || children[0].Permissions == nil || !reflect.DeepEqual(children[0].Permissions.Models, []string{"model"}) {
+				if len(children) != 1 ||
+					len(children[0].Scopes) != 2 ||
+					children[0].Scopes[1].ID != parent ||
+					children[0].Permissions == nil ||
+					!reflect.DeepEqual(children[0].Permissions.Models, []string{"model"}) {
 					return fmt.Errorf("child scopes/permissions=%+v", children)
 				}
 				scopes, err := store.ReadExecutionScopes(ctx, tx, children[0])
@@ -260,11 +316,19 @@ func TestRuntimeLoopReadsOnlyCurrentChildAndRetainsIterationEvidence(t *testing.
 	plan := runtimePlan("")
 	text, integer := `{"type":"string"}`, `{"type":"integer"}`
 	body := contract.Graph{
-		Nodes:   map[string]contract.Node{"gate": {Type: "switch", Switch: &contract.SwitchNode{Default: "done"}, Outputs: map[string]contract.Port{"route": compositePort(text, "")}}},
+		Nodes: map[string]contract.Node{"gate": {
+			Type:    "switch",
+			Switch:  &contract.SwitchNode{Default: "done"},
+			Outputs: map[string]contract.Port{"route": compositePort(text, "")},
+		}},
 		Outputs: map[string]contract.Port{"branch": compositePort(text, "nodes.gate.outputs.route")},
 	}
 	loop := contract.Node{Type: "loop", Loop: &contract.LoopNode{MaxIterations: 70, Until: "iteration.index == 69", Body: body},
-		Outputs: map[string]contract.Port{"branch": compositePort(text, ""), "iterations": compositePort(integer, ""), "termination": compositePort(text, "")}}
+		Outputs: map[string]contract.Port{
+			"branch":      compositePort(text, ""),
+			"iterations":  compositePort(integer, ""),
+			"termination": compositePort(text, ""),
+		}}
 	plan.Pipelines[plan.Root].Spec.Graph = contract.Graph{Nodes: map[string]contract.Node{"repeat": loop},
 		Outputs: map[string]contract.Port{"iterations": compositePort(integer, "nodes.repeat.outputs.iterations")}}
 	id := admitRuntimeRun(t, r, plan)
@@ -291,12 +355,20 @@ func TestRuntimeLoopReadsOnlyCurrentChildAndRetainsIterationEvidence(t *testing.
 		if err != nil {
 			return err
 		}
-		if len(children) != 1 || children[0].IterationIndex == nil || *children[0].IterationIndex != 69 || string(children[0].Outputs["branch"].JSON) != `"done"` {
+		if len(children) != 1 ||
+			children[0].IterationIndex == nil ||
+			*children[0].IterationIndex != 69 ||
+			string(children[0].Outputs["branch"].JSON) != `"done"` {
 			return fmt.Errorf("scheduler loaded historical iterations: %+v", children)
 		}
 		var graphs, successes int
-		if err := tx.QueryRow(ctx, `SELECT count(*),count(*) FILTER (WHERE state='succeeded')
-			FROM knotra_execution_graphs WHERE run_id=$1 AND parent_instance_id=$2`, id, execution.StableID("n", id+"/root/repeat")).Scan(&graphs, &successes); err != nil {
+		if err := tx.QueryRow(
+			ctx,
+			`SELECT count(*),count(*) FILTER (WHERE state='succeeded')
+			FROM knotra_execution_graphs WHERE run_id=$1 AND parent_instance_id=$2`,
+			id,
+			execution.StableID("n", id+"/root/repeat"),
+		).Scan(&graphs, &successes); err != nil {
 			return err
 		}
 		if graphs != 70 || successes != 70 {
@@ -429,19 +501,44 @@ func TestRuntimeForeachCollectsDockerArtifactsInOrder(t *testing.T) {
 			plan := resourceCodePlan(t, r, 0)
 			code := plan.Pipelines[plan.Root].Spec.Nodes["a"]
 			code.Inputs = map[string]contract.Port{"item": compositePort(`{"type":"integer"}`, "inputs.item")}
-			code.Outputs = map[string]contract.Port{"file": {Artifact: &contract.ArtifactPort{MediaTypes: []string{"text/plain"}}, Collect: &contract.Collect{Path: "report.txt", MediaType: "text/plain"}}}
-			code.Code.Command = []string{"python", "-c", `import json,os;v=json.load(open(os.environ["KNOTRA_INPUT_JSON"]))["values"]["item"];open("report.txt","w").write(str(v));json.dump({},open(os.environ["KNOTRA_OUTPUT_JSON"],"w"))`}
+			code.Outputs = map[string]contract.Port{"file": {
+				Artifact: &contract.ArtifactPort{MediaTypes: []string{"text/plain"}},
+				Collect:  &contract.Collect{Path: "report.txt", MediaType: "text/plain"},
+			}}
+			code.Code.Command = []string{
+				"python",
+				"-c",
+				`import json,os;v=json.load(open(os.environ["KNOTRA_INPUT_JSON"]))["values"]["item"];open("report.txt","w").write(str(v));json.dump({},open(os.environ["KNOTRA_OUTPUT_JSON"],"w"))`,
+			}
 			items := []int{3, 1, 2}[:count]
 			raw, _ := json.Marshal(items)
 			bodyPort := code.Outputs["file"]
 			bodyPort.Collect, bodyPort.Bind = nil, &contract.Binding{From: "nodes.write.outputs.file"}
 			collection := contract.Port{Artifact: &contract.ArtifactPort{MediaTypes: []string{"text/plain"}, Collection: true}}
-			node := contract.Node{Type: "foreach", Inputs: map[string]contract.Port{"items": {Schema: json.RawMessage(`{"type":"array","items":{"type":"integer"}}`), Bind: &contract.Binding{Value: raw}}}, Outputs: map[string]contract.Port{"files": collection},
-				Foreach: &contract.ForeachNode{Over: "items", Concurrency: 2, With: map[string]contract.Binding{"item": {From: "iteration.item"}}, Body: contract.Graph{
-					Inputs: map[string]contract.Port{"item": compositePort(`{"type":"integer"}`, "")}, Nodes: map[string]contract.Node{"write": code}, Outputs: map[string]contract.Port{"files": bodyPort}}}}
+			node := contract.Node{
+				Type: "foreach",
+				Inputs: map[string]contract.Port{"items": {
+					Schema: json.RawMessage(`{"type":"array","items":{"type":"integer"}}`),
+					Bind:   &contract.Binding{Value: raw},
+				}},
+				Outputs: map[string]contract.Port{"files": collection},
+				Foreach: &contract.ForeachNode{
+					Over:        "items",
+					Concurrency: 2,
+					With:        map[string]contract.Binding{"item": {From: "iteration.item"}},
+					Body: contract.Graph{
+						Inputs:  map[string]contract.Port{"item": compositePort(`{"type":"integer"}`, "")},
+						Nodes:   map[string]contract.Node{"write": code},
+						Outputs: map[string]contract.Port{"files": bodyPort},
+					},
+				},
+			}
 			export := collection
 			export.Bind = &contract.Binding{From: "nodes.map.outputs.files"}
-			plan.Pipelines[plan.Root].Spec.Graph = contract.Graph{Nodes: map[string]contract.Node{"map": node}, Outputs: map[string]contract.Port{"files": export}}
+			plan.Pipelines[plan.Root].Spec.Graph = contract.Graph{
+				Nodes:   map[string]contract.Node{"map": node},
+				Outputs: map[string]contract.Port{"files": export},
+			}
 			id := admitRuntimeRun(t, r, plan)
 			if err := r.Start(ctx); err != nil {
 				t.Fatal(err)
@@ -566,9 +663,13 @@ func TestRuntimeGraphScanFinishesLargeHumanWaitAndCancelsEveryChild(t *testing.T
 		}
 	}
 	var open, graphs int
-	if err := r.Store.Pool.QueryRow(ctx, `SELECT
+	if err := r.Store.Pool.QueryRow(
+		ctx,
+		`SELECT
 		(SELECT count(*) FROM knotra_requests WHERE run_id=$1 AND status='open'),
-		(SELECT count(*) FROM knotra_execution_graphs WHERE run_id=$1)`, id).Scan(&open, &graphs); err != nil || open != len(items) || graphs != len(items)+1 {
+		(SELECT count(*) FROM knotra_execution_graphs WHERE run_id=$1)`,
+		id,
+	).Scan(&open, &graphs); err != nil || open != len(items) || graphs != len(items)+1 {
 		t.Fatalf("waiting bodies open=%d graphs=%d error=%v", open, graphs, err)
 	}
 	// Finish the bounded scan and verify that waiting alone creates no more

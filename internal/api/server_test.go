@@ -266,7 +266,15 @@ spec:
 		if index == 101 {
 			instance = "other"
 		}
-		if err := db.Observe(context.Background(), protocol.Event{RunID: id, InstanceID: instance, Type: "model.delta", Data: map[string]any{"content": fmt.Sprint(index)}}); err != nil {
+		if err := db.Observe(
+			context.Background(),
+			protocol.Event{
+				RunID:      id,
+				InstanceID: instance,
+				Type:       "model.delta",
+				Data:       map[string]any{"content": fmt.Sprint(index)},
+			},
+		); err != nil {
 			t.Fatal(err)
 		}
 	}

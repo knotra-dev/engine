@@ -33,7 +33,14 @@ func TestLargeInstanceCollectionPagesWithoutLosingData(t *testing.T) {
 		documents := [][]byte{}
 		documentBytes := 0
 		for i := seen; i < count && i < seen+101; i++ {
-			b, err := json.Marshal(protocol.Instance{ID: fmt.Sprintf("%05d", i), NodeID: "work", Scope: "pipeline.yaml", Status: "succeeded", Inputs: preview, Outputs: preview})
+			b, err := json.Marshal(protocol.Instance{
+				ID:      fmt.Sprintf("%05d", i),
+				NodeID:  "work",
+				Scope:   "pipeline.yaml",
+				Status:  "succeeded",
+				Inputs:  preview,
+				Outputs: preview,
+			})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -48,7 +55,10 @@ func TestLargeInstanceCollectionPagesWithoutLosingData(t *testing.T) {
 			t.Fatalf("page after %d: %v", seen, err)
 		}
 		for _, instance := range page.Items {
-			if instance.ID != fmt.Sprintf("%05d", seen) || instance.DataTruncated || !reflect.DeepEqual(instance.Inputs, preview) || !reflect.DeepEqual(instance.Outputs, preview) {
+			if instance.ID != fmt.Sprintf("%05d", seen) ||
+				instance.DataTruncated ||
+				!reflect.DeepEqual(instance.Inputs, preview) ||
+				!reflect.DeepEqual(instance.Outputs, preview) {
 				t.Fatalf("lost instance or context at %d: %s", seen, instance.ID)
 			}
 			b, err := json.Marshal(instance)
@@ -83,7 +93,14 @@ func TestRunInstancePages(t *testing.T) {
 	if err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		for i := range 205 {
 			instanceID := fmt.Sprintf("%05d", i)
-			b, err := json.Marshal(protocol.Instance{ID: instanceID, NodeID: "work", Scope: "pipeline.yaml", Status: "succeeded", Inputs: preview, Outputs: preview})
+			b, err := json.Marshal(protocol.Instance{
+				ID:      instanceID,
+				NodeID:  "work",
+				Scope:   "pipeline.yaml",
+				Status:  "succeeded",
+				Inputs:  preview,
+				Outputs: preview,
+			})
 			if err != nil {
 				return err
 			}
@@ -141,12 +158,22 @@ func TestInstancePageCountAndOversizedRecord(t *testing.T) {
 	if err != nil || len(partial.Items) != 100 || partial.NextCursor == nil || *partial.NextCursor != "00099" {
 		t.Fatalf("count bound lost its cursor: %d, %v", len(partial.Items), err)
 	}
-	large, err := json.Marshal(protocol.Instance{ID: "large", NodeID: "work", Scope: "pipeline.yaml", Status: "failed", Reason: strings.Repeat("x", MaxInstancePageBytes+1)})
+	large, err := json.Marshal(protocol.Instance{
+		ID:     "large",
+		NodeID: "work",
+		Scope:  "pipeline.yaml",
+		Status: "failed",
+		Reason: strings.Repeat("x", MaxInstancePageBytes+1),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	page, err := instancePage([][]byte{large, documents[0]})
-	if err != nil || len(page.Items) != 1 || page.NextCursor == nil || *page.NextCursor != "large" || len(page.Items[0].Reason) != MaxInstancePageBytes+1 {
+	if err != nil ||
+		len(page.Items) != 1 ||
+		page.NextCursor == nil ||
+		*page.NextCursor != "large" ||
+		len(page.Items[0].Reason) != MaxInstancePageBytes+1 {
 		t.Fatalf("oversized record lost data or cursor: %v", err)
 	}
 }
@@ -166,7 +193,14 @@ func TestInstancePagesKeepCursorWhenSQLJSONHasMoreWhitespace(t *testing.T) {
 	if err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		for i := range 40 {
 			instanceID := fmt.Sprintf("%05d", i)
-			b, err := json.Marshal(protocol.Instance{ID: instanceID, NodeID: "work", Scope: "pipeline.yaml", Status: "succeeded", Inputs: preview, Outputs: preview})
+			b, err := json.Marshal(protocol.Instance{
+				ID:      instanceID,
+				NodeID:  "work",
+				Scope:   "pipeline.yaml",
+				Status:  "succeeded",
+				Inputs:  preview,
+				Outputs: preview,
+			})
 			if err != nil {
 				return err
 			}

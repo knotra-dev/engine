@@ -29,6 +29,7 @@ func (s *Store) BeginOwnedOperation(ctx context.Context, token execution.Ownersh
 	if id == "" || (kind != "" && kind != "model" && kind != "tool") || (effect != "read" && effect != "write" && effect != "unknown") {
 		return OperationState{}, errors.New("invalid external operation intent")
 	}
+
 	var state OperationState
 	err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		run, err := s.LockOwnedAttempt(ctx, tx, token)
@@ -66,6 +67,7 @@ func (s *Store) BeginOwnedOperation(ctx context.Context, token execution.Ownersh
 		if storedOperationIntent.RunID != token.RunID || storedOperationIntent.Kind != kind || storedOperationIntent.Effect != effect {
 			return ErrConflict
 		}
+
 		state.Started = storedOperationIntent.AdmittedAt != nil
 		if state.Started || state.Completed {
 			return nil
@@ -92,10 +94,12 @@ func (s *Store) AdmitOperation(ctx context.Context, token execution.Ownership, i
 	if kind != "model" && kind != "tool" {
 		return fmt.Errorf("unknown budget kind %q", kind)
 	}
+
 	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		if _, err := s.LockOwnedAttempt(ctx, tx, token); err != nil {
 			return err
 		}
+
 		var admitted *time.Time
 		admitted, err := db.New(tx).LockOperationAdmission(ctx, db.LockOperationAdmissionParams{
 			ID:                  id,
@@ -112,6 +116,7 @@ func (s *Store) AdmitOperation(ctx context.Context, token execution.Ownership, i
 		if err != nil {
 			return err
 		}
+
 		rows, err := db.New(tx).LockOperationScopes(ctx, db.LockOperationScopesParams{
 			RunID:               token.RunID,
 			InstanceID:          token.InstanceID,
@@ -121,6 +126,7 @@ func (s *Store) AdmitOperation(ctx context.Context, token execution.Ownership, i
 		if err != nil {
 			return err
 		}
+
 		var scopes []execution.BudgetScope
 		var hasRoot bool
 		for _, record := range rows {
@@ -149,6 +155,7 @@ func (s *Store) AdmitOperation(ctx context.Context, token execution.Ownership, i
 		if err := reserveCalls(ctx, tx, token.RunID, kind, scopes); err != nil {
 			return err
 		}
+
 		_, err = db.New(tx).SetOperationAdmitted(ctx, db.SetOperationAdmittedParams{ID: id, AdmittedAt: new(run.Now)})
 		return err
 	})
@@ -158,6 +165,7 @@ func (s *Store) CompleteOwnedOperation(ctx context.Context, token execution.Owne
 	if !json.Valid(response) {
 		return errors.New("invalid external operation response")
 	}
+
 	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		if _, err := s.LockOwnedAttempt(ctx, tx, token); err != nil {
 			return err
@@ -184,6 +192,7 @@ func (s *Store) CompleteOwnedOperation(ctx context.Context, token execution.Owne
 			}
 			return nil
 		}
+
 		_, err = db.New(tx).SetOperationCompleted(ctx, db.SetOperationCompletedParams{ID: id, Response: []byte(response)})
 		return err
 	})

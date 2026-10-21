@@ -20,6 +20,7 @@ func (s *Store) StageLostAttempt(ctx context.Context, tx pgx.Tx, token execution
 	if err := token.Validate(); err != nil {
 		return false, err
 	}
+
 	run, err := LockExecutionRun(ctx, tx, token.RunID)
 	if err != nil {
 		return false, err
@@ -27,6 +28,7 @@ func (s *Store) StageLostAttempt(ctx context.Context, tx pgx.Tx, token execution
 	if err := checkExecutionVersion(run); err != nil {
 		return false, err
 	}
+
 	q := db.New(tx)
 	attempt, err := q.LockLostAttempt(ctx, db.LockLostAttemptParams{RunID: token.RunID, InstanceID: token.InstanceID, Number: token.Number})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -35,9 +37,14 @@ func (s *Store) StageLostAttempt(ctx context.Context, tx pgx.Tx, token execution
 	if err != nil {
 		return false, err
 	}
-	if attempt.State != "claimed" || attempt.Owner == nil || *attempt.Owner != token.WorkerID || attempt.OwnershipGeneration != token.Generation || len(attempt.Outcome) > 0 {
+	if attempt.State != "claimed" ||
+		attempt.Owner == nil ||
+		*attempt.Owner != token.WorkerID ||
+		attempt.OwnershipGeneration != token.Generation ||
+		len(attempt.Outcome) > 0 {
 		return false, nil
 	}
+
 	key, err := token.OutcomeKey()
 	if err != nil {
 		return false, err
@@ -45,6 +52,7 @@ func (s *Store) StageLostAttempt(ctx context.Context, tx pgx.Tx, token execution
 	if attempt.OutcomeKey == nil || *attempt.OutcomeKey != key || attempt.LeaseExpiresAt == nil {
 		return false, ErrConflict
 	}
+
 	run.Now, err = q.DatabaseTime(ctx)
 	if err != nil {
 		return false, err
@@ -52,6 +60,7 @@ func (s *Store) StageLostAttempt(ctx context.Context, tx pgx.Tx, token execution
 	if attempt.LeaseExpiresAt.After(run.Now) {
 		return false, nil
 	}
+
 	var request execution.ExecuteRequest
 	if err := json.Unmarshal(attempt.ExecutionRequest, &request); err != nil {
 		return false, err
@@ -59,9 +68,18 @@ func (s *Store) StageLostAttempt(ctx context.Context, tx pgx.Tx, token execution
 	if request.RunID != token.RunID || request.InstanceID != token.InstanceID || request.Attempt != token.Number {
 		return false, ErrConflict
 	}
-	lost := &execution.Failure{Code: "OUTCOME_UNKNOWN", Message: "attempt lease expired without a verified durable final outcome", Unknown: true,
-		OperationID: fmt.Sprintf("%s/attempt/%d", token.InstanceID, token.Number), CanRetryIfNotExecuted: request.Node.Type != "agent"}
-	operation, err := q.FirstUnconfirmedOperation(ctx, db.FirstUnconfirmedOperationParams{RunID: token.RunID, InstanceID: new(token.InstanceID), AttemptNumber: new(token.Number)})
+
+	lost := &execution.Failure{
+		Code:                  "OUTCOME_UNKNOWN",
+		Message:               "attempt lease expired without a verified durable final outcome",
+		Unknown:               true,
+		OperationID:           fmt.Sprintf("%s/attempt/%d", token.InstanceID, token.Number),
+		CanRetryIfNotExecuted: request.Node.Type != "agent",
+	}
+	operation, err := q.FirstUnconfirmedOperation(
+		ctx,
+		db.FirstUnconfirmedOperationParams{RunID: token.RunID, InstanceID: new(token.InstanceID), AttemptNumber: new(token.Number)},
+	)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return false, err
 	}
@@ -76,11 +94,23 @@ func (s *Store) StageLostAttempt(ctx context.Context, tx pgx.Tx, token execution
 	if err != nil {
 		return false, err
 	}
+
 	cause, err := json.Marshal(lost)
 	if err != nil {
 		return false, err
 	}
-	tag, err := q.SetLostAttempt(ctx, db.SetLostAttemptParams{RunID: token.RunID, InstanceID: token.InstanceID, Number: token.Number, State: state, Result: result, Failure: cause})
+
+	tag, err := q.SetLostAttempt(
+		ctx,
+		db.SetLostAttemptParams{
+			RunID:      token.RunID,
+			InstanceID: token.InstanceID,
+			Number:     token.Number,
+			State:      state,
+			Result:     result,
+			Failure:    cause,
+		},
+	)
 	if err != nil {
 		return false, err
 	}
@@ -88,7 +118,19 @@ func (s *Store) StageLostAttempt(ctx context.Context, tx pgx.Tx, token execution
 		return false, ErrConflict
 	}
 	if state == "cancelled" {
-		if err := s.ProjectExecution(ctx, tx, execution.Projection{RunID: token.RunID, InstanceID: token.InstanceID, Kind: "diagnostic", Status: "attempt_lost", Failure: lost, Attempt: token.Number, Time: run.Now}); err != nil {
+		if err := s.ProjectExecution(
+			ctx,
+			tx,
+			execution.Projection{
+				RunID:      token.RunID,
+				InstanceID: token.InstanceID,
+				Kind:       "diagnostic",
+				Status:     "attempt_lost",
+				Failure:    lost,
+				Attempt:    token.Number,
+				Time:       run.Now,
+			},
+		); err != nil {
 			return false, err
 		}
 	}

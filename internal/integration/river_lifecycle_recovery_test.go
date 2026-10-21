@@ -53,7 +53,12 @@ func TestRiverStartupProcessCrashBoundaries(t *testing.T) {
 			parameters := dsn.Query()
 			parameters.Set("pool_max_conns", "1")
 			dsn.RawQuery = parameters.Encode()
-			options := app.Options{Listen: unusedAddress(t), DatabaseURL: dsn.String(), DataDir: filepath.Join(work, "engine"), Profiles: []string{profilePath}}
+			options := app.Options{
+				Listen:      unusedAddress(t),
+				DatabaseURL: dsn.String(),
+				DataDir:     filepath.Join(work, "engine"),
+				Profiles:    []string{profilePath},
+			}
 			optionsPath := filepath.Join(work, "server.json")
 			writeJSON(t, optionsPath, options)
 			api := &client.Client{BaseURL: "http://" + options.Listen, StateDir: filepath.Join(work, "client")}
@@ -62,12 +67,23 @@ func TestRiverStartupProcessCrashBoundaries(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer admin.Close()
-			pkg := contract.Package{Entrypoint: "pipeline.yaml", Source: routingHumanPipeline, Files: []contract.File{{Path: "pipeline.yaml", Content: []byte(routingHumanPipeline)}}}
+			pkg := contract.Package{
+				Entrypoint: "pipeline.yaml",
+				Source:     routingHumanPipeline,
+				Files:      []contract.File{{Path: "pipeline.yaml", Content: []byte(routingHumanPipeline)}},
+			}
 			plan, diagnostics := contract.Compile(pkg, nil)
 			if contract.HasErrors(diagnostics) {
 				t.Fatal(diagnostics)
 			}
-			definition := protocol.Definition{ID: uuid.NewString(), Name: "routing-human", Title: "routing-human", PackageDigest: plan.Digest, CreatedAt: time.Now().UTC(), Package: pkg}
+			definition := protocol.Definition{
+				ID:            uuid.NewString(),
+				Name:          "routing-human",
+				Title:         "routing-human",
+				PackageDigest: plan.Digest,
+				CreatedAt:     time.Now().UTC(),
+				Package:       pkg,
+			}
 			if err := pgx.BeginFunc(ctx, admin.Pool, func(tx pgx.Tx) error {
 				var err error
 				definition, err = store.PutDefinition(ctx, tx, definition)
@@ -112,8 +128,15 @@ func TestRiverStartupProcessCrashBoundaries(t *testing.T) {
 				if mode == "registered_before_binding" {
 					event, condition = "UPDATE", "OLD.delivery_client_id IS NULL AND NEW.delivery_client_id IS NOT NULL"
 				}
-				if _, err := admin.Pool.Exec(ctx, fmt.Sprintf(`CREATE FUNCTION startup_crash_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273657); RETURN NEW; END $$;
-     CREATE TRIGGER startup_crash_barrier BEFORE %s ON knotra_workers FOR EACH ROW WHEN (%s) EXECUTE FUNCTION startup_crash_barrier()`, event, condition)); err != nil {
+				if _, err := admin.Pool.Exec(
+					ctx,
+					fmt.Sprintf(
+						`CREATE FUNCTION startup_crash_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273657); RETURN NEW; END $$;
+     CREATE TRIGGER startup_crash_barrier BEFORE %s ON knotra_workers FOR EACH ROW WHEN (%s) EXECUTE FUNCTION startup_crash_barrier()`,
+						event,
+						condition,
+					),
+				); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -121,7 +144,11 @@ func TestRiverStartupProcessCrashBoundaries(t *testing.T) {
 			first := startEngineProcess(t, ctx, optionsPath, logPath, nil)
 			awaitLifecycleBoundary(t, ctx, first, logPath, func() bool {
 				var blocked bool
-				if err := admin.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_pids(pid)))`, int64(barrier.PgConn().PID())).Scan(&blocked); err != nil {
+				if err := admin.Pool.QueryRow(
+					ctx,
+					`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_pids(pid)))`,
+					int64(barrier.PgConn().PID()),
+				).Scan(&blocked); err != nil {
 					t.Fatal(err)
 				}
 				return blocked
@@ -184,7 +211,10 @@ func TestRiverStartupProcessCrashBoundaries(t *testing.T) {
 
 			if mode == "migration_before_commit" {
 				var rolledBack bool
-				if err := admin.Pool.QueryRow(ctx, `SELECT to_regclass('river_notification') IS NULL AND to_regclass('river_client') IS NOT NULL AND to_regclass('river_client_queue') IS NOT NULL`).Scan(&rolledBack); err != nil || !rolledBack {
+				if err := admin.Pool.QueryRow(
+					ctx,
+					`SELECT to_regclass('river_notification') IS NULL AND to_regclass('river_client') IS NOT NULL AND to_regclass('river_client_queue') IS NOT NULL`,
+				).Scan(&rolledBack); err != nil || !rolledBack {
 					t.Fatalf("migration 7 did not roll back atomically: %t %v", rolledBack, err)
 				}
 			}
@@ -197,11 +227,23 @@ func TestRiverStartupProcessCrashBoundaries(t *testing.T) {
 				t.Fatalf("startup lost the retained definition: %+v %v", saved, err)
 			}
 			var accepted struct{ Run protocol.Run }
-			if err := api.Command(ctx, "/runs", map[string]any{"definitionId": definition.ID, "profile": profile.Metadata.Name}, uuid.NewString(), &accepted); err != nil {
+			if err := api.Command(
+				ctx,
+				"/runs",
+				map[string]any{"definitionId": definition.ID, "profile": profile.Metadata.Name},
+				uuid.NewString(),
+				&accepted,
+			); err != nil {
 				t.Fatal(err)
 			}
 			request := awaitHuman(t, ctx, api, accepted.Run.ID)
-			if err := api.Command(ctx, "/requests/"+request.ID+"/response", map[string]any{"outputs": map[string]any{"approved": true}}, uuid.NewString(), new(any)); err != nil {
+			if err := api.Command(
+				ctx,
+				"/requests/"+request.ID+"/response",
+				map[string]any{"outputs": map[string]any{"approved": true}},
+				uuid.NewString(),
+				new(any),
+			); err != nil {
 				t.Fatal(err)
 			}
 			final := awaitTerminal(t, ctx, api, accepted.Run.ID)
@@ -228,7 +270,13 @@ func TestRiverShutdownProcessBoundaries(t *testing.T) {
 		t.Skip("set KNOTRA_TEST_RECOVERY and KNOTRA_TEST_DATABASE_URL for service shutdown checks")
 	}
 	t.Setenv("KNOTRA_LIFECYCLE_FIXTURE_KEY", "fixture-key")
-	for _, mode := range []string{"drain_before_commit", "draining_before_response", "graceful_active_response", "lease_lost_active_response", "forced_active_timeout"} {
+	for _, mode := range []string{
+		"drain_before_commit",
+		"draining_before_response",
+		"graceful_active_response",
+		"lease_lost_active_response",
+		"forced_active_timeout",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 			defer cancel()
@@ -254,7 +302,10 @@ func TestRiverShutdownProcessBoundaries(t *testing.T) {
 				select {
 				case <-respond.Done():
 					w.Header().Set("Content-Type", "application/json")
-					_, _ = fmt.Fprint(w, `{"status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"knotra_output","arguments":"{\"answer\":42}"}]}`)
+					_, _ = fmt.Fprint(
+						w,
+						`{"status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"knotra_output","arguments":"{\"answer\":42}"}]}`,
+					)
 				case <-request.Context().Done():
 					interrupted.Store(true)
 				}
@@ -265,10 +316,20 @@ func TestRiverShutdownProcessBoundaries(t *testing.T) {
 			profile.Spec.Sandboxes = nil
 			profile.Spec.Limits.Timeout = "3m"
 			profile.Spec.Secrets = map[string]contract.SecretSource{"fixture": {Env: "KNOTRA_LIFECYCLE_FIXTURE_KEY"}}
-			profile.Spec.Models = map[string]contract.ModelConnection{"cloud": {Provider: "openai", Model: "fixture-model", BaseURL: provider.URL, Auth: map[string]contract.Credential{"key": {SecretRef: "fixture"}}}}
+			profile.Spec.Models = map[string]contract.ModelConnection{"cloud": {
+				Provider: "openai",
+				Model:    "fixture-model",
+				BaseURL:  provider.URL,
+				Auth:     map[string]contract.Credential{"key": {SecretRef: "fixture"}},
+			}}
 			profilePath := filepath.Join(work, "profile.json")
 			writeJSON(t, profilePath, profile)
-			options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), DataDir: filepath.Join(work, "engine"), Profiles: []string{profilePath}}
+			options := app.Options{
+				Listen:      unusedAddress(t),
+				DatabaseURL: databaseSchema(t, ctx),
+				DataDir:     filepath.Join(work, "engine"),
+				Profiles:    []string{profilePath},
+			}
 			optionsPath := filepath.Join(work, "server.json")
 			writeJSON(t, optionsPath, options)
 			api := &client.Client{BaseURL: "http://" + options.Listen, StateDir: filepath.Join(work, "client")}
@@ -285,12 +346,22 @@ func TestRiverShutdownProcessBoundaries(t *testing.T) {
 			if mode == "forced_active_timeout" {
 				source = strings.Replace(source, "      type: llm\n", "      type: llm\n      execution: {retry: {maxAttempts: 2, backoff: 1ms}}\n", 1)
 			}
-			pkg := contract.Package{Entrypoint: "pipeline.yaml", Source: source, Files: []contract.File{{Path: "pipeline.yaml", Content: []byte(source)}}}
+			pkg := contract.Package{
+				Entrypoint: "pipeline.yaml",
+				Source:     source,
+				Files:      []contract.File{{Path: "pipeline.yaml", Content: []byte(source)}},
+			}
 			if err := api.Command(ctx, "/definitions", map[string]any{"package": pkg}, uuid.NewString(), &definition); err != nil {
 				t.Fatal(err)
 			}
 			var accepted struct{ Run protocol.Run }
-			if err := api.Command(ctx, "/runs", map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name}, uuid.NewString(), &accepted); err != nil {
+			if err := api.Command(
+				ctx,
+				"/runs",
+				map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name},
+				uuid.NewString(),
+				&accepted,
+			); err != nil {
 				t.Fatal(err)
 			}
 			select {
@@ -321,17 +392,24 @@ func TestRiverShutdownProcessBoundaries(t *testing.T) {
 				if _, err := barrier.Exec(ctx, "SELECT pg_advisory_lock(918273658)"); err != nil {
 					t.Fatal(err)
 				}
-				if _, err := admin.Pool.Exec(ctx, `CREATE FUNCTION shutdown_crash_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273658); RETURN NEW; END $$;
-     CREATE TRIGGER shutdown_crash_barrier BEFORE UPDATE ON knotra_workers FOR EACH ROW WHEN (NOT OLD.draining AND NEW.draining) EXECUTE FUNCTION shutdown_crash_barrier()`); err != nil {
+				if _, err := admin.Pool.Exec(
+					ctx,
+					`CREATE FUNCTION shutdown_crash_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273658); RETURN NEW; END $$;
+     CREATE TRIGGER shutdown_crash_barrier BEFORE UPDATE ON knotra_workers FOR EACH ROW WHEN (NOT OLD.draining AND NEW.draining) EXECUTE FUNCTION shutdown_crash_barrier()`,
+				); err != nil {
 					t.Fatal(err)
 				}
 			}
 			if mode == "lease_lost_active_response" {
 				var terminated bool
-				if err := admin.Pool.QueryRow(ctx, `SELECT pg_terminate_backend(pid) FROM pg_locks
+				if err := admin.Pool.QueryRow(
+					ctx,
+					`SELECT pg_terminate_backend(pid) FROM pg_locks
                     WHERE locktype='advisory' AND granted AND objsubid=1
                     AND classid=((hashtextextended($1,0)>>32)&4294967295)::oid
-                    AND objid=(hashtextextended($1,0)&4294967295)::oid`, "knotra.engine."+admin.EngineID).Scan(&terminated); err != nil || !terminated {
+                    AND objid=(hashtextextended($1,0)&4294967295)::oid`,
+					"knotra.engine."+admin.EngineID,
+				).Scan(&terminated); err != nil || !terminated {
 					t.Fatalf("did not terminate the service ownership connection: %t %v", terminated, err)
 				}
 			} else if err := first.command.Process.Signal(os.Interrupt); err != nil {
@@ -340,7 +418,11 @@ func TestRiverShutdownProcessBoundaries(t *testing.T) {
 			awaitLifecycleBoundary(t, ctx, first, logPath, func() bool {
 				var reached bool
 				if barrier != nil {
-					if err := admin.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_pids(pid)))`, int64(barrier.PgConn().PID())).Scan(&reached); err != nil {
+					if err := admin.Pool.QueryRow(
+						ctx,
+						`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_pids(pid)))`,
+						int64(barrier.PgConn().PID()),
+					).Scan(&reached); err != nil {
 						t.Fatal(err)
 					}
 				} else {
@@ -353,15 +435,28 @@ func TestRiverShutdownProcessBoundaries(t *testing.T) {
 			assertLifecycleListenerClosed(t, ctx, options.Listen)
 			var draining bool
 			var debits, operations, completed, slots int
-			if err := admin.Pool.QueryRow(ctx, `SELECT (SELECT draining FROM knotra_workers WHERE id=$2),
+			if err := admin.Pool.QueryRow(
+				ctx,
+				`SELECT (SELECT draining FROM knotra_workers WHERE id=$2),
     (SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='model'),
     (SELECT count(*) FROM knotra_operations WHERE run_id=$1 AND admitted_at IS NOT NULL),
     (SELECT count(*) FROM knotra_operations WHERE run_id=$1 AND completed),
-    (SELECT sum(active_attempts) FROM knotra_execution_scopes WHERE run_id=$1)`, accepted.Run.ID, workerID).Scan(&draining, &debits, &operations, &completed, &slots); err != nil {
+    (SELECT sum(active_attempts) FROM knotra_execution_scopes WHERE run_id=$1)`,
+				accepted.Run.ID,
+				workerID,
+			).Scan(&draining, &debits, &operations, &completed, &slots); err != nil {
 				t.Fatal(err)
 			}
 			if draining != (barrier == nil) || debits != 1 || operations != 1 || completed != 0 || slots != 1 || calls.Load() != 1 {
-				t.Fatalf("shutdown barrier draining/debits/operations/completed/slots/calls=%t/%d/%d/%d/%d/%d", draining, debits, operations, completed, slots, calls.Load())
+				t.Fatalf(
+					"shutdown barrier draining/debits/operations/completed/slots/calls=%t/%d/%d/%d/%d/%d",
+					draining,
+					debits,
+					operations,
+					completed,
+					slots,
+					calls.Load(),
+				)
 			}
 			switch {
 			case graceful:
@@ -391,7 +486,9 @@ func TestRiverShutdownProcessBoundaries(t *testing.T) {
 					t.Fatal("bounded shutdown did not cancel the active request and exit", stopped.Err())
 				}
 				log, _ := os.ReadFile(logPath)
-				if first.command.ProcessState.Success() || !bytes.Contains(log, []byte("execution shutdown failed")) || !bytes.Contains(log, []byte("context deadline exceeded")) {
+				if first.command.ProcessState.Success() ||
+					!bytes.Contains(log, []byte("execution shutdown failed")) ||
+					!bytes.Contains(log, []byte("context deadline exceeded")) {
 					t.Fatalf("forced shutdown did not report its drain timeout: %s", log)
 				}
 				awaitLifecycleBoundary(t, stopped, nil, "", interrupted.Load)
@@ -425,7 +522,11 @@ func TestRiverShutdownProcessBoundaries(t *testing.T) {
 					return status == "waiting_resolution"
 				})
 				var requestID string
-				if err := admin.Pool.QueryRow(ctx, "SELECT id FROM knotra_requests WHERE run_id=$1 AND kind='resolution' AND status='open'", accepted.Run.ID).Scan(&requestID); err != nil {
+				if err := admin.Pool.QueryRow(
+					ctx,
+					"SELECT id FROM knotra_requests WHERE run_id=$1 AND kind='resolution' AND status='open'",
+					accepted.Run.ID,
+				).Scan(&requestID); err != nil {
 					t.Fatal(err)
 				}
 				resolution, err := admin.Request(ctx, requestID)
@@ -448,20 +549,45 @@ func TestRiverShutdownProcessBoundaries(t *testing.T) {
 			}
 			var attempts, workers int
 			var finalRootDeadline, finalNodeDeadline time.Time
-			if err := admin.Pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1),
+			if err := admin.Pool.QueryRow(
+				ctx,
+				`SELECT (SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1),
     (SELECT count(*) FROM knotra_workers),(SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='model'),
     (SELECT count(*) FROM knotra_operations WHERE run_id=$1 AND admitted_at IS NOT NULL),
     (SELECT sum(active_attempts) FROM knotra_execution_scopes WHERE run_id=$1),execution_deadline,
-    (SELECT deadline FROM knotra_execution_nodes WHERE run_id=$1 AND node_id='generate') FROM knotra_runs WHERE id=$1`, accepted.Run.ID).Scan(&attempts, &workers, &debits, &operations, &slots, &finalRootDeadline, &finalNodeDeadline); err != nil {
+    (SELECT deadline FROM knotra_execution_nodes WHERE run_id=$1 AND node_id='generate') FROM knotra_runs WHERE id=$1`,
+				accepted.Run.ID,
+			).Scan(&attempts, &workers, &debits, &operations, &slots, &finalRootDeadline, &finalNodeDeadline); err != nil {
 				t.Fatal(err)
 			}
-			if attempts != 1 || workers != 2 || debits != 1 || operations != 1 || slots != 0 || calls.Load() != 1 || !finalRootDeadline.Equal(rootDeadline) || !finalNodeDeadline.Equal(nodeDeadline) {
-				t.Fatalf("shutdown recovery attempts/workers/debits/operations/slots/calls=%d/%d/%d/%d/%d/%d root=%v node=%v", attempts, workers, debits, operations, slots, calls.Load(), finalRootDeadline, finalNodeDeadline)
+			if attempts != 1 ||
+				workers != 2 ||
+				debits != 1 ||
+				operations != 1 ||
+				slots != 0 ||
+				calls.Load() != 1 ||
+				!finalRootDeadline.Equal(rootDeadline) ||
+				!finalNodeDeadline.Equal(nodeDeadline) {
+				t.Fatalf(
+					"shutdown recovery attempts/workers/debits/operations/slots/calls=%d/%d/%d/%d/%d/%d root=%v node=%v",
+					attempts,
+					workers,
+					debits,
+					operations,
+					slots,
+					calls.Load(),
+					finalRootDeadline,
+					finalNodeDeadline,
+				)
 			}
 			events := readEventsUntil(t, ctx, api, accepted.Run.ID, "", terminalEvent)
 			var terminalEvents int
-			if err := admin.Pool.QueryRow(ctx, `SELECT count(*) FROM knotra_events WHERE run_id=$1
-                AND document->>'type'='run' AND document->'data'->>'status' IN ('succeeded','failed','cancelled')`, accepted.Run.ID).Scan(&terminalEvents); err != nil {
+			if err := admin.Pool.QueryRow(
+				ctx,
+				`SELECT count(*) FROM knotra_events WHERE run_id=$1
+                AND document->>'type'='run' AND document->'data'->>'status' IN ('succeeded','failed','cancelled')`,
+				accepted.Run.ID,
+			).Scan(&terminalEvents); err != nil {
 				t.Fatal(err)
 			}
 			data, ok := events[len(events)-1].Data.(map[string]any)

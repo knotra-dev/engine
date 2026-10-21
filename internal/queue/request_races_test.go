@@ -25,7 +25,17 @@ const requestRaceBlockersSQL = `WITH RECURSIVE blocked(pid) AS (
 
 func TestRuntimeRequestCommandsArbitrateUnderContention(t *testing.T) {
 	for _, kind := range []string{"human", "resolution"} {
-		modes := []string{"different_keys", "same_key", "same_key_different_body", "answer_then_cancel", "cancel_then_answer", "accepted_before_deadline", "wait_past_deadline", "accepted_before_root_deadline", "wait_past_root_deadline"}
+		modes := []string{
+			"different_keys",
+			"same_key",
+			"same_key_different_body",
+			"answer_then_cancel",
+			"cancel_then_answer",
+			"accepted_before_deadline",
+			"wait_past_deadline",
+			"accepted_before_root_deadline",
+			"wait_past_root_deadline",
+		}
 		if kind == "resolution" {
 			modes = append(modes, "answer_then_failed", "failed_then_answer")
 		}
@@ -45,13 +55,21 @@ func TestRuntimeRequestCommandsArbitrateUnderContention(t *testing.T) {
 				defer provider.Close()
 				plan := runtimePlan(provider.URL)
 				port := contract.Port{Schema: json.RawMessage(`{"type":"boolean"}`)}
-				human := contract.Node{Type: "human", Human: &contract.HumanNode{Prompt: contract.TextSource{Text: "Approve?"}}, Outputs: map[string]contract.Port{"approved": port}, Execution: contract.Execution{Timeout: "30s"}}
+				human := contract.Node{
+					Type:      "human",
+					Human:     &contract.HumanNode{Prompt: contract.TextSource{Text: "Approve?"}},
+					Outputs:   map[string]contract.Port{"approved": port},
+					Execution: contract.Execution{Timeout: "30s"},
+				}
 				review := human
 				if kind == "resolution" {
 					review.Type, review.Human = "llm", nil
 					review.LLM = &contract.LLMNode{Model: "model", Prompt: contract.TextSource{Text: "Return approval."}}
-					if _, err := r.Store.Pool.Exec(ctx, `CREATE FUNCTION lose_race_response() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.completed THEN RAISE EXCEPTION 'fixture lost model reply'; END IF; RETURN NEW; END $$;
-						CREATE TRIGGER lose_race_response BEFORE UPDATE ON knotra_operations FOR EACH ROW EXECUTE FUNCTION lose_race_response()`); err != nil {
+					if _, err := r.Store.Pool.Exec(
+						ctx,
+						`CREATE FUNCTION lose_race_response() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.completed THEN RAISE EXCEPTION 'fixture lost model reply'; END IF; RETURN NEW; END $$;
+						CREATE TRIGGER lose_race_response BEFORE UPDATE ON knotra_operations FOR EACH ROW EXECUTE FUNCTION lose_race_response()`,
+					); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -63,7 +81,10 @@ func TestRuntimeRequestCommandsArbitrateUnderContention(t *testing.T) {
 				}
 				export := port
 				export.Bind = &contract.Binding{From: "nodes.review.outputs.approved"}
-				plan.Pipelines[plan.Root].Spec.Graph = contract.Graph{Nodes: map[string]contract.Node{"review": review, "wait": human}, Outputs: map[string]contract.Port{"result": export}}
+				plan.Pipelines[plan.Root].Spec.Graph = contract.Graph{
+					Nodes:   map[string]contract.Node{"review": review, "wait": human},
+					Outputs: map[string]contract.Port{"result": export},
+				}
 				if err := r.Start(ctx); err != nil {
 					t.Fatal(err)
 				}
@@ -76,8 +97,13 @@ func TestRuntimeRequestCommandsArbitrateUnderContention(t *testing.T) {
 				})
 				var requestID string
 				var deadline, rootDeadline time.Time
-				if err := r.Store.Pool.QueryRow(ctx, `SELECT q.id,(q.document->>'deadline')::timestamptz,r.execution_deadline
-					FROM knotra_requests q JOIN knotra_runs r ON r.id=q.run_id WHERE q.run_id=$1 AND q.document->>'instanceId'=$2`, id, instance).Scan(&requestID, &deadline, &rootDeadline); err != nil {
+				if err := r.Store.Pool.QueryRow(
+					ctx,
+					`SELECT q.id,(q.document->>'deadline')::timestamptz,r.execution_deadline
+					FROM knotra_requests q JOIN knotra_runs r ON r.id=q.run_id WHERE q.run_id=$1 AND q.document->>'instanceId'=$2`,
+					id,
+					instance,
+				).Scan(&requestID, &deadline, &rootDeadline); err != nil {
 					t.Fatal(err)
 				}
 				handler := (&api.Server{Store: r.Store, Artifacts: r.Host.Artifacts, Wake: r.CommandWake}).Handler()
@@ -176,8 +202,15 @@ func TestRuntimeRequestCommandsArbitrateUnderContention(t *testing.T) {
 						table, when = "knotra_runs", "NOT OLD.cancel_requested AND NEW.cancel_requested"
 						acceptanceSQL = "SetRunCancelled"
 					}
-					if _, err := r.Store.Pool.Exec(ctx, fmt.Sprintf(`CREATE FUNCTION request_race_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273653); RETURN NEW; END $$;
-						CREATE TRIGGER request_race_barrier BEFORE UPDATE ON %s FOR EACH ROW WHEN (%s) EXECUTE FUNCTION request_race_barrier()`, table, when)); err != nil {
+					if _, err := r.Store.Pool.Exec(
+						ctx,
+						fmt.Sprintf(
+							`CREATE FUNCTION request_race_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273653); RETURN NEW; END $$;
+						CREATE TRIGGER request_race_barrier BEFORE UPDATE ON %s FOR EACH ROW WHEN (%s) EXECUTE FUNCTION request_race_barrier()`,
+							table,
+							when,
+						),
+					); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -189,7 +222,12 @@ func TestRuntimeRequestCommandsArbitrateUnderContention(t *testing.T) {
 					waitSQL = "LockRunCommand"
 				}
 				await(t, 5*time.Second, func() (bool, error) {
-					err := r.Store.Pool.QueryRow(ctx, requestRaceBlockersSQL+`SELECT COALESCE((SELECT pid FROM pg_stat_activity WHERE pid<>$1 AND pid IN (SELECT pid FROM blocked) AND query LIKE '%'||$2||'%' LIMIT 1),0)`, barrierPID, waitSQL).Scan(&firstPID)
+					err := r.Store.Pool.QueryRow(
+						ctx,
+						requestRaceBlockersSQL+`SELECT COALESCE((SELECT pid FROM pg_stat_activity WHERE pid<>$1 AND pid IN (SELECT pid FROM blocked) AND query LIKE '%'||$2||'%' LIMIT 1),0)`,
+						barrierPID,
+						waitSQL,
+					).Scan(&firstPID)
 					return firstPID != 0, err
 				})
 				if locked == nil {
@@ -200,7 +238,12 @@ func TestRuntimeRequestCommandsArbitrateUnderContention(t *testing.T) {
 					}
 					await(t, 5*time.Second, func() (bool, error) {
 						var blocked bool
-						err := r.Store.Pool.QueryRow(ctx, requestRaceBlockersSQL+`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE pid<>$1 AND pid IN (SELECT pid FROM blocked) AND query LIKE '%'||$2||'%')`, firstPID, waitSQL).Scan(&blocked)
+						err := r.Store.Pool.QueryRow(
+							ctx,
+							requestRaceBlockersSQL+`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE pid<>$1 AND pid IN (SELECT pid FROM blocked) AND query LIKE '%'||$2||'%')`,
+							firstPID,
+							waitSQL,
+						).Scan(&blocked)
 						return blocked, err
 					})
 				}
@@ -234,7 +277,15 @@ func TestRuntimeRequestCommandsArbitrateUnderContention(t *testing.T) {
 					}
 				}
 				if replies[0].Code != firstCode || replies[1].Code != secondCode {
-					t.Fatalf("concurrent replies=%d:%s / %d:%s, want %d/%d", replies[0].Code, replies[0].Body.String(), replies[1].Code, replies[1].Body.String(), firstCode, secondCode)
+					t.Fatalf(
+						"concurrent replies=%d:%s / %d:%s, want %d/%d",
+						replies[0].Code,
+						replies[0].Body.String(),
+						replies[1].Code,
+						replies[1].Body.String(),
+						firstCode,
+						secondCode,
+					)
 				}
 				if mode == "same_key" && replies[0].Body.String() != replies[1].Body.String() {
 					t.Fatal("concurrent duplicate changed its receipt")
@@ -252,7 +303,9 @@ func TestRuntimeRequestCommandsArbitrateUnderContention(t *testing.T) {
 				var attempts, budget, slots, open, receipts, events int
 				var finalDeadline, finalRootDeadline, finalRequestDeadline time.Time
 				var acceptedBefore bool
-				if err := r.Store.Pool.QueryRow(ctx, `SELECT n.state,q.status,r.document->>'status',COALESCE(n.outputs->'approved'->>'json',''),COALESCE(q.response_id,''),COALESCE(r.stop_cause->>'code',''),
+				if err := r.Store.Pool.QueryRow(
+					ctx,
+					`SELECT n.state,q.status,r.document->>'status',COALESCE(n.outputs->'approved'->>'json',''),COALESCE(q.response_id,''),COALESCE(r.stop_cause->>'code',''),
 					(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1),
 					COALESCE((SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='model'),0),
 					(SELECT sum(active_attempts) FROM knotra_execution_scopes WHERE run_id=$1),
@@ -261,8 +314,29 @@ func TestRuntimeRequestCommandsArbitrateUnderContention(t *testing.T) {
 					(SELECT count(*) FROM knotra_events WHERE run_id=$1 AND document->>'type'='node' AND document->'data'->>'nodeId'='review' AND document->'data'->>'status'='succeeded'),
 					n.deadline,r.execution_deadline,(q.document->>'deadline')::timestamptz,
 					COALESCE(q.accepted_at < n.deadline,false)
-					FROM knotra_runs r JOIN knotra_execution_nodes n ON n.run_id=r.id AND n.id=$2 JOIN knotra_requests q ON q.id=$3 WHERE r.id=$1`, id, instance, requestID).
-					Scan(&node, &request, &run, &output, &responseID, &stopCode, &attempts, &budget, &slots, &open, &receipts, &events, &finalDeadline, &finalRootDeadline, &finalRequestDeadline, &acceptedBefore); err != nil {
+					FROM knotra_runs r JOIN knotra_execution_nodes n ON n.run_id=r.id AND n.id=$2 JOIN knotra_requests q ON q.id=$3 WHERE r.id=$1`,
+					id,
+					instance,
+					requestID,
+				).
+					Scan(
+						&node,
+						&request,
+						&run,
+						&output,
+						&responseID,
+						&stopCode,
+						&attempts,
+						&budget,
+						&slots,
+						&open,
+						&receipts,
+						&events,
+						&finalDeadline,
+						&finalRootDeadline,
+						&finalRequestDeadline,
+						&acceptedBefore,
+					); err != nil {
 					t.Fatal(err)
 				}
 				wantAttempts, wantOpen, wantReceipts, wantEvents := 0, 1, 2, 1
@@ -289,8 +363,43 @@ func TestRuntimeRequestCommandsArbitrateUnderContention(t *testing.T) {
 				if mode == "failed_then_answer" {
 					wantStop = "EXTERNAL_FAILED"
 				}
-				if node != wantState || request != wantRequest || run != wantRun || output != wantOutput || responseID != wantResponse || stopCode != wantStop || attempts != wantAttempts || budget != wantAttempts || calls.Load() != int32(wantAttempts) || slots != 0 || open != wantOpen || receipts != wantReceipts || events != wantEvents || acceptedBefore != wantAccepted || !deadline.Equal(finalDeadline) || !deadline.Equal(finalRequestDeadline) || !rootDeadline.Equal(finalRootDeadline) {
-					t.Fatalf("node/request/run=%s/%s/%s output=%s response=%s cause=%s attempts/budget/calls=%d/%d/%d slots=%d open=%d receipts=%d events=%d acceptedBefore=%v deadlines=%v/%v/%v", node, request, run, output, responseID, stopCode, attempts, budget, calls.Load(), slots, open, receipts, events, acceptedBefore, deadline.Equal(finalDeadline), deadline.Equal(finalRequestDeadline), rootDeadline.Equal(finalRootDeadline))
+				if node != wantState ||
+					request != wantRequest ||
+					run != wantRun ||
+					output != wantOutput ||
+					responseID != wantResponse ||
+					stopCode != wantStop ||
+					attempts != wantAttempts ||
+					budget != wantAttempts ||
+					calls.Load() != int32(wantAttempts) ||
+					slots != 0 ||
+					open != wantOpen ||
+					receipts != wantReceipts ||
+					events != wantEvents ||
+					acceptedBefore != wantAccepted ||
+					!deadline.Equal(finalDeadline) ||
+					!deadline.Equal(finalRequestDeadline) ||
+					!rootDeadline.Equal(finalRootDeadline) {
+					t.Fatalf(
+						"node/request/run=%s/%s/%s output=%s response=%s cause=%s attempts/budget/calls=%d/%d/%d slots=%d open=%d receipts=%d events=%d acceptedBefore=%v deadlines=%v/%v/%v",
+						node,
+						request,
+						run,
+						output,
+						responseID,
+						stopCode,
+						attempts,
+						budget,
+						calls.Load(),
+						slots,
+						open,
+						receipts,
+						events,
+						acceptedBefore,
+						deadline.Equal(finalDeadline),
+						deadline.Equal(finalRequestDeadline),
+						rootDeadline.Equal(finalRootDeadline),
+					)
 				}
 			})
 		}

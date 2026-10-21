@@ -23,7 +23,18 @@ import (
 )
 
 func TestRuntimeLostAttemptRequiresEvidenceAndRetainsLateOutcome(t *testing.T) {
-	for _, mode := range []string{"journaled_response", "corrupt_envelope", "saved_envelope", "enqueue_rollback", "unconfirmed_operation", "agent_prefix", "fail_policy", "cancel", "node_deadline", "run_deadline"} {
+	for _, mode := range []string{
+		"journaled_response",
+		"corrupt_envelope",
+		"saved_envelope",
+		"enqueue_rollback",
+		"unconfirmed_operation",
+		"agent_prefix",
+		"fail_policy",
+		"cancel",
+		"node_deadline",
+		"run_deadline",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			r := newTestRuntime(t)
 			ctx := context.Background()
@@ -44,7 +55,10 @@ func TestRuntimeLostAttemptRequiresEvidenceAndRetainsLateOutcome(t *testing.T) {
 			}
 			export := node.Outputs["answer"]
 			export.Bind = &contract.Binding{From: "nodes.a.outputs.answer"}
-			plan.Pipelines[plan.Root].Spec.Graph = contract.Graph{Nodes: map[string]contract.Node{"a": node}, Outputs: map[string]contract.Port{"result": export}}
+			plan.Pipelines[plan.Root].Spec.Graph = contract.Graph{
+				Nodes:   map[string]contract.Node{"a": node},
+				Outputs: map[string]contract.Port{"result": export},
+			}
 			id := admitRuntimeRun(t, r, plan)
 			if err := r.Store.RegisterWorker(ctx, r.WorkerID, r.HostID); err != nil {
 				t.Fatal(err)
@@ -55,7 +69,13 @@ func TestRuntimeLostAttemptRequiresEvidenceAndRetainsLateOutcome(t *testing.T) {
 					return err
 				}
 				var err error
-				claim, err = r.Store.ClaimAttempt(ctx, tx, execution.AttemptID{RunID: id, InstanceID: execution.StableID("n", id+"/root/a"), Number: 1}, 1, r.WorkerID)
+				claim, err = r.Store.ClaimAttempt(
+					ctx,
+					tx,
+					execution.AttemptID{RunID: id, InstanceID: execution.StableID("n", id+"/root/a"), Number: 1},
+					1,
+					r.WorkerID,
+				)
 				return err
 			}); err != nil || claim == nil {
 				t.Fatalf("claim=%+v error=%v", claim, err)
@@ -112,8 +132,12 @@ func TestRuntimeLostAttemptRequiresEvidenceAndRetainsLateOutcome(t *testing.T) {
 				}
 			}
 			if mode == "node_deadline" {
-				if _, err := r.Store.Pool.Exec(ctx, `UPDATE knotra_execution_nodes SET deadline=clock_timestamp()-interval '1 second',
-					execution_request=jsonb_set(execution_request,'{deadline}',to_jsonb(clock_timestamp()-interval '1 second')) WHERE run_id=$1`, id); err != nil {
+				if _, err := r.Store.Pool.Exec(
+					ctx,
+					`UPDATE knotra_execution_nodes SET deadline=clock_timestamp()-interval '1 second',
+					execution_request=jsonb_set(execution_request,'{deadline}',to_jsonb(clock_timestamp()-interval '1 second')) WHERE run_id=$1`,
+					id,
+				); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -122,7 +146,11 @@ func TestRuntimeLostAttemptRequiresEvidenceAndRetainsLateOutcome(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if _, err := r.Store.Pool.Exec(ctx, "UPDATE knotra_execution_attempts SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE run_id=$1", id); err != nil {
+			if _, err := r.Store.Pool.Exec(
+				ctx,
+				"UPDATE knotra_execution_attempts SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE run_id=$1",
+				id,
+			); err != nil {
 				t.Fatal(err)
 			}
 			corruptPath := ""
@@ -134,7 +162,13 @@ func TestRuntimeLostAttemptRequiresEvidenceAndRetainsLateOutcome(t *testing.T) {
 				}
 				defer func() { _ = files.Close() }()
 				r.Outcomes = files
-				key, err := files.Put(execution.Outcome{FormatVersion: execution.StateFormatVersion, Ownership: claim.Ownership, PlanID: plan.Digest, CompletedAt: time.Now(), Outputs: result.Outputs})
+				key, err := files.Put(execution.Outcome{
+					FormatVersion: execution.StateFormatVersion,
+					Ownership:     claim.Ownership,
+					PlanID:        plan.Digest,
+					CompletedAt:   time.Now(),
+					Outputs:       result.Outputs,
+				})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -144,7 +178,13 @@ func TestRuntimeLostAttemptRequiresEvidenceAndRetainsLateOutcome(t *testing.T) {
 				}
 			}
 			if mode == "saved_envelope" {
-				outcome := execution.Outcome{FormatVersion: execution.StateFormatVersion, Ownership: claim.Ownership, PlanID: plan.Digest, CompletedAt: time.Now(), Outputs: result.Outputs}
+				outcome := execution.Outcome{
+					FormatVersion: execution.StateFormatVersion,
+					Ownership:     claim.Ownership,
+					PlanID:        plan.Digest,
+					CompletedAt:   time.Now(),
+					Outputs:       result.Outputs,
+				}
 				if _, err := r.Outcomes.Put(outcome); err != nil {
 					t.Fatal(err)
 				}
@@ -158,8 +198,12 @@ func TestRuntimeLostAttemptRequiresEvidenceAndRetainsLateOutcome(t *testing.T) {
 				}
 				await(t, 5*time.Second, func() (bool, error) { run, err := r.Store.Run(ctx, id); return run.Status == "succeeded", err })
 				var slots, requests int
-				if err := r.Store.Pool.QueryRow(ctx, `SELECT s.active_attempts,(SELECT count(*) FROM knotra_requests WHERE run_id=$1)
-                    FROM knotra_execution_scopes s WHERE s.run_id=$1 AND s.id=$1`, id).Scan(&slots, &requests); err != nil || slots != 0 || requests != 0 || calls.Load() != 1 {
+				if err := r.Store.Pool.QueryRow(
+					ctx,
+					`SELECT s.active_attempts,(SELECT count(*) FROM knotra_requests WHERE run_id=$1)
+                    FROM knotra_execution_scopes s WHERE s.run_id=$1 AND s.id=$1`,
+					id,
+				).Scan(&slots, &requests); err != nil || slots != 0 || requests != 0 || calls.Load() != 1 {
 					t.Fatalf("saved envelope recovery slots=%d requests=%d calls=%d error=%v", slots, requests, calls.Load(), err)
 				}
 				return
@@ -180,10 +224,14 @@ func TestRuntimeLostAttemptRequiresEvidenceAndRetainsLateOutcome(t *testing.T) {
 					t.Fatal("lost-attempt transaction committed without its delivery")
 				}
 				var slots, requests int
-				if err := r.Store.Pool.QueryRow(ctx, `SELECT a.state,s.active_attempts,
+				if err := r.Store.Pool.QueryRow(
+					ctx,
+					`SELECT a.state,s.active_attempts,
                     (SELECT count(*) FROM knotra_requests WHERE run_id=$1)
                     FROM knotra_execution_attempts a JOIN knotra_execution_scopes s ON s.run_id=a.run_id AND s.id=a.run_id
-                    WHERE a.run_id=$1`, id).Scan(&state, &slots, &requests); err != nil || state != "claimed" || slots != 1 || requests != 0 {
+                    WHERE a.run_id=$1`,
+					id,
+				).Scan(&state, &slots, &requests); err != nil || state != "claimed" || slots != 1 || requests != 0 {
 					t.Fatalf("lost transition escaped rollback: state=%s slots=%d requests=%d error=%v", state, slots, requests, err)
 				}
 				if _, err := r.Store.Pool.Exec(ctx, "DROP TRIGGER reject_lost_wake ON river_job"); err != nil {
@@ -211,16 +259,31 @@ func TestRuntimeLostAttemptRequiresEvidenceAndRetainsLateOutcome(t *testing.T) {
 				t.Fatal(err)
 			}
 			var slots, attempts, requests int
-			if err := r.Store.Pool.QueryRow(ctx, `SELECT
+			if err := r.Store.Pool.QueryRow(
+				ctx,
+				`SELECT
 				(SELECT active_attempts FROM knotra_execution_scopes WHERE run_id=$1 AND id=$1),
 				(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1),
-				(SELECT count(*) FROM knotra_requests WHERE run_id=$1 AND status='open')`, id).Scan(&slots, &attempts, &requests); err != nil || slots != 0 || attempts != 1 {
+				(SELECT count(*) FROM knotra_requests WHERE run_id=$1 AND status='open')`,
+				id,
+			).Scan(&slots, &attempts, &requests); err != nil || slots != 0 || attempts != 1 {
 				t.Fatalf("slots=%d attempts=%d requests=%d error=%v", slots, attempts, requests, err)
 			}
-			if err := pgx.BeginFunc(ctx, r.Store.Pool, func(tx pgx.Tx) error { _, err := r.Store.RenewAttempt(ctx, tx, claim.Ownership); return err }); !errors.Is(err, store.ErrExecutionOwnership) {
+			if err := pgx.BeginFunc(
+				ctx,
+				r.Store.Pool,
+				func(tx pgx.Tx) error { _, err := r.Store.RenewAttempt(ctx, tx, claim.Ownership); return err },
+			); !errors.Is(err, store.ErrExecutionOwnership) {
 				t.Fatalf("lost owner renewed: %v", err)
 			}
-			outcome := execution.Outcome{FormatVersion: execution.StateFormatVersion, Ownership: claim.Ownership, PlanID: plan.Digest, CompletedAt: time.Now(), Outputs: result.Outputs, Failure: result.Failure}
+			outcome := execution.Outcome{
+				FormatVersion: execution.StateFormatVersion,
+				Ownership:     claim.Ownership,
+				PlanID:        plan.Digest,
+				CompletedAt:   time.Now(),
+				Outputs:       result.Outputs,
+				Failure:       result.Failure,
+			}
 			if mode == "corrupt_envelope" {
 				if _, err := r.Outcomes.Put(outcome); !errors.Is(err, execution.ErrInvalidOutcome) {
 					t.Fatalf("overwrote corrupt evidence: %v", err)

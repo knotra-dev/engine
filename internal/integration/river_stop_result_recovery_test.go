@@ -33,7 +33,12 @@ func TestRiverStopAndSavedResultProcessCrashBoundaries(t *testing.T) {
 	if os.Getenv("KNOTRA_TEST_RECOVERY") != "1" || os.Getenv("KNOTRA_TEST_HELPER") == "" || os.Getenv("KNOTRA_TEST_DATABASE_URL") == "" {
 		t.Skip("set KNOTRA_TEST_RECOVERY, KNOTRA_TEST_HELPER and KNOTRA_TEST_DATABASE_URL for stop/result SIGKILL checks")
 	}
-	for _, mode := range []string{"cancel_before_recovered_result", "recovered_result_before_cancel", "result_committed_cancel_receipt_lost", "late_result_after_cancel"} {
+	for _, mode := range []string{
+		"cancel_before_recovered_result",
+		"recovered_result_before_cancel",
+		"result_committed_cancel_receipt_lost",
+		"late_result_after_cancel",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
 			defer cancel()
@@ -45,7 +50,15 @@ func TestRiverStopAndSavedResultProcessCrashBoundaries(t *testing.T) {
 			profile := recoveryProfile()
 			profilePath := filepath.Join(work, "profile.json")
 			writeJSON(t, profilePath, profile)
-			options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), DataDir: filepath.Join(work, "engine"), DockerHost: os.Getenv("DOCKER_HOST"), HelperPath: os.Getenv("KNOTRA_TEST_HELPER"), Profiles: []string{profilePath}, Version: "stop-result-test"}
+			options := app.Options{
+				Listen:      unusedAddress(t),
+				DatabaseURL: databaseSchema(t, ctx),
+				DataDir:     filepath.Join(work, "engine"),
+				DockerHost:  os.Getenv("DOCKER_HOST"),
+				HelperPath:  os.Getenv("KNOTRA_TEST_HELPER"),
+				Profiles:    []string{profilePath},
+				Version:     "stop-result-test",
+			}
 			optionsPath := filepath.Join(work, "server.json")
 			writeJSON(t, optionsPath, options)
 			api := &client.Client{BaseURL: "http://" + options.Listen, StateDir: filepath.Join(work, "client")}
@@ -74,8 +87,11 @@ func TestRiverStopAndSavedResultProcessCrashBoundaries(t *testing.T) {
 				if _, err := barrier.Exec(ctx, "SELECT pg_advisory_lock(918273662)"); err != nil {
 					t.Fatal(err)
 				}
-				if _, err := admin.Pool.Exec(ctx, `CREATE FUNCTION stop_result_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273662); RETURN NEW; END $$;
-					CREATE TRIGGER stop_result_barrier BEFORE UPDATE ON knotra_artifacts FOR EACH ROW WHEN (NOT OLD.published AND NEW.published) EXECUTE FUNCTION stop_result_barrier()`); err != nil {
+				if _, err := admin.Pool.Exec(
+					ctx,
+					`CREATE FUNCTION stop_result_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273662); RETURN NEW; END $$;
+					CREATE TRIGGER stop_result_barrier BEFORE UPDATE ON knotra_artifacts FOR EACH ROW WHEN (NOT OLD.published AND NEW.published) EXECUTE FUNCTION stop_result_barrier()`,
+				); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -83,7 +99,12 @@ func TestRiverStopAndSavedResultProcessCrashBoundaries(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			pkg.Source = strings.Replace(pkg.Source, "    prepare:\n      type: code\n", "    prepare:\n      type: code\n      execution: {retry: {maxAttempts: 3, backoff: 1ms}}\n", 1)
+			pkg.Source = strings.Replace(
+				pkg.Source,
+				"    prepare:\n      type: code\n",
+				"    prepare:\n      type: code\n      execution: {retry: {maxAttempts: 3, backoff: 1ms}}\n",
+				1,
+			)
 			for i := range pkg.Files {
 				if pkg.Files[i].Path == pkg.Entrypoint {
 					pkg.Files[i].Content = []byte(pkg.Source)
@@ -95,7 +116,17 @@ func TestRiverStopAndSavedResultProcessCrashBoundaries(t *testing.T) {
 			}
 			marker := strings.Repeat("stop-result-input-", 10000)
 			var admitted struct{ Run protocol.Run }
-			if err := api.Command(ctx, "/runs", map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name, "inputs": map[string]any{"marker": marker}}, uuid.NewString(), &admitted); err != nil {
+			if err := api.Command(
+				ctx,
+				"/runs",
+				map[string]any{
+					"definitionId": definition.Definition.ID,
+					"profile":      profile.Metadata.Name,
+					"inputs":       map[string]any{"marker": marker},
+				},
+				uuid.NewString(),
+				&admitted,
+			); err != nil {
 				t.Fatal(err)
 			}
 			var publicationPID int32
@@ -103,7 +134,11 @@ func TestRiverStopAndSavedResultProcessCrashBoundaries(t *testing.T) {
 				awaitHuman(t, ctx, api, admitted.Run.ID)
 			} else {
 				awaitLifecycleBoundary(t, ctx, first, firstLog, func() bool {
-					if err := admin.Pool.QueryRow(ctx, `SELECT COALESCE((SELECT pid FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_pids(pid)) LIMIT 1),0)`, int64(barrier.PgConn().PID())).Scan(&publicationPID); err != nil {
+					if err := admin.Pool.QueryRow(
+						ctx,
+						`SELECT COALESCE((SELECT pid FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_pids(pid)) LIMIT 1),0)`,
+						int64(barrier.PgConn().PID()),
+					).Scan(&publicationPID); err != nil {
 						t.Fatal(err)
 					}
 					return publicationPID != 0
@@ -116,10 +151,14 @@ func TestRiverStopAndSavedResultProcessCrashBoundaries(t *testing.T) {
 			}
 			var instance, outcomeKey, sandbox string
 			var rootDeadline, nodeDeadline time.Time
-			if err := admin.Pool.QueryRow(ctx, `SELECT n.id,a.outcome_key,r.execution_deadline,n.deadline,
+			if err := admin.Pool.QueryRow(
+				ctx,
+				`SELECT n.id,a.outcome_key,r.execution_deadline,n.deadline,
 				(SELECT id FROM knotra_resources WHERE run_id=r.id AND kind='sandbox')
 				FROM knotra_runs r JOIN knotra_execution_nodes n ON n.run_id=r.id JOIN knotra_execution_attempts a ON a.run_id=n.run_id AND a.instance_id=n.id
-				WHERE r.id=$1 AND n.node_id='prepare'`, admitted.Run.ID).Scan(&instance, &outcomeKey, &rootDeadline, &nodeDeadline, &sandbox); err != nil {
+				WHERE r.id=$1 AND n.node_id='prepare'`,
+				admitted.Run.ID,
+			).Scan(&instance, &outcomeKey, &rootDeadline, &nodeDeadline, &sandbox); err != nil {
 				t.Fatal(err)
 			}
 			outcomes, err := execution.OpenOutcomeFiles(filepath.Join(options.DataDir, "outcomes"))
@@ -138,7 +177,10 @@ func TestRiverStopAndSavedResultProcessCrashBoundaries(t *testing.T) {
 			if err != nil || hex.EncodeToString(sum[:]) != artifact.SHA256 || int64(len(content)) != artifact.Size {
 				t.Fatalf("real artifact bytes=%d hash=%s error=%v", len(content), artifact.SHA256, err)
 			}
-			if err := json.Unmarshal(content, &document); err != nil || document.Marker != marker || document.Nonce == "" || string(outcome.Outputs["nonce"].JSON) != `"`+document.Nonce+`"` {
+			if err := json.Unmarshal(content, &document); err != nil ||
+				document.Marker != marker ||
+				document.Nonce == "" ||
+				string(outcome.Outputs["nonce"].JSON) != `"`+document.Nonce+`"` {
 				t.Fatalf("real code marker/nonce mismatch: marker bytes=%d nonce=%q error=%v", len(document.Marker), document.Nonce, err)
 			}
 			outcomePath := filepath.Join(options.DataDir, "outcomes", outcomeKey+".json")
@@ -166,7 +208,11 @@ func TestRiverStopAndSavedResultProcessCrashBoundaries(t *testing.T) {
 				} else {
 					awaitLifecycleBoundary(t, ctx, first, firstLog, func() bool {
 						var waiting bool
-						if err := admin.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_pids(pid)) AND query LIKE '%LockRunCommand%')`, publicationPID).Scan(&waiting); err != nil {
+						if err := admin.Pool.QueryRow(
+							ctx,
+							`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_pids(pid)) AND query LIKE '%LockRunCommand%')`,
+							publicationPID,
+						).Scan(&waiting); err != nil {
 							t.Fatal(err)
 						}
 						return waiting
@@ -200,12 +246,18 @@ func TestRiverStopAndSavedResultProcessCrashBoundaries(t *testing.T) {
 			}
 			var published, evidence, results, events, receipts int
 			var cancelled bool
-			if err := admin.Pool.QueryRow(ctx, `SELECT cancel_requested,
+			if err := admin.Pool.QueryRow(
+				ctx,
+				`SELECT cancel_requested,
 				(SELECT count(*) FROM knotra_artifacts WHERE id=$2 AND published),
 				(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1 AND outcome IS NOT NULL),
 				(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1 AND result IS NOT NULL),
 				(SELECT count(*) FROM knotra_events WHERE run_id=$1 AND document->'data'->>'nodeId'='prepare' AND document->'data'->>'status'='succeeded'),
-				(SELECT count(*) FROM knotra_commands WHERE id=$3) FROM knotra_runs WHERE id=$1`, admitted.Run.ID, artifact.ID, key).Scan(&cancelled, &published, &evidence, &results, &events, &receipts); err != nil {
+				(SELECT count(*) FROM knotra_commands WHERE id=$3) FROM knotra_runs WHERE id=$1`,
+				admitted.Run.ID,
+				artifact.ID,
+				key,
+			).Scan(&cancelled, &published, &evidence, &results, &events, &receipts); err != nil {
 				t.Fatal(err)
 			}
 			want := 0
@@ -213,7 +265,16 @@ func TestRiverStopAndSavedResultProcessCrashBoundaries(t *testing.T) {
 				want = 1
 			}
 			if cancelled != committed || published != want || evidence != want || results != want || events != want || receipts != want {
-				t.Fatalf("post-crash cancel/publication/evidence/result/event/receipt=%v/%d/%d/%d/%d/%d want=%d", cancelled, published, evidence, results, events, receipts, want)
+				t.Fatalf(
+					"post-crash cancel/publication/evidence/result/event/receipt=%v/%d/%d/%d/%d/%d want=%d",
+					cancelled,
+					published,
+					evidence,
+					results,
+					events,
+					receipts,
+					want,
+				)
 			}
 			if mode == "late_result_after_cancel" {
 				// Fault the actual fsynced envelope, then restore the same bytes after
@@ -280,10 +341,14 @@ func TestRiverStopAndSavedResultProcessCrashBoundaries(t *testing.T) {
 				}
 			}()
 			awaitLifecycleBoundary(t, recovery, second, secondLog, func() bool {
-				if err := admin.Pool.QueryRow(ctx, `SELECT
+				if err := admin.Pool.QueryRow(
+					ctx,
+					`SELECT
 					(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1 AND outcome IS NOT NULL),
 					(SELECT active_attempts FROM knotra_execution_scopes WHERE run_id=$1 AND id=$1),
-					(SELECT count(*) FROM knotra_resources WHERE run_id=$1 AND state<>'closed')`, final.ID).Scan(&retainedCount, &remainingSlots, &remainingResources); err != nil {
+					(SELECT count(*) FROM knotra_resources WHERE run_id=$1 AND state<>'closed')`,
+					final.ID,
+				).Scan(&retainedCount, &remainingSlots, &remainingResources); err != nil {
 					t.Fatal(err)
 				}
 				return retainedCount == 1 && remainingSlots == 0 && remainingResources == 0
@@ -292,7 +357,9 @@ func TestRiverStopAndSavedResultProcessCrashBoundaries(t *testing.T) {
 			var attempts, tools, confirmed, slots, requests, successes, terminalEvents, verify int
 			var finalRootDeadline, finalNodeDeadline time.Time
 			var storedOutcome []byte
-			if err := admin.Pool.QueryRow(ctx, `SELECT r.stop_cause->>'code',r.execution_deadline,n.state,n.deadline,a.outcome,
+			if err := admin.Pool.QueryRow(
+				ctx,
+				`SELECT r.stop_cause->>'code',r.execution_deadline,n.state,n.deadline,a.outcome,
 				(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=r.id),
 				(SELECT used FROM knotra_budgets WHERE run_id=r.id AND scope=r.id AND kind='tool'),
 				(SELECT count(*) FROM knotra_operations WHERE run_id=r.id AND kind='tool' AND completed),
@@ -304,7 +371,28 @@ func TestRiverStopAndSavedResultProcessCrashBoundaries(t *testing.T) {
 				(SELECT count(*) FROM knotra_artifacts WHERE id=$3 AND published),
 				(SELECT count(*) FROM knotra_commands WHERE id=$4)
 				FROM knotra_runs r JOIN knotra_execution_nodes n ON n.run_id=r.id JOIN knotra_execution_attempts a ON a.run_id=n.run_id AND a.instance_id=n.id
-				WHERE r.id=$1 AND n.id=$2`, final.ID, instance, artifact.ID, key).Scan(&stopCode, &finalRootDeadline, &nodeState, &finalNodeDeadline, &storedOutcome, &attempts, &tools, &confirmed, &slots, &requests, &successes, &terminalEvents, &verify, &published, &receipts); err != nil {
+				WHERE r.id=$1 AND n.id=$2`,
+				final.ID,
+				instance,
+				artifact.ID,
+				key,
+			).Scan(
+				&stopCode,
+				&finalRootDeadline,
+				&nodeState,
+				&finalNodeDeadline,
+				&storedOutcome,
+				&attempts,
+				&tools,
+				&confirmed,
+				&slots,
+				&requests,
+				&successes,
+				&terminalEvents,
+				&verify,
+				&published,
+				&receipts,
+			); err != nil {
 				t.Fatal(err)
 			}
 			wantNode, wantPublished := "cancelled", 0
@@ -312,14 +400,50 @@ func TestRiverStopAndSavedResultProcessCrashBoundaries(t *testing.T) {
 				wantNode, wantPublished = "succeeded", 1
 			}
 			var retained execution.Outcome
-			if err := json.Unmarshal(storedOutcome, &retained); err != nil || retained.Failure != nil || len(retained.Artifacts) != 1 || retained.Artifacts[0] != outcome.Artifacts[0] || string(retained.Outputs["nonce"].JSON) != string(outcome.Outputs["nonce"].JSON) {
+			if err := json.Unmarshal(storedOutcome, &retained); err != nil ||
+				retained.Failure != nil ||
+				len(retained.Artifacts) != 1 ||
+				retained.Artifacts[0] != outcome.Artifacts[0] ||
+				string(retained.Outputs["nonce"].JSON) != string(outcome.Outputs["nonce"].JSON) {
 				t.Fatalf("late outcome changed: failure=%v artifacts=%v error=%v", retained.Failure, retained.Artifacts, err)
 			}
-			if final.Status != "cancelled" || len(final.Outputs) != 0 || len(final.Artifacts) != 0 || stopCode != "CANCELLED" || nodeState != wantNode || attempts != 1 || tools != 1 || confirmed != 1 || slots != 0 || requests != 0 || successes != wantPublished || terminalEvents != 1 || verify != 0 || published != wantPublished || receipts != 1 || !rootDeadline.Equal(finalRootDeadline) || !nodeDeadline.Equal(finalNodeDeadline) {
-				t.Fatalf("final stop/result: status=%s stop=%s node=%s attempts/tools/confirmed/slots/requests/successes/terminal/verify/published/receipts=%d/%d/%d/%d/%d/%d/%d/%d/%d/%d", final.Status, stopCode, nodeState, attempts, tools, confirmed, slots, requests, successes, terminalEvents, verify, published, receipts)
+			if final.Status != "cancelled" ||
+				len(final.Outputs) != 0 ||
+				len(final.Artifacts) != 0 ||
+				stopCode != "CANCELLED" ||
+				nodeState != wantNode ||
+				attempts != 1 ||
+				tools != 1 ||
+				confirmed != 1 ||
+				slots != 0 ||
+				requests != 0 ||
+				successes != wantPublished ||
+				terminalEvents != 1 ||
+				verify != 0 ||
+				published != wantPublished ||
+				receipts != 1 ||
+				!rootDeadline.Equal(finalRootDeadline) ||
+				!nodeDeadline.Equal(finalNodeDeadline) {
+				t.Fatalf(
+					"final stop/result: status=%s stop=%s node=%s attempts/tools/confirmed/slots/requests/successes/terminal/verify/published/receipts=%d/%d/%d/%d/%d/%d/%d/%d/%d/%d",
+					final.Status,
+					stopCode,
+					nodeState,
+					attempts,
+					tools,
+					confirmed,
+					slots,
+					requests,
+					successes,
+					terminalEvents,
+					verify,
+					published,
+					receipts,
+				)
 			}
 			download, err := api.Bytes(ctx, "/artifacts/"+artifact.ID+"/content")
-			if (resultFirst && (err != nil || !bytes.Equal(download, content))) || (!resultFirst && (err == nil || !strings.Contains(err.Error(), "HTTP 404"))) {
+			if (resultFirst && (err != nil || !bytes.Equal(download, content))) ||
+				(!resultFirst && (err == nil || !strings.Contains(err.Error(), "HTTP 404"))) {
 				t.Fatalf("artifact visibility after stop: bytes=%d error=%v", len(download), err)
 			}
 			unchanged, err := os.ReadFile(outcomePath)
@@ -335,7 +459,10 @@ func TestRiverStopAndSavedResultProcessCrashBoundaries(t *testing.T) {
 			if len(eventsAfterStop) == 0 || !terminalEvent(eventsAfterStop[len(eventsAfterStop)-1]) {
 				t.Fatal("terminal cancellation missing from real SSE")
 			}
-			t.Logf("SIGKILL arbitration kept %s prefix, immutable artifact/envelope and inspectable evidence, one debit/receipt/terminal event, original deadlines and no downstream execution", wantNode)
+			t.Logf(
+				"SIGKILL arbitration kept %s prefix, immutable artifact/envelope and inspectable evidence, one debit/receipt/terminal event, original deadlines and no downstream execution",
+				wantNode,
+			)
 		})
 	}
 }

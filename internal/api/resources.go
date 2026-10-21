@@ -68,7 +68,8 @@ func (s *Server) resources(w http.ResponseWriter, _ *http.Request) {
 				switch kind {
 				case "model":
 					m := p.Spec.Models[id]
-					available = slices.Contains([]string{"ollama", "openai", "anthropic", "openai_compatible", "codex", "claude"}, m.Provider) && credentialsReady(m.Auth)
+					available = slices.Contains([]string{"ollama", "openai", "anthropic", "openai_compatible", "codex", "claude"}, m.Provider) &&
+						credentialsReady(m.Auth)
 					if m.Provider == "openai" || m.Provider == "anthropic" {
 						_, hasKey := m.Auth["key"]
 						available = available && hasKey

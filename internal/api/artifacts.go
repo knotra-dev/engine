@@ -24,6 +24,7 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, 400, "INPUT_INVALID", e.Error(), nil)
 		return
 	}
+
 	var content []byte
 	if q.Content != nil {
 		content, e = base64.StdEncoding.DecodeString(*q.Content)

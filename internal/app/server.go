@@ -111,10 +111,12 @@ func Serve(ctx context.Context, o Options, log *slog.Logger) (serveErr error) {
 	if err := o.validate(); err != nil {
 		return err
 	}
+
 	stopTelemetry, err := telemetry.Start(ctx, o.Version)
 	if err != nil {
 		return err
 	}
+
 	defer func() {
 		ctx, stop := context.WithTimeout(context.Background(), 5*time.Second)
 		defer stop()
@@ -142,6 +144,7 @@ func Serve(ctx context.Context, o Options, log *slog.Logger) (serveErr error) {
 	if err != nil {
 		return err
 	}
+
 	defer db.Close()
 	var lease *store.Lease
 	if o.Role == execution.RoleAll && o.S3.Bucket == "" && o.SharedDataDir == "" {
@@ -156,11 +159,13 @@ func Serve(ctx context.Context, o Options, log *slog.Logger) (serveErr error) {
 	if err != nil {
 		return err
 	}
+
 	defer func() { _ = lease.Close(context.Background()) }()
 	dataDir, err := filepath.Abs(o.DataDir)
 	if err != nil {
 		return err
 	}
+
 	sharedDir := dataDir
 	if o.SharedDataDir != "" {
 		sharedDir, err = filepath.Abs(o.SharedDataDir)
@@ -193,6 +198,7 @@ func Serve(ctx context.Context, o Options, log *slog.Logger) (serveErr error) {
 	if err := db.BindStorage(ctx, storageID, o.S3.Bucket != ""); err != nil {
 		return err
 	}
+
 	runner := &adapters.Runner{
 		EngineID:      db.EngineID,
 		DockerHost:    o.DockerHost,
@@ -201,11 +207,22 @@ func Serve(ctx context.Context, o Options, log *slog.Logger) (serveErr error) {
 		FirewallImage: o.FirewallImage,
 	}
 	defer func() { _ = runner.Close() }()
-	srv := &api.Server{Store: db, Artifacts: artifacts, Profiles: profiles, Token: o.Token, ManagedToken: o.ManagedToken, Version: o.Version, CORSOrigin: o.CORSOrigin, HostID: o.HostID, Log: log, Admit: func(ctx context.Context, p *contract.Plan) error {
-		ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-		defer cancel()
-		return runner.Prepare(ctx, p)
-	}}
+	srv := &api.Server{
+		Store:        db,
+		Artifacts:    artifacts,
+		Profiles:     profiles,
+		Token:        o.Token,
+		ManagedToken: o.ManagedToken,
+		Version:      o.Version,
+		CORSOrigin:   o.CORSOrigin,
+		HostID:       o.HostID,
+		Log:          log,
+		Admit: func(ctx context.Context, p *contract.Plan) error {
+			ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+			defer cancel()
+			return runner.Prepare(ctx, p)
+		},
+	}
 	if o.ManagedHoldAdmission {
 		srv.HoldManagedAdmission()
 	}
@@ -226,6 +243,7 @@ func Serve(ctx context.Context, o Options, log *slog.Logger) (serveErr error) {
 	if micros < 0 || micros > int64(365*24*time.Hour/time.Microsecond) {
 		return errors.New("stored execution duration exceeds the supported admission bound")
 	}
+
 	config.ExecutionTimeout = max(config.ExecutionTimeout, time.Duration(micros)*time.Microsecond+time.Minute)
 	config.Schema, err = storedb.New(db.Pool).CurrentSchema(ctx)
 	if err != nil {
@@ -234,6 +252,7 @@ func Serve(ctx context.Context, o Options, log *slog.Logger) (serveErr error) {
 	if err := queue.Migrate(ctx, db.Pool, config.Schema); err != nil {
 		return err
 	}
+
 	native := &queue.Runtime{Store: db, Host: &executor.Host{Store: db, Artifacts: artifacts, Runner: runner},
 		Outcomes: outcomes, WorkerID: uuid.NewString(), HostID: config.HostID}
 	native.Client, err = queue.New(db.Pool, config, native.Handlers())
@@ -243,11 +262,22 @@ func Serve(ctx context.Context, o Options, log *slog.Logger) (serveErr error) {
 	if err := native.Start(ctx); err != nil {
 		return err
 	}
+
 	defer func() {
 		stopCtx, stop := context.WithTimeout(context.Background(), 10*time.Second)
 		defer stop()
 		if stopErr := native.Stop(stopCtx); stopErr != nil {
-			log.Error("execution shutdown failed", "engineId", db.EngineID, "hostId", native.HostID, "workerId", native.WorkerID, "error", telemetry.RedactError(stopErr))
+			log.Error(
+				"execution shutdown failed",
+				"engineId",
+				db.EngineID,
+				"hostId",
+				native.HostID,
+				"workerId",
+				native.WorkerID,
+				"error",
+				telemetry.RedactError(stopErr),
+			)
 			serveErr = errors.Join(serveErr, stopErr)
 		}
 	}()
@@ -305,7 +335,19 @@ func Serve(ctx context.Context, o Options, log *slog.Logger) (serveErr error) {
 		}()
 		log.Info("Knotra engine listening", "address", listener.Addr().String(), "engineId", db.EngineID, "role", o.Role, "backend", execution.BackendRiver)
 	} else {
-		log.Info("Knotra worker started", "engineId", db.EngineID, "hostId", o.HostID, "workerId", native.WorkerID, "role", o.Role, "backend", execution.BackendRiver)
+		log.Info(
+			"Knotra worker started",
+			"engineId",
+			db.EngineID,
+			"hostId",
+			o.HostID,
+			"workerId",
+			native.WorkerID,
+			"role",
+			o.Role,
+			"backend",
+			execution.BackendRiver,
+		)
 	}
 
 serveLoop:
@@ -314,7 +356,17 @@ serveLoop:
 		case <-ctx.Done():
 			break serveLoop
 		case problem := <-native.Failure:
-			log.Warn("execution background check failed", "engineId", db.EngineID, "hostId", native.HostID, "workerId", native.WorkerID, "error", telemetry.RedactError(problem))
+			log.Warn(
+				"execution background check failed",
+				"engineId",
+				db.EngineID,
+				"hostId",
+				native.HostID,
+				"workerId",
+				native.WorkerID,
+				"error",
+				telemetry.RedactError(problem),
+			)
 		case <-native.Done():
 			err = native.Err()
 			break serveLoop
@@ -335,5 +387,6 @@ serveLoop:
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
+
 	return shutdownErr
 }

@@ -14,7 +14,7 @@ import (
 
 const insertOwnedOperation = `-- name: InsertOwnedOperation :execresult
 INSERT INTO knotra_operations(id,run_id,kind,effect,instance_id,attempt_number,worker_id,ownership_generation,admitted_at)
-				VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
 `
 
 type InsertOwnedOperationParams struct {
@@ -45,7 +45,7 @@ func (q *Queries) InsertOwnedOperation(ctx context.Context, arg InsertOwnedOpera
 
 const lockOperationAdmission = `-- name: LockOperationAdmission :one
 SELECT admitted_at FROM knotra_operations WHERE id=$1 AND run_id=$2 AND instance_id=$3
-			AND attempt_number=$4 AND worker_id=$5 AND ownership_generation=$6 AND kind=$7 AND NOT completed FOR UPDATE
+    AND attempt_number=$4 AND worker_id=$5 AND ownership_generation=$6 AND kind=$7 AND NOT completed FOR UPDATE
 `
 
 type LockOperationAdmissionParams struct {
@@ -75,7 +75,7 @@ func (q *Queries) LockOperationAdmission(ctx context.Context, arg LockOperationA
 
 const lockOperationIntent = `-- name: LockOperationIntent :one
 SELECT run_id,kind,effect,instance_id,admitted_at,completed,response
-			FROM knotra_operations WHERE id=$1 FOR UPDATE
+FROM knotra_operations WHERE id=$1 FOR UPDATE
 `
 
 type LockOperationIntentRow struct {
@@ -105,8 +105,8 @@ func (q *Queries) LockOperationIntent(ctx context.Context, id string) (LockOpera
 
 const lockOperationScopes = `-- name: LockOperationScopes :many
 SELECT s.id,s.limits FROM knotra_execution_scopes s JOIN knotra_execution_slots r
-			ON r.run_id=s.run_id AND r.scope_id=s.id WHERE r.run_id=$1 AND r.instance_id=$2 AND r.attempt_number=$3
-			AND r.ownership_generation=$4 AND r.released_at IS NULL ORDER BY s.id FOR UPDATE OF s
+ON r.run_id=s.run_id AND r.scope_id=s.id WHERE r.run_id=$1 AND r.instance_id=$2 AND r.attempt_number=$3
+    AND r.ownership_generation=$4 AND r.released_at IS NULL ORDER BY s.id FOR UPDATE OF s
 `
 
 type LockOperationScopesParams struct {
@@ -148,7 +148,7 @@ func (q *Queries) LockOperationScopes(ctx context.Context, arg LockOperationScop
 
 const lockOwnedOperationResponse = `-- name: LockOwnedOperationResponse :one
 SELECT completed,response FROM knotra_operations WHERE id=$1 AND run_id=$2 AND instance_id=$3
-			AND attempt_number=$4 AND worker_id=$5 AND ownership_generation=$6 AND admitted_at IS NOT NULL FOR UPDATE
+    AND attempt_number=$4 AND worker_id=$5 AND ownership_generation=$6 AND admitted_at IS NOT NULL FOR UPDATE
 `
 
 type LockOwnedOperationResponseParams struct {

@@ -60,14 +60,23 @@ func TestManagedMCPDiscoveryManifestAndToolExecution(t *testing.T) {
 		transport.ServeHTTP(w, r)
 	}))
 	defer remote.Close()
-	connection := contract.MCPConnection{Transport: "streamable_http", URL: remote.URL, Headers: map[string]contract.Credential{"Authorization": {SecretRef: "mcp_fixture_auth"}}, AllowedTools: []string{}}
+	connection := contract.MCPConnection{
+		Transport:    "streamable_http",
+		URL:          remote.URL,
+		Headers:      map[string]contract.Credential{"Authorization": {SecretRef: "mcp_fixture_auth"}},
+		AllowedTools: []string{},
+	}
 	secrets := map[string]contract.SecretSource{"mcp_fixture_auth": {Env: envName}}
 	input, err := json.Marshal(map[string]any{"url": remote.URL, "headers": connection.Headers, "secrets": secrets})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var output, stderr bytes.Buffer
-	if err := cli.Execute(ctx, []string{"mcp", "discover", "--json"}, cli.Options{In: bytes.NewReader(input), Out: &output, Err: &stderr, Getenv: os.Getenv}); err != nil {
+	if err := cli.Execute(
+		ctx,
+		[]string{"mcp", "discover", "--json"},
+		cli.Options{In: bytes.NewReader(input), Out: &output, Err: &stderr, Getenv: os.Getenv},
+	); err != nil {
 		t.Fatalf("discover: %v %s", err, &stderr)
 	}
 	var catalog struct {
@@ -76,13 +85,29 @@ func TestManagedMCPDiscoveryManifestAndToolExecution(t *testing.T) {
 			OutputSchema json.RawMessage
 		}
 	}
-	if json.Unmarshal(output.Bytes(), &catalog) != nil || len(catalog.Tools) != 2 || catalog.Tools[0].Name != "read_text" || len(catalog.Tools[0].OutputSchema) != 0 || catalog.Tools[1].Name != "search" || catalog.Tools[1].Title != "Search documents" || calls.Load() != 0 || contentCalls.Load() != 0 {
+	if json.Unmarshal(output.Bytes(), &catalog) != nil ||
+		len(catalog.Tools) != 2 ||
+		catalog.Tools[0].Name != "read_text" ||
+		len(catalog.Tools[0].OutputSchema) != 0 ||
+		catalog.Tools[1].Name != "search" ||
+		catalog.Tools[1].Title != "Search documents" ||
+		calls.Load() != 0 ||
+		contentCalls.Load() != 0 {
 		t.Fatalf("discovery called a tool or lost its catalog: %s calls=%d", &output, calls.Load())
 	}
 	connection.AllowedTools = []string{catalog.Tools[0].Name, catalog.Tools[1].Name}
 	directory := t.TempDir()
 	manifest := filepath.Join(directory, "connections.json")
-	writeJSON(t, manifest, bootstrap.Connections{Models: map[string]contract.ModelConnection{}, MCP: map[string]contract.MCPConnection{"mcp_fixture": connection}, Secrets: secrets, Remove: []string{"model_main"}})
+	writeJSON(
+		t,
+		manifest,
+		bootstrap.Connections{
+			Models:  map[string]contract.ModelConnection{},
+			MCP:     map[string]contract.MCPConnection{"mcp_fixture": connection},
+			Secrets: secrets,
+			Remove:  []string{"model_main"},
+		},
+	)
 	setup := &bootstrap.Setup{Config: bootstrap.Config{Dir: directory, ConnectionsFile: manifest, PostgresPort: 25432}}
 	if _, err := setup.WriteOnce(); err != nil {
 		t.Fatal(err)
@@ -122,7 +147,11 @@ spec:
   outputs:
     result: {schema: {type: object, additionalProperties: true}, bind: {from: nodes.lookup.outputs.result}}
 `
-	pkg := contract.Package{Entrypoint: "pipeline.yaml", Source: source, Files: []contract.File{{Path: "pipeline.yaml", Content: []byte(source)}}}
+	pkg := contract.Package{
+		Entrypoint: "pipeline.yaml",
+		Source:     source,
+		Files:      []contract.File{{Path: "pipeline.yaml", Content: []byte(source)}},
+	}
 	var validation struct {
 		Valid       bool
 		Diagnostics []contract.Diagnostic
@@ -135,7 +164,13 @@ spec:
 		t.Fatal(err)
 	}
 	var accepted struct{ Run protocol.Run }
-	if err := api.Command(ctx, "/runs", map[string]any{"definitionId": definition.Definition.ID, "profile": "local"}, uuid.NewString(), &accepted); err != nil {
+	if err := api.Command(
+		ctx,
+		"/runs",
+		map[string]any{"definitionId": definition.Definition.ID, "profile": "local"},
+		uuid.NewString(),
+		&accepted,
+	); err != nil {
 		t.Fatal(err)
 	}
 	request := awaitHuman(t, ctx, api, accepted.Run.ID)
@@ -151,7 +186,16 @@ spec:
 	next := connection
 	next.URL = replacement.URL
 	next.Headers = map[string]contract.Credential{"Authorization": {SecretRef: "mcp_fixture_next_auth"}}
-	writeJSON(t, manifest, bootstrap.Connections{Models: map[string]contract.ModelConnection{}, MCP: map[string]contract.MCPConnection{"mcp_fixture": next}, Secrets: map[string]contract.SecretSource{"mcp_fixture_next_auth": {Env: "KNOTRA_TEST_MCP_NEXT_AUTH"}}, Remove: []string{"model_main"}})
+	writeJSON(
+		t,
+		manifest,
+		bootstrap.Connections{
+			Models:  map[string]contract.ModelConnection{},
+			MCP:     map[string]contract.MCPConnection{"mcp_fixture": next},
+			Secrets: map[string]contract.SecretSource{"mcp_fixture_next_auth": {Env: "KNOTRA_TEST_MCP_NEXT_AUTH"}},
+			Remove:  []string{"model_main"},
+		},
+	)
 	if _, err := setup.WriteOnce(); err != nil {
 		t.Fatal(err)
 	}
@@ -164,21 +208,39 @@ spec:
 	}
 	defer db.Close()
 	pinned, err := db.Plan(ctx, accepted.Run.ID)
-	if err != nil || pinned.Profile.Spec.MCP["mcp_fixture"].URL != remote.URL || pinned.Profile.Spec.MCP["mcp_fixture"].Headers["Authorization"].SecretRef != "mcp_fixture_auth" || pinned.Profile.Spec.Secrets["mcp_fixture_auth"].Env != envName || pinned.MCPTools["mcp_fixture"]["search"].Title != "Search documents" {
+	if err != nil ||
+		pinned.Profile.Spec.MCP["mcp_fixture"].URL != remote.URL ||
+		pinned.Profile.Spec.MCP["mcp_fixture"].Headers["Authorization"].SecretRef != "mcp_fixture_auth" ||
+		pinned.Profile.Spec.Secrets["mcp_fixture_auth"].Env != envName ||
+		pinned.MCPTools["mcp_fixture"]["search"].Title != "Search documents" {
 		t.Fatalf("unfinished run lost its admitted MCP configuration: %v %v", pinned, err)
 	}
 	var response any
-	if err := api.Command(ctx, "/requests/"+request.ID+"/response", map[string]any{"outputs": map[string]any{"approved": true}}, uuid.NewString(), &response); err != nil {
+	if err := api.Command(
+		ctx,
+		"/requests/"+request.ID+"/response",
+		map[string]any{"outputs": map[string]any{"approved": true}},
+		uuid.NewString(),
+		&response,
+	); err != nil {
 		t.Fatal(err)
 	}
+
 	final := awaitTerminal(t, ctx, api, accepted.Run.ID)
-	if final.Status != "succeeded" || calls.Load() != 1 || replacements.Load() != 0 || !strings.Contains(string(final.Outputs["result"]), "Found: Knotra") {
+	if final.Status != "succeeded" ||
+		calls.Load() != 1 ||
+		replacements.Load() != 0 ||
+		!strings.Contains(string(final.Outputs["result"]), "Found: Knotra") {
 		t.Fatalf("managed MCP did not execute the chosen tool once: %+v calls=%d", final, calls.Load())
 	}
 	var tools, completed int
-	if err := db.Pool.QueryRow(ctx, `SELECT
+	if err := db.Pool.QueryRow(
+		ctx,
+		`SELECT
 		COALESCE((SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='tool'),0),
-		(SELECT count(*) FROM knotra_operations WHERE run_id=$1 AND kind='tool' AND completed)`, final.ID).Scan(&tools, &completed); err != nil || tools != 1 || completed != 1 {
+		(SELECT count(*) FROM knotra_operations WHERE run_id=$1 AND kind='tool' AND completed)`,
+		final.ID,
+	).Scan(&tools, &completed); err != nil || tools != 1 || completed != 1 {
 		t.Fatalf("managed MCP execution evidence: tools=%d completed=%d err=%v", tools, completed, err)
 	}
 	const contentSource = `apiVersion: knotra/v1
@@ -198,21 +260,41 @@ spec:
   outputs:
     result: {schema: {type: array}, bind: {from: nodes.read.outputs.result}}
 `
-	contentPackage := contract.Package{Entrypoint: "pipeline.yaml", Source: contentSource, Files: []contract.File{{Path: "pipeline.yaml", Content: []byte(contentSource)}}}
+	contentPackage := contract.Package{
+		Entrypoint: "pipeline.yaml",
+		Source:     contentSource,
+		Files:      []contract.File{{Path: "pipeline.yaml", Content: []byte(contentSource)}},
+	}
 	if err := api.Command(ctx, "/definitions", map[string]any{"package": contentPackage}, uuid.NewString(), &definition); err != nil {
 		t.Fatal(err)
 	}
-	if err := api.Command(ctx, "/runs", map[string]any{"definitionId": definition.Definition.ID, "profile": "local"}, uuid.NewString(), &accepted); err != nil {
+	if err := api.Command(
+		ctx,
+		"/runs",
+		map[string]any{"definitionId": definition.Definition.ID, "profile": "local"},
+		uuid.NewString(),
+		&accepted,
+	); err != nil {
 		t.Fatal(err)
 	}
 	contentFinal := awaitTerminal(t, ctx, api, accepted.Run.ID)
 	var contents []struct{ Type, Text string }
-	if contentFinal.Status != "succeeded" || contentCalls.Load() != 1 || calls.Load() != 1 || json.Unmarshal(contentFinal.Outputs["result"], &contents) != nil || len(contents) != 1 || contents[0].Type != "text" || contents[0].Text != "A plain text MCP result" {
+	if contentFinal.Status != "succeeded" ||
+		contentCalls.Load() != 1 ||
+		calls.Load() != 1 ||
+		json.Unmarshal(contentFinal.Outputs["result"], &contents) != nil ||
+		len(contents) != 1 ||
+		contents[0].Type != "text" ||
+		contents[0].Text != "A plain text MCP result" {
 		t.Fatalf("content-only MCP result did not match its array port: %+v calls=%d", contentFinal, contentCalls.Load())
 	}
-	if err := db.Pool.QueryRow(ctx, `SELECT
+	if err := db.Pool.QueryRow(
+		ctx,
+		`SELECT
 		COALESCE((SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='tool'),0),
-		(SELECT count(*) FROM knotra_operations WHERE run_id=$1 AND kind='tool' AND completed)`, contentFinal.ID).Scan(&tools, &completed); err != nil || tools != 1 || completed != 1 {
+		(SELECT count(*) FROM knotra_operations WHERE run_id=$1 AND kind='tool' AND completed)`,
+		contentFinal.ID,
+	).Scan(&tools, &completed); err != nil || tools != 1 || completed != 1 {
 		t.Fatalf("content MCP execution evidence: tools=%d completed=%d err=%v", tools, completed, err)
 	}
 	t.Log("HTTP discovery, managed profile overlay, API admission and selected MCP tool execution passed; a pending manifest replacement preserved the unfinished run's endpoint and credential reference")

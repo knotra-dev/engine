@@ -115,11 +115,13 @@ func (s *OutcomeFiles) publish(key string, data []byte, replace bool) (string, e
 		}
 		return key, nil
 	}
+
 	temporary := ".outcome-" + uuid.NewString()
 	file, err := s.root.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return "", err
 	}
+
 	defer func() { _ = s.root.Remove(temporary) }()
 	if _, err := file.Write(encoded); err != nil {
 		_ = file.Close()
@@ -152,11 +154,13 @@ func (s *OutcomeFiles) publish(key string, data []byte, replace bool) (string, e
 	if err != nil {
 		return "", err
 	}
+
 	err = fsutil.SyncOpenDir(dir)
 	closeErr := dir.Close()
 	if err != nil {
 		return "", err
 	}
+
 	return key, closeErr
 }
 
@@ -192,6 +196,7 @@ func (s *OutcomeFiles) readBoundedContext(ctx context.Context, key string, limit
 	if !validKey(key) {
 		return nil, fmt.Errorf("%w: invalid outcome key", ErrInvalidOutcome)
 	}
+
 	data, err := s.readEnvelope(ctx, key, limit)
 	if errors.Is(err, blob.ErrTooLarge) {
 		return nil, fmt.Errorf("%w: evidence exceeds byte limit", ErrInvalidOutcome)
@@ -199,14 +204,17 @@ func (s *OutcomeFiles) readBoundedContext(ctx context.Context, key string, limit
 	if err != nil {
 		return nil, err
 	}
+
 	var envelope outcomeFile
 	if err := decodeStrict(data, &envelope); err != nil {
 		return nil, fmt.Errorf("%w: decode envelope: %w", ErrInvalidOutcome, err)
 	}
+
 	sum := sha256.Sum256(envelope.Data)
 	if hex.EncodeToString(sum[:]) != envelope.SHA256 {
 		return nil, fmt.Errorf("%w: checksum mismatch", ErrInvalidOutcome)
 	}
+
 	return envelope.Data, nil
 }
 
@@ -214,6 +222,7 @@ func (s *OutcomeFiles) readEnvelope(ctx context.Context, key string, limit int64
 	if s.blobs != nil {
 		return s.blobs.Get(ctx, "outcomes/"+key+".json", limit)
 	}
+
 	name := key + ".json"
 	info, err := s.root.Lstat(name)
 	if err != nil {
@@ -222,10 +231,12 @@ func (s *OutcomeFiles) readEnvelope(ctx context.Context, key string, limit int64
 	if !info.Mode().IsRegular() {
 		return nil, fmt.Errorf("%w: outcome must be a regular file", ErrInvalidOutcome)
 	}
+
 	file, err := s.root.Open(name)
 	if err != nil {
 		return nil, err
 	}
+
 	defer func() { _ = file.Close() }()
 	// These are executor-produced durable records. An arbitrary byte cap here
 	// would make a contract-valid large output impossible to recover.
@@ -240,6 +251,7 @@ func (s *OutcomeFiles) readEnvelope(ctx context.Context, key string, limit int64
 	if limit > 0 && int64(len(data)) > limit {
 		return nil, fmt.Errorf("%w: evidence exceeds byte limit", ErrInvalidOutcome)
 	}
+
 	return data, nil
 }
 

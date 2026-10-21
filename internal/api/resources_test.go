@@ -36,7 +36,16 @@ func TestResourceCatalogRecognizesCloudProvidersAndRequiresCredentials(t *testin
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	expected := map[string]string{"local": "available", "openai": "available", "anthropic": "available", "missing": "unavailable", "unauthenticated": "unavailable", "unknown": "unavailable", "compatible": "available", "no_endpoint": "unavailable"}
+	expected := map[string]string{
+		"local":           "available",
+		"openai":          "available",
+		"anthropic":       "available",
+		"missing":         "unavailable",
+		"unauthenticated": "unavailable",
+		"unknown":         "unavailable",
+		"compatible":      "available",
+		"no_endpoint":     "unavailable",
+	}
 	seen := map[string]bool{}
 	for _, item := range body.Items {
 		if item.Kind == "model" {

@@ -9,6 +9,7 @@ import uuid
 
 context = json.loads(Path(os.environ["KNOTRA_INPUT_JSON"]).read_text(encoding="utf-8"))
 values = context["values"]
+
 if sys.argv[1] == "prepare":
     nonce = str(uuid.uuid4())
     document = {"nonce": nonce, "marker": values["marker"]}
@@ -22,4 +23,5 @@ elif sys.argv[1] == "verify":
     output = {"nonce": document["nonce"], "verified": True}
 else:
     raise ValueError(f"unknown stage: {sys.argv[1]}")
+
 Path(os.environ["KNOTRA_OUTPUT_JSON"]).write_text(json.dumps(output), encoding="utf-8")

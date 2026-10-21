@@ -117,6 +117,7 @@ func response(res *http.Response, out any) error {
 	if e = json.Unmarshal(b, out); e != nil {
 		return fmt.Errorf("invalid engine response: %w", e)
 	}
+
 	return nil
 }
 
@@ -151,10 +152,12 @@ func (c *Client) save(v Command) error {
 	if e != nil {
 		return e
 	}
+
 	f, e := os.CreateTemp(dir, ".command-")
 	if e != nil {
 		return e
 	}
+
 	name := f.Name()
 	defer func() { _ = os.Remove(name) }()
 	if _, e = f.Write(b); e != nil {
@@ -171,6 +174,7 @@ func (c *Client) save(v Command) error {
 	if e = os.Rename(name, filepath.Join(dir, v.ID+".json")); e != nil {
 		return e
 	}
+
 	return fsutil.SyncDir(dir)
 }
 
@@ -195,6 +199,7 @@ func (c *Client) Command(ctx context.Context, route string, payload any, id stri
 	if !validID(id) {
 		return errors.New("invalid operation ID")
 	}
+
 	b, e := json.Marshal(payload)
 	if e != nil {
 		return e
@@ -207,10 +212,12 @@ func (c *Client) Command(ctx context.Context, route string, payload any, id stri
 	if e = root.Close(); e != nil {
 		return e
 	}
+
 	unlock, e := c.lockCommand(ctx, id)
 	if e != nil {
 		return e
 	}
+
 	defer unlock()
 	var info struct {
 		EngineID    string `json:"engineId"`
@@ -223,6 +230,7 @@ func (c *Client) Command(ctx context.Context, route string, payload any, id stri
 	if info.Protocol != protocol.Version || info.EngineID == "" || info.PrincipalID == "" {
 		return errors.New("incompatible engine identity or protocol")
 	}
+
 	v := Command{
 		ID:          id,
 		Endpoint:    c.BaseURL,
@@ -257,19 +265,23 @@ func (c *Client) Command(ctx context.Context, route string, payload any, id stri
 	if e = c.save(v); e != nil {
 		return e
 	}
+
 	res, e := c.request(ctx, http.MethodPost, route, b, id)
 	if e != nil {
 		return fmt.Errorf("operation %s is pending; reconcile with operations retry: %w", id, e)
 	}
+
 	defer func() { _ = res.Body.Close() }()
 	data, e := io.ReadAll(io.LimitReader(res.Body, (256<<20)+1))
 	if e != nil || len(data) > 256<<20 {
 		return fmt.Errorf("operation %s remains pending after incomplete response", id)
 	}
+
 	var object map[string]json.RawMessage
 	if json.Unmarshal(data, &object) != nil || object == nil {
 		return fmt.Errorf("operation %s remains pending after malformed response", id)
 	}
+
 	var er protocol.Error
 	if res.StatusCode >= 200 && res.StatusCode < 300 {
 		if e = validateReceipt(route, data); e == nil {
@@ -281,6 +293,7 @@ func (c *Client) Command(ctx context.Context, route string, payload any, id stri
 	if e != nil {
 		return fmt.Errorf("operation %s remains pending after invalid receipt: %w", id, e)
 	}
+
 	v.HTTPStatus = res.StatusCode
 	v.Response = data
 	if res.StatusCode >= 200 && res.StatusCode < 300 {
@@ -294,6 +307,7 @@ func (c *Client) Command(ctx context.Context, route string, payload any, id stri
 	if v.Status == "completed" {
 		return nil
 	}
+
 	return &HTTPError{Status: res.StatusCode, Body: er}
 }
 
@@ -331,6 +345,7 @@ func (c *Client) Commands() ([]Command, error) {
 	if e != nil {
 		return nil, e
 	}
+
 	out := []Command{}
 
 	for _, f := range entries {
@@ -391,11 +406,13 @@ func (c *Client) Watch(ctx context.Context, runID, cursor string, emit func(prot
 				_ = res.Body.Close()
 				return fmt.Errorf("event stream: HTTP %d", res.StatusCode)
 			}
+
 			mediaType, _, mediaErr := mime.ParseMediaType(res.Header.Get("Content-Type"))
 			if mediaErr != nil || mediaType != "text/event-stream" {
 				_ = res.Body.Close()
 				return errors.New("event stream has invalid content type")
 			}
+
 			var callbackErr error
 			e = scanEvents(res.Body, runID, func(v protocol.Event) error {
 				if v.ID == cursor {
@@ -412,6 +429,7 @@ func (c *Client) Watch(ctx context.Context, runID, cursor string, emit func(prot
 			if callbackErr != nil {
 				return callbackErr
 			}
+
 			var readErr *eventReadError
 			if e != nil && !errors.Is(e, io.EOF) && !errors.As(e, &readErr) {
 				return e
@@ -420,6 +438,7 @@ func (c *Client) Watch(ctx context.Context, runID, cursor string, emit func(prot
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+
 		timer := time.NewTimer(time.Second)
 
 		select {
@@ -491,5 +510,6 @@ func scanEvents(r io.Reader, runID string, emit func(protocol.Event) error) erro
 		}
 		return &eventReadError{err: e}
 	}
+
 	return io.EOF
 }

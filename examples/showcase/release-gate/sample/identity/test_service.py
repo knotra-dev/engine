@@ -3,7 +3,6 @@ import service
 
 
 class RegressionTests(unittest.TestCase):
-
     def test_valid_permission(self):
         self.assertTrue(
             service.authorize(

@@ -19,8 +19,15 @@ func TestImplementedCompatibilityAtBoundedStepSizes(t *testing.T) {
 			executiontest.Run(t, func(t *testing.T, scenario executiontest.Scenario) executiontest.Observation {
 				limits := scenario.Plan.Profile.Spec.Limits
 				deadline := scenario.Start.Add(time.Hour)
-				snapshot := Snapshot{Run: execution.RunState{RunID: "test", Backend: execution.BackendRiver, SchedulerVersion: execution.SchedulerVersion,
-					StateFormatVersion: execution.StateFormatVersion, Status: "pending", Now: scenario.Start, Deadline: deadline},
+				snapshot := Snapshot{Run: execution.RunState{
+					RunID:              "test",
+					Backend:            execution.BackendRiver,
+					SchedulerVersion:   execution.SchedulerVersion,
+					StateFormatVersion: execution.StateFormatVersion,
+					Status:             "pending",
+					Now:                scenario.Start,
+					Deadline:           deadline,
+				},
 					Graph:  execution.RootGraph("test", scenario.Plan.Root, scenario.Inputs, limits, deadline),
 					Scopes: []execution.ScopeRecord{{RunID: "test", ID: "test", Limits: limits}}}
 				rootID := snapshot.Graph.ID
@@ -107,7 +114,11 @@ func TestImplementedCompatibilityAtBoundedStepSizes(t *testing.T) {
 								control.CurrentElement = nil
 							}
 							snapshot.Controls[i] = control
-							if control.Kind == "foreach" && control.CollectionPosition == control.ElementCount && control.SucceededChildren == control.ElementCount && control.ActiveChildren == 0 && control.FailedChildren == 0 {
+							if control.Kind == "foreach" &&
+								control.CollectionPosition == control.ElementCount &&
+								control.SucceededChildren == control.ElementCount &&
+								control.ActiveChildren == 0 &&
+								control.FailedChildren == 0 {
 								outputs, err := collectForeach(nodes[control.InstanceID].Request.Node.Foreach.Body, control.InstanceID, control.Elements, snapshot.Children)
 								if err != nil {
 									t.Fatal(err)
@@ -117,7 +128,10 @@ func TestImplementedCompatibilityAtBoundedStepSizes(t *testing.T) {
 						}
 						snapshot.Children = slices.DeleteFunc(snapshot.Children, func(child execution.GraphRecord) bool {
 							for _, control := range snapshot.Controls {
-								if control.Kind == "foreach" && control.InstanceID == child.ParentInstanceID && child.IterationIndex != nil && *child.IterationIndex < control.CollectionPosition {
+								if control.Kind == "foreach" &&
+									control.InstanceID == child.ParentInstanceID &&
+									child.IterationIndex != nil &&
+									*child.IterationIndex < control.CollectionPosition {
 									return true
 								}
 							}
@@ -270,7 +284,11 @@ func collectForeach(body contract.Graph, parentID string, elements []contract.Va
 		if child.ParentInstanceID != parentID {
 			continue
 		}
-		if child.IterationIndex == nil || *child.IterationIndex < 0 || *child.IterationIndex >= len(results) || child.State != "succeeded" || seen[*child.IterationIndex] {
+		if child.IterationIndex == nil ||
+			*child.IterationIndex < 0 ||
+			*child.IterationIndex >= len(results) ||
+			child.State != "succeeded" ||
+			seen[*child.IterationIndex] {
 			return nil, failure("PLAN_INVALID", "foreach child position is inconsistent")
 		}
 		results[*child.IterationIndex] = child.Outputs

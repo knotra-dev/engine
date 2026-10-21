@@ -3,7 +3,6 @@ import service
 
 
 class RegressionTests(unittest.TestCase):
-
     def test_discount_before_tax(self):
         self.assertEqual(service.charge(1000, 100, 1000), 990)
 

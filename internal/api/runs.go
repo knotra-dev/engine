@@ -124,6 +124,7 @@ func (s *Server) respond(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, 400, "INPUT_INVALID", e.Error(), nil)
 		return
 	}
+
 	id := r.PathValue("id")
 	s.command(w, r, b, func(tx pgx.Tx) (int, any, error) {
 		values := contract.Values{}
@@ -151,6 +152,7 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, 400, "INPUT_INVALID", e.Error(), nil)
 		return
 	}
+
 	id, instance := r.PathValue("id"), r.PathValue("instance")
 	s.command(w, r, b, func(tx pgx.Tx) (int, any, error) {
 		decisions := map[string]string{"succeeded": "completed", "not_started": "not_executed", "failed": "failed"}

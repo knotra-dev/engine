@@ -46,9 +46,11 @@ type Runtime struct {
 	workCtx context.Context
 	cancel  context.CancelCauseFunc
 	done    chan struct{}
+
 	// ponytail: scan 64 expired outcome keys per tick; the cursor prevents a
 	// missing envelope from starving later keys. Partition if scans dominate.
-	outcomeCursor   string
+	outcomeCursor string
+
 	timerCursor     string
 	deliveryCursor  string
 	resourceCursor  string
@@ -80,9 +82,11 @@ func (r *Runtime) Start(ctx context.Context) error {
 	if r.HostID != r.Client.hostID || r.Store.EngineID != r.Client.engineID {
 		return errors.New("runtime queue does not match its engine and host identity")
 	}
-	if (r.Host.Runner.EngineID != "" && r.Host.Runner.EngineID != r.Store.EngineID) || (r.Host.Runner.HostID != "" && r.Host.Runner.HostID != r.HostID) {
+	if (r.Host.Runner.EngineID != "" && r.Host.Runner.EngineID != r.Store.EngineID) ||
+		(r.Host.Runner.HostID != "" && r.Host.Runner.HostID != r.HostID) {
 		return errors.New("runtime runner does not match its engine and host identity")
 	}
+
 	r.Host.Runner.EngineID, r.Host.Runner.HostID = r.Store.EngineID, r.HostID
 	r.Host.Runner.ResourceEvidence = r.Outcomes
 	if err := r.Store.RegisterWorker(ctx, r.WorkerID, r.HostID, r.Client.role); err != nil {
@@ -91,6 +95,7 @@ func (r *Runtime) Start(ctx context.Context) error {
 	if err := r.Store.BindWorkerDeliveryClient(ctx, r.WorkerID, r.Client.River.ID()); err != nil {
 		return err
 	}
+
 	r.Client.logger = r.Client.logger.With("actorId", r.WorkerID)
 	if r.Host.Log == nil {
 		r.Host.Log = r.Client.logger
@@ -110,6 +115,7 @@ func (r *Runtime) Start(ctx context.Context) error {
 		close(r.done)
 		return err
 	}
+
 	go r.maintain(registration)
 	return nil
 }
@@ -164,6 +170,7 @@ func (r *Runtime) maintain(registration metric.Registration) {
 		if len(polls) == 0 {
 			return
 		}
+
 		timer := time.NewTicker(time.Second)
 		defer timer.Stop()
 		for {
@@ -251,6 +258,7 @@ func (r *Runtime) advance(ctx context.Context, job *river.Job[AdvanceArgs]) erro
 	if err != nil {
 		return err
 	}
+
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	return pgx.BeginFunc(ctx, r.Store.Pool, func(tx pgx.Tx) error {
@@ -270,8 +278,12 @@ func (r *Runtime) advance(ctx context.Context, job *river.Job[AdvanceArgs]) erro
 
 func (r *Runtime) advanceTx(ctx context.Context, tx pgx.Tx, plan contract.Plan, runID, focusInstanceID string) error {
 	ctx, span := otel.Tracer("knotra/scheduler").Start(ctx, "scheduler.advance", trace.WithAttributes(
-		attribute.String("knotra.run.id", runID), attribute.String("knotra.instance.id", focusInstanceID),
-		attribute.String("knotra.engine.id", r.Store.EngineID), attribute.String("knotra.host.id", r.HostID), attribute.String("knotra.actor.id", r.WorkerID)))
+		attribute.String("knotra.run.id", runID),
+		attribute.String("knotra.instance.id", focusInstanceID),
+		attribute.String("knotra.engine.id", r.Store.EngineID),
+		attribute.String("knotra.host.id", r.HostID),
+		attribute.String("knotra.actor.id", r.WorkerID),
+	))
 	defer span.End()
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -279,14 +291,21 @@ func (r *Runtime) advanceTx(ctx context.Context, tx pgx.Tx, plan contract.Plan, 
 	if err != nil {
 		return err
 	}
-	if run.Backend != execution.BackendRiver || run.SchedulerVersion != execution.SchedulerVersion || run.StateFormatVersion != execution.StateFormatVersion {
+	if run.Backend != execution.BackendRiver ||
+		run.SchedulerVersion != execution.SchedulerVersion ||
+		run.StateFormatVersion != execution.StateFormatVersion {
 		return store.ErrExecutionVersion
 	}
+
 	span.SetAttributes(attribute.Int64("knotra.wake.generation", run.WakeGeneration))
 	if protocol.Terminal(run.Status) {
 		return nil
 	}
-	graphs, err := db.New(tx).ListRunnableGraphs(ctx, db.ListRunnableGraphsParams{RunID: runID, GraphCursor: run.GraphCursor, FocusInstanceID: focusInstanceID})
+
+	graphs, err := db.New(tx).ListRunnableGraphs(
+		ctx,
+		db.ListRunnableGraphsParams{RunID: runID, GraphCursor: run.GraphCursor, FocusInstanceID: focusInstanceID},
+	)
 	if err != nil {
 		return err
 	}
@@ -360,18 +379,22 @@ func (r *Runtime) advanceGraphTx(ctx context.Context, tx pgx.Tx, plan contract.P
 	if err != nil {
 		return changes, err
 	}
+
 	run, err := store.LockExecutionRun(ctx, tx, runID)
 	if err != nil {
 		return changes, err
 	}
+
 	definition, err := execution.GraphDefinition(plan, graph.Pipeline, graph.GraphPath)
 	if err != nil {
 		return changes, err
 	}
+
 	nodes, err := store.ReadSchedulableNodes(ctx, tx, run, graph, focusInstanceID, bound)
 	if err != nil {
 		return changes, err
 	}
+
 	instanceIDs, nodeIDs := make([]string, 0, len(nodes)), make([]string, 0, len(nodes))
 	var dependencies []string
 	for _, node := range nodes {
@@ -429,31 +452,38 @@ func (r *Runtime) advanceGraphTx(ctx context.Context, tx pgx.Tx, plan contract.P
 	if err != nil {
 		return changes, err
 	}
+
 	slices.Sort(dependencies)
 	dependencyValues, err := store.ReadExecutionDependencyValues(ctx, tx, runID, graph.ID, slices.Compact(dependencies))
 	if err != nil {
 		return changes, err
 	}
+
 	attempts, err := store.ReadExecutionAttempts(ctx, tx, runID, graph.ID, instanceIDs)
 	if err != nil {
 		return changes, err
 	}
+
 	scopes, err := store.ReadExecutionScopes(ctx, tx, graph)
 	if err != nil {
 		return changes, err
 	}
+
 	timers, err := store.ReadExecutionRetryTimers(ctx, tx, runID, graph.ID, instanceIDs)
 	if err != nil {
 		return changes, err
 	}
+
 	requests, err := store.ReadExecutionRequests(ctx, tx, runID, graph.ID, instanceIDs)
 	if err != nil {
 		return changes, err
 	}
+
 	controls, err := store.ReadExecutionControls(ctx, tx, runID, graph.ID, instanceIDs)
 	if err != nil {
 		return changes, err
 	}
+
 	controlByID := make(map[string]execution.ControlRecord, len(controls))
 	for _, control := range controls {
 		controlByID[control.InstanceID] = control
@@ -468,7 +498,11 @@ func (r *Runtime) advanceGraphTx(ctx context.Context, tx pgx.Tx, plan contract.P
 		if !found || frozen.Foreach == nil {
 			return changes, errors.New("foreach snapshot has no frozen control")
 		}
-		if !run.Paused && run.StopCause == nil && !run.Cancelled && control.NextPosition < control.ElementCount && control.ActiveChildren < control.Concurrency {
+		if !run.Paused &&
+			run.StopCause == nil &&
+			!run.Cancelled &&
+			control.NextPosition < control.ElementCount &&
+			control.ActiveChildren < control.Concurrency {
 			bindings := make([]contract.Binding, 0, len(frozen.Foreach.With))
 			for _, binding := range frozen.Foreach.With {
 				bindings = append(bindings, binding)
@@ -490,14 +524,17 @@ func (r *Runtime) advanceGraphTx(ctx context.Context, tx pgx.Tx, plan contract.P
 	if err != nil {
 		return changes, err
 	}
+
 	unresolved, err := db.New(tx).HasUnresolvedOutsideSelection(ctx, db.HasUnresolvedOutsideSelectionParams{RunID: runID, InstanceIds: instanceIDs})
 	if err != nil {
 		return changes, err
 	}
+
 	active, err := db.New(tx).HasActiveNodesOutsideSelection(ctx, db.HasActiveNodesOutsideSelectionParams{RunID: runID, GraphID: graph.ID, InstanceIds: instanceIDs})
 	if err != nil {
 		return changes, err
 	}
+
 	snapshot := scheduler.Snapshot{Graph: graph, Nodes: append(dependencyValues, nodes...), Attempts: attempts, Scopes: scopes,
 		Timers: timers, Requests: requests, Controls: controls, Children: children, UnresolvedElsewhere: unresolved,
 		FocusInstanceID: focusInstanceID, SelectedNodeIDs: nodeIDs, ActiveNodesElsewhere: active}
@@ -512,6 +549,7 @@ func (r *Runtime) advanceGraphTx(ctx context.Context, tx pgx.Tx, plan contract.P
 		if err != nil {
 			return changes, err
 		}
+
 		changes, err = scheduler.Step(plan, snapshot, bound)
 		schedulerCount(ctx, "steps")
 		if err != nil {
@@ -550,10 +588,12 @@ func (r *Runtime) advanceGraphTx(ctx context.Context, tx pgx.Tx, plan contract.P
 			if err != nil {
 				return changes, err
 			}
+
 			exports, err := store.ReadExecutionDependencyValues(ctx, tx, runID, graph.ID, dependencies)
 			if err != nil {
 				return changes, err
 			}
+
 			bindings := make([]contract.Binding, 0, len(definition.Outputs))
 			for _, port := range definition.Outputs {
 				if port.Bind != nil {
@@ -564,6 +604,7 @@ func (r *Runtime) advanceGraphTx(ctx context.Context, tx pgx.Tx, plan contract.P
 			if err != nil {
 				return changes, err
 			}
+
 			inputValues, err := store.ReadExecutionGraphInputValues(ctx, tx, runID, graph.ID, names)
 			if err != nil {
 				return changes, err
@@ -580,7 +621,10 @@ func (r *Runtime) advanceGraphTx(ctx context.Context, tx pgx.Tx, plan contract.P
 	}
 	if changes.ReserveInstances > 0 {
 		for _, scope := range scopes {
-			tag, err := db.New(tx).ReserveNodeInstances(ctx, db.ReserveNodeInstancesParams{RunID: runID, ID: scope.ID, MaterializedInstances: changes.ReserveInstances})
+			tag, err := db.New(tx).ReserveNodeInstances(
+				ctx,
+				db.ReserveNodeInstancesParams{RunID: runID, ID: scope.ID, MaterializedInstances: changes.ReserveInstances},
+			)
 			if err != nil {
 				return changes, err
 			}
@@ -615,14 +659,33 @@ func (r *Runtime) advanceGraphTx(ctx context.Context, tx pgx.Tx, plan contract.P
 			return changes, err
 		}
 		if !node.Deadline.IsZero() {
-			if _, err := db.New(tx).InsertNodeDeadline(ctx, db.InsertNodeDeadlineParams{RunID: runID, ID: "node/" + node.ID, InstanceID: new(node.ID), DueAt: node.Deadline}); err != nil {
+			if _, err := db.New(tx).InsertNodeDeadline(
+				ctx,
+				db.InsertNodeDeadlineParams{RunID: runID, ID: "node/" + node.ID, InstanceID: new(node.ID), DueAt: node.Deadline},
+			); err != nil {
 				return changes, err
 			}
 		}
-		projection := execution.Projection{RunID: runID, Kind: "node", InstanceID: node.ID, NodeID: node.NodeID, Pipeline: graph.Pipeline,
-			ParentInstanceID: graph.ParentInstanceID, IterationIndex: graph.IterationIndex, GraphPath: graph.GraphPath + "/nodes/" + node.NodeID,
-			NodeType: definition.Nodes[node.NodeID].Type, Status: node.State, Attempt: node.AttemptNumber,
-			Inputs: node.Inputs, Outputs: node.Outputs, Failure: node.Failure, StartedAt: node.StartedAt, FinishedAt: node.FinishedAt, Reason: node.Reason, Time: run.Now}
+		projection := execution.Projection{
+			RunID:            runID,
+			Kind:             "node",
+			InstanceID:       node.ID,
+			NodeID:           node.NodeID,
+			Pipeline:         graph.Pipeline,
+			ParentInstanceID: graph.ParentInstanceID,
+			IterationIndex:   graph.IterationIndex,
+			GraphPath:        graph.GraphPath + "/nodes/" + node.NodeID,
+			NodeType:         definition.Nodes[node.NodeID].Type,
+			Status:           node.State,
+			Attempt:          node.AttemptNumber,
+			Inputs:           node.Inputs,
+			Outputs:          node.Outputs,
+			Failure:          node.Failure,
+			StartedAt:        node.StartedAt,
+			FinishedAt:       node.FinishedAt,
+			Reason:           node.Reason,
+			Time:             run.Now,
+		}
 		if err := r.Store.ProjectExecution(ctx, tx, projection); err != nil {
 			return changes, err
 		}
@@ -664,7 +727,17 @@ func (r *Runtime) advanceGraphTx(ctx context.Context, tx pgx.Tx, plan contract.P
 			return changes, err
 		}
 		if !run.Paused {
-			if err := r.Store.ProjectExecution(ctx, tx, execution.Projection{RunID: runID, Kind: "run", Status: "waiting_resolution", Failure: changes.PauseCause, Time: run.Now}); err != nil {
+			if err := r.Store.ProjectExecution(
+				ctx,
+				tx,
+				execution.Projection{
+					RunID:   runID,
+					Kind:    "run",
+					Status:  "waiting_resolution",
+					Failure: changes.PauseCause,
+					Time:    run.Now,
+				},
+			); err != nil {
 				return changes, err
 			}
 		}
@@ -690,10 +763,21 @@ func (r *Runtime) advanceGraphTx(ctx context.Context, tx pgx.Tx, plan contract.P
 		if err := store.InsertExecutionAttempt(ctx, tx, attempt); err != nil {
 			return changes, err
 		}
-		if err := r.Client.InsertExecute(ctx, tx, ExecuteArgs{Attempt: attempt.AttemptID, DispatchGeneration: attempt.DispatchGeneration, RoutingVersion: RoutingVersion}); err != nil {
+		if err := r.Client.InsertExecute(
+			ctx,
+			tx,
+			ExecuteArgs{
+				Attempt:            attempt.AttemptID,
+				DispatchGeneration: attempt.DispatchGeneration,
+				RoutingVersion:     RoutingVersion,
+			},
+		); err != nil {
 			return changes, err
 		}
-		if _, err := db.New(tx).ClearAttemptDispatch(ctx, db.ClearAttemptDispatchParams{RunID: attempt.RunID, InstanceID: attempt.InstanceID, Number: attempt.Number}); err != nil {
+		if _, err := db.New(tx).ClearAttemptDispatch(
+			ctx,
+			db.ClearAttemptDispatchParams{RunID: attempt.RunID, InstanceID: attempt.InstanceID, Number: attempt.Number},
+		); err != nil {
 			return changes, err
 		}
 	}
@@ -717,7 +801,15 @@ func (r *Runtime) advanceGraphTx(ctx context.Context, tx pgx.Tx, plan contract.P
 		}); err != nil {
 			return changes, err
 		}
-		if err := r.Client.InsertExecute(ctx, tx, ExecuteArgs{Attempt: attempt.AttemptID, DispatchGeneration: generation, RoutingVersion: RoutingVersion}); err != nil {
+		if err := r.Client.InsertExecute(
+			ctx,
+			tx,
+			ExecuteArgs{
+				Attempt:            attempt.AttemptID,
+				DispatchGeneration: generation,
+				RoutingVersion:     RoutingVersion,
+			},
+		); err != nil {
 			return changes, err
 		}
 	}
@@ -742,7 +834,10 @@ func (r *Runtime) execute(ctx context.Context, job *river.Job[ExecuteArgs]) erro
 				return err
 			}
 			if _, err := db.New(tx).MarkPausedAttemptForDispatch(claimCtx, db.MarkPausedAttemptForDispatchParams{
-				RunID: job.Args.Attempt.RunID, InstanceID: job.Args.Attempt.InstanceID, Number: job.Args.Attempt.Number, DispatchGeneration: job.Args.DispatchGeneration,
+				RunID:              job.Args.Attempt.RunID,
+				InstanceID:         job.Args.Attempt.InstanceID,
+				Number:             job.Args.Attempt.Number,
+				DispatchGeneration: job.Args.DispatchGeneration,
 			}); err != nil {
 				return err
 			}
@@ -764,6 +859,7 @@ func (r *Runtime) execute(ctx context.Context, job *river.Job[ExecuteArgs]) erro
 	if err != nil || claim == nil {
 		return err
 	}
+
 	trace.SpanFromContext(ctx).SetAttributes(telemetry.OwnershipAttributes(claim.Ownership)...)
 	trace.SpanFromContext(ctx).SetAttributes(attribute.String("knotra.actor.id", r.WorkerID))
 	work, cancel := context.WithCancelCause(ctx)
@@ -801,8 +897,12 @@ func (r *Runtime) execute(ctx context.Context, job *river.Job[ExecuteArgs]) erro
 	}()
 	var result execution.ExecuteResult
 	if claim.SessionWorkerLost {
-		result.Failure = &execution.Failure{Code: "OUTCOME_UNKNOWN", Message: "run-scoped MCP worker was lost; session state cannot be reconstructed", Unknown: true,
-			OperationID: claim.RunID + "/session"}
+		result.Failure = &execution.Failure{
+			Code:        "OUTCOME_UNKNOWN",
+			Message:     "run-scoped MCP worker was lost; session state cannot be reconstructed",
+			Unknown:     true,
+			OperationID: claim.RunID + "/session",
+		}
 	} else {
 		result = r.Host.Execute(work, claim.Request)
 	}
@@ -823,6 +923,7 @@ func (r *Runtime) execute(ctx context.Context, job *river.Job[ExecuteArgs]) erro
 	if err == nil {
 		return nil
 	}
+
 	handoff, stopHandoff := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer stopHandoff()
 	queueErr := pgx.BeginFunc(handoff, r.Store.Pool, func(tx pgx.Tx) error {
@@ -863,10 +964,12 @@ func (r *Runtime) publish(ctx context.Context, outcome execution.Outcome, recove
 	if err := r.verifyArtifacts(ctx, outcome); err != nil {
 		return err
 	}
+
 	plan, err := r.Store.Plan(ctx, outcome.Ownership.RunID)
 	if err != nil {
 		return err
 	}
+
 	return pgx.BeginFunc(ctx, r.Store.Pool, func(tx pgx.Tx) error {
 		var eligible bool
 		var err error
@@ -886,6 +989,7 @@ func (r *Runtime) publish(ctx context.Context, outcome execution.Outcome, recove
 		if _, err := store.ReleaseAttemptSlots(ctx, tx, outcome.Ownership, r.Wake); err != nil {
 			return err
 		}
+
 		return complete(tx)
 	})
 }
@@ -913,6 +1017,7 @@ func (r *Runtime) verifyArtifacts(ctx context.Context, outcome execution.Outcome
 	if err := outcome.Validate(); err != nil {
 		return err
 	}
+
 	refs := make(map[string]execution.ArtifactReference, len(outcome.Artifacts))
 	for _, ref := range outcome.Artifacts {
 		data, err := r.Host.Artifacts.Get(ctx, ref.ID)
@@ -941,6 +1046,7 @@ func (r *Runtime) pumpTimers(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
 	var pollErr error
 	for _, id := range ids {
 		r.timerCursor = id
@@ -979,12 +1085,18 @@ func (r *Runtime) reconcileOutcomes(ctx context.Context) error {
 		r.outcomeCursor = ""
 		return nil
 	}
+
 	for _, record := range rows {
 		if record.OutcomeKey == nil || record.Owner == nil {
 			return errors.New("claimed attempt is missing ownership/outcome identity")
 		}
+
 		r.outcomeCursor = *record.OutcomeKey
-		token := execution.Ownership{AttemptID: execution.AttemptID{RunID: record.RunID, InstanceID: record.InstanceID, Number: record.Number}, WorkerID: *record.Owner, Generation: record.OwnershipGeneration}
+		token := execution.Ownership{
+			AttemptID:  execution.AttemptID{RunID: record.RunID, InstanceID: record.InstanceID, Number: record.Number},
+			WorkerID:   *record.Owner,
+			Generation: record.OwnershipGeneration,
+		}
 		if _, err := r.Outcomes.GetContext(ctx, *record.OutcomeKey); err != nil {
 			if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, execution.ErrInvalidOutcome) {
 				return err
@@ -1011,10 +1123,15 @@ func (r *Runtime) reconcileOutcomes(ctx context.Context) error {
 			}); err != nil {
 				return err
 			}
+
 			continue
 		}
 		if err := pgx.BeginFunc(ctx, r.Store.Pool, func(tx pgx.Tx) error {
-			return r.Client.InsertFinalize(ctx, tx, FinalizeArgs{Attempt: token.AttemptID, OutcomeKey: *record.OutcomeKey, RoutingVersion: RoutingVersion})
+			return r.Client.InsertFinalize(
+				ctx,
+				tx,
+				FinalizeArgs{Attempt: token.AttemptID, OutcomeKey: *record.OutcomeKey, RoutingVersion: RoutingVersion},
+			)
 		}); err != nil {
 			return err
 		}
@@ -1032,6 +1149,7 @@ func (r *Runtime) reconcileDeliveries(ctx context.Context) error {
 		r.deliveryCursor = ""
 		return nil
 	}
+
 	for _, id := range runs {
 		r.deliveryCursor = id
 		if err := pgx.BeginFunc(ctx, r.Store.Pool, func(tx pgx.Tx) error {
@@ -1039,7 +1157,9 @@ func (r *Runtime) reconcileDeliveries(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			if run.Backend != execution.BackendRiver || run.SchedulerVersion != execution.SchedulerVersion || run.StateFormatVersion != execution.StateFormatVersion {
+			if run.Backend != execution.BackendRiver ||
+				run.SchedulerVersion != execution.SchedulerVersion ||
+				run.StateFormatVersion != execution.StateFormatVersion {
 				return store.ErrExecutionVersion
 			}
 			if protocol.Terminal(run.Status) {
@@ -1058,14 +1178,20 @@ func (r *Runtime) reconcileDeliveries(ctx context.Context) error {
 			if run.Cancelled || run.StopCause != nil || run.Paused || !run.Deadline.After(run.Now) {
 				return nil //nolint:nilerr // These states deliberately prohibit redispatch; no delivery repair failed.
 			}
+
 			ready, err := db.New(tx).ReadReadyDeliveries(ctx, db.ReadReadyDeliveriesParams{RunID: id, Cursor: run.DeliveryCursor, Now: run.Now})
 			if err != nil {
 				return err
 			}
+
 			repaired, cursor := false, run.DeliveryCursor
 			for _, attempt := range ready {
 				cursor = attempt.InstanceID
-				args := ExecuteArgs{Attempt: execution.AttemptID{RunID: id, InstanceID: attempt.InstanceID, Number: attempt.Number}, DispatchGeneration: attempt.DispatchGeneration, RoutingVersion: RoutingVersion}
+				args := ExecuteArgs{
+					Attempt:            execution.AttemptID{RunID: id, InstanceID: attempt.InstanceID, Number: attempt.Number},
+					DispatchGeneration: attempt.DispatchGeneration,
+					RoutingVersion:     RoutingVersion,
+				}
 				viable, err := r.Client.hasDelivery(ctx, tx, args, run.Now)
 				if err != nil {
 					return err

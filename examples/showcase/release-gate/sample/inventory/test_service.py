@@ -3,7 +3,6 @@ import service
 
 
 class RegressionTests(unittest.TestCase):
-
     def test_partial_reservation(self):
         self.assertEqual(service.reserve(10, 3), 7)
 

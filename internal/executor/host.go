@@ -31,15 +31,23 @@ type Host struct {
 func (h *Host) Execute(ctx context.Context, q execution.ExecuteRequest) execution.ExecuteResult {
 	ctx, span := otel.Tracer("knotra/engine").Start(ctx, "node."+q.Node.Type)
 	defer span.End()
-	span.SetAttributes(attribute.String("knotra.run.id", q.RunID), attribute.String("knotra.instance.id", q.InstanceID), attribute.Int("knotra.attempt", q.Attempt))
+	span.SetAttributes(
+		attribute.String("knotra.run.id", q.RunID),
+		attribute.String("knotra.instance.id", q.InstanceID),
+		attribute.Int("knotra.attempt", q.Attempt),
+	)
 	var loadErr error
 	q.Plan, loadErr = h.Store.Plan(ctx, q.RunID)
 	if loadErr != nil {
 		return execution.ExecuteResult{Failure: &execution.Failure{Code: "STORAGE_UNAVAILABLE", Message: "cannot load admitted plan", Retryable: true}}
 	}
 	if q.Ownership == nil || q.Ownership.AttemptID != (execution.AttemptID{RunID: q.RunID, InstanceID: q.InstanceID, Number: q.Attempt}) {
-		return execution.ExecuteResult{Failure: &execution.Failure{Code: "OWNERSHIP_REQUIRED", Message: "execution token does not match the admitted attempt"}}
+		return execution.ExecuteResult{Failure: &execution.Failure{
+			Code:    "OWNERSHIP_REQUIRED",
+			Message: "execution token does not match the admitted attempt",
+		}}
 	}
+
 	span.SetAttributes(telemetry.OwnershipAttributes(*q.Ownership)...)
 	span.SetAttributes(attribute.String("knotra.engine.id", h.Store.EngineID), attribute.String("knotra.host.id", h.Runner.HostID))
 	ctx, cancel := context.WithDeadline(ctx, q.Deadline)
@@ -74,10 +82,14 @@ func (h *Host) Execute(ctx context.Context, q execution.ExecuteRequest) executio
 	}
 	// Adapters can classify transport errors without retaining their cancellation
 	// cause. The owned context still proves that execution was interrupted.
-	if ctx.Err() != nil || errors.Is(e, store.ErrExecutionOwnership) || errors.Is(e, context.Canceled) || errors.Is(e, context.DeadlineExceeded) {
+	if ctx.Err() != nil ||
+		errors.Is(e, store.ErrExecutionOwnership) ||
+		errors.Is(e, context.Canceled) ||
+		errors.Is(e, context.DeadlineExceeded) {
 		return execution.ExecuteResult{Failure: &execution.Failure{Code: "OUTCOME_UNKNOWN", Message: e.Error(), Unknown: true,
 			OperationID: fmt.Sprintf("%s/attempt/%d", q.InstanceID, q.Attempt), CanRetryIfNotExecuted: q.Node.Type != "agent"}}
 	}
+
 	var f *adapters.Failure
 	if errors.As(e, &f) {
 		return execution.ExecuteResult{Failure: &execution.Failure{
@@ -89,6 +101,7 @@ func (h *Host) Execute(ctx context.Context, q execution.ExecuteRequest) executio
 			CanRetryIfNotExecuted: q.Node.Type != "agent",
 		}}
 	}
+
 	code := "EXECUTION_FAILED"
 	if strings.Contains(e.Error(), "BUDGET_EXCEEDED") {
 		code = "BUDGET_EXCEEDED"
@@ -125,7 +138,11 @@ func (h *executionHooks) Reserve(ctx context.Context, kind string) error {
 }
 
 func (h *executionHooks) PutArtifact(ctx context.Context, name, mime string, b []byte) (contract.Artifact, error) {
-	origin := map[string]string{"runId": h.request.RunID, "instanceId": h.request.InstanceID, "attemptId": fmt.Sprintf("%s.a%d", h.request.InstanceID, h.request.Attempt)}
+	origin := map[string]string{
+		"runId":      h.request.RunID,
+		"instanceId": h.request.InstanceID,
+		"attemptId":  fmt.Sprintf("%s.a%d", h.request.InstanceID, h.request.Attempt),
+	}
 	return h.store.PutOwnedArtifact(ctx, *h.request.Ownership, h.artifacts, name, mime, b, origin)
 }
 

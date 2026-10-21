@@ -103,7 +103,7 @@ func (q *Queries) HasUnresolvedOutsideSelection(ctx context.Context, arg HasUnre
 
 const insertExecutionAttempt = `-- name: InsertExecutionAttempt :execresult
 INSERT INTO knotra_execution_attempts(run_id,instance_id,number,dispatch_generation,dispatch_pending,state)
-		VALUES($1,$2,$3,$4,$5,'ready')
+VALUES($1,$2,$3,$4,$5,'ready')
 `
 
 type InsertExecutionAttemptParams struct {
@@ -126,7 +126,22 @@ func (q *Queries) InsertExecutionAttempt(ctx context.Context, arg InsertExecutio
 
 const insertExecutionGraph = `-- name: InsertExecutionGraph :execresult
 INSERT INTO knotra_execution_graphs(run_id,id,parent_instance_id,address,pipeline,graph_path,
-		inputs,permissions,scopes,deadline,state,revision,iteration_index) VALUES($1,$2,NULLIF($3::text,''),$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+    inputs,permissions,scopes,deadline,state,revision,iteration_index)
+VALUES(
+    $1,
+    $2,
+    NULLIF($3::text,''),
+    $4,
+    $5,
+    $6,
+    $7,
+    $8,
+    $9,
+    $10,
+    $11,
+    $12,
+    $13
+)
 `
 
 type InsertExecutionGraphParams struct {
@@ -573,7 +588,12 @@ func (q *Queries) ReadExecutionRetryTimers(ctx context.Context, arg ReadExecutio
 }
 
 const readExecutionScopes = `-- name: ReadExecutionScopes :many
-SELECT to_jsonb(s) FROM knotra_execution_scopes s WHERE run_id=$1 AND id=ANY($2::text[]) ORDER BY id FOR UPDATE
+SELECT to_jsonb(s)
+FROM knotra_execution_scopes s
+WHERE run_id=$1
+    AND id=ANY($2::text[])
+ORDER BY id
+FOR UPDATE
 `
 
 type ReadExecutionScopesParams struct {
@@ -736,10 +756,20 @@ func (q *Queries) ReleaseNodeDependencies(ctx context.Context, arg ReleaseNodeDe
 const saveExecutionControl = `-- name: SaveExecutionControl :execresult
 INSERT INTO knotra_execution_controls (
     run_id,instance_id,kind,next_position,collection_position,iteration,elements,carry,child_graph_id,revision,concurrency
-) VALUES ($1,$2,$3,$4,$5,
-    $6,COALESCE($7::jsonb,'[]'::jsonb),$8,NULLIF($9::text,''),$10,$11)
-ON CONFLICT (run_id,instance_id) DO UPDATE SET
-    next_position=EXCLUDED.next_position,
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    COALESCE($7::jsonb,'[]'::jsonb),
+    $8,
+    NULLIF($9::text,''),
+    $10,
+    $11
+)
+ON CONFLICT (run_id,instance_id) DO UPDATE SET next_position=EXCLUDED.next_position,
     collection_position=EXCLUDED.collection_position,
     iteration=EXCLUDED.iteration,
     carry=EXCLUDED.carry,
@@ -780,9 +810,16 @@ func (q *Queries) SaveExecutionControl(ctx context.Context, arg SaveExecutionCon
 }
 
 const saveExecutionGraph = `-- name: SaveExecutionGraph :execresult
-UPDATE knotra_execution_graphs SET state=$1,materialization_cursor=$2,
-		inputs=CASE WHEN state='pending' THEN $3::jsonb ELSE inputs END,outputs=$4,failure=$5,revision=$6
-		WHERE run_id=$7 AND id=$8 AND revision=$6-1 AND state IN ('pending','running')
+UPDATE knotra_execution_graphs SET state=$1,
+    materialization_cursor=$2,
+    inputs=CASE WHEN state='pending' THEN $3::jsonb ELSE inputs END,
+    outputs=$4,
+    failure=$5,
+    revision=$6
+WHERE run_id=$7
+    AND id=$8
+    AND revision=$6-1
+    AND state IN ('pending','running')
 `
 
 type SaveExecutionGraphParams struct {
@@ -811,15 +848,23 @@ func (q *Queries) SaveExecutionGraph(ctx context.Context, arg SaveExecutionGraph
 
 const saveExecutionNode = `-- name: SaveExecutionNode :execresult
 INSERT INTO knotra_execution_nodes(run_id,id,graph_id,node_id,address,state,inputs,outputs,failure,
-		execution_request,deadline,attempt_number,revision,started_at,finished_at,reason,node_kind,dependency_node_ids,remaining_dependencies,current_request_id)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,NULLIF($20::text,''))
-		ON CONFLICT(run_id,id) DO UPDATE SET state=EXCLUDED.state,inputs=EXCLUDED.inputs,outputs=EXCLUDED.outputs,
-		failure=EXCLUDED.failure,execution_request=EXCLUDED.execution_request,deadline=EXCLUDED.deadline,current_request_id=EXCLUDED.current_request_id,
-		attempt_number=EXCLUDED.attempt_number,revision=EXCLUDED.revision,started_at=EXCLUDED.started_at,
-		finished_at=EXCLUDED.finished_at,reason=EXCLUDED.reason
-		WHERE knotra_execution_nodes.revision=EXCLUDED.revision-1
-		AND knotra_execution_nodes.state NOT IN ('succeeded','skipped','failed','cancelled')
-		AND (knotra_execution_nodes.deadline IS NULL OR knotra_execution_nodes.deadline=EXCLUDED.deadline)
+    execution_request,deadline,attempt_number,revision,started_at,finished_at,reason,node_kind,dependency_node_ids,remaining_dependencies,current_request_id)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,NULLIF($20::text,''))
+ON CONFLICT(run_id,id) DO UPDATE SET state=EXCLUDED.state,
+    inputs=EXCLUDED.inputs,
+    outputs=EXCLUDED.outputs,
+    failure=EXCLUDED.failure,
+    execution_request=EXCLUDED.execution_request,
+    deadline=EXCLUDED.deadline,
+    current_request_id=EXCLUDED.current_request_id,
+    attempt_number=EXCLUDED.attempt_number,
+    revision=EXCLUDED.revision,
+    started_at=EXCLUDED.started_at,
+    finished_at=EXCLUDED.finished_at,
+    reason=EXCLUDED.reason
+WHERE knotra_execution_nodes.revision=EXCLUDED.revision-1
+    AND knotra_execution_nodes.state NOT IN ('succeeded','skipped','failed','cancelled')
+    AND (knotra_execution_nodes.deadline IS NULL OR knotra_execution_nodes.deadline=EXCLUDED.deadline)
 `
 
 type SaveExecutionNodeParams struct {
@@ -872,8 +917,8 @@ func (q *Queries) SaveExecutionNode(ctx context.Context, arg SaveExecutionNodePa
 
 const saveExecutionRequest = `-- name: SaveExecutionRequest :execresult
 UPDATE knotra_requests SET status=$3,document=$4
-		WHERE run_id=$1 AND id=$2 AND response_id=$5 AND
-		((kind='human' AND status='answered' AND $3='accepted') OR (kind='resolution' AND status='resolved' AND $3='resolved'))
+WHERE run_id=$1 AND id=$2 AND response_id=$5 AND
+    ((kind='human' AND status='answered' AND $3='accepted') OR (kind='resolution' AND status='resolved' AND $3='resolved'))
 `
 
 type SaveExecutionRequestParams struct {

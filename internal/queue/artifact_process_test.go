@@ -32,7 +32,14 @@ func TestRuntimeArtifactPublicationProcessCrashBoundaries(t *testing.T) {
 	if os.Getenv("KNOTRA_TEST_RUNTIME_RECOVERY") != "1" || os.Getenv("KNOTRA_TEST_HELPER") == "" {
 		t.Skip("set KNOTRA_TEST_RUNTIME_RECOVERY and KNOTRA_TEST_HELPER for artifact publication SIGKILL checks")
 	}
-	for _, mode := range []string{"artifact_bytes_saved", "artifact_registered_before_journal", "artifact_publication_before_commit", "delivery_completion_before_commit", "next_delivery_before_commit", "result_committed"} {
+	for _, mode := range []string{
+		"artifact_bytes_saved",
+		"artifact_registered_before_journal",
+		"artifact_publication_before_commit",
+		"delivery_completion_before_commit",
+		"next_delivery_before_commit",
+		"result_committed",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			r := newTestRuntime(t)
 			ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
@@ -49,7 +56,10 @@ func TestRuntimeArtifactPublicationProcessCrashBoundaries(t *testing.T) {
 			var calls atomic.Int32
 			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				calls.Add(1)
-				_, _ = fmt.Fprint(w, `{"message":{"role":"assistant","content":"{\"answer\":\"downstream confirmed\"}"},"done":true,"done_reason":"stop"}`)
+				_, _ = fmt.Fprint(
+					w,
+					`{"message":{"role":"assistant","content":"{\"answer\":\"downstream confirmed\"}"},"done":true,"done_reason":"stop"}`,
+				)
 			}))
 			defer provider.Close()
 			plan := resourceCodePlan(t, r, 0)
@@ -57,16 +67,36 @@ func TestRuntimeArtifactPublicationProcessCrashBoundaries(t *testing.T) {
 			plan.Profile.Spec.Models = runtimePlan(provider.URL).Profile.Spec.Models
 			spec := &plan.Pipelines[plan.Root].Spec
 			spec.Models = runtimePlan(provider.URL).Pipelines["main.yaml"].Spec.Models
-			report := contract.Port{Artifact: &contract.ArtifactPort{MediaTypes: []string{"text/plain"}}, Collect: &contract.Collect{Path: "report.txt", MediaType: "text/plain"}}
+			report := contract.Port{
+				Artifact: &contract.ArtifactPort{MediaTypes: []string{"text/plain"}},
+				Collect:  &contract.Collect{Path: "report.txt", MediaType: "text/plain"},
+			}
 			node := spec.Nodes["a"]
 			node.Outputs = map[string]contract.Port{"nonce": {Schema: json.RawMessage(`{"type":"string"}`)}, "report": report}
 			node.Execution.Timeout = "90s"
-			node.Code = &contract.CodeNode{Command: []string{"python", "-c", `import json,os,pathlib,uuid; nonce=uuid.uuid4().hex; pathlib.Path('report.txt').write_text(nonce); json.dump({'nonce':nonce},open(os.environ['KNOTRA_OUTPUT_JSON'],'w'))`}}
+			node.Code = &contract.CodeNode{Command: []string{
+				"python",
+				"-c",
+				`import json,os,pathlib,uuid; nonce=uuid.uuid4().hex; pathlib.Path('report.txt').write_text(nonce); json.dump({'nonce':nonce},open(os.environ['KNOTRA_OUTPUT_JSON'],'w'))`,
+			}}
 			after := runtimePlan(provider.URL).Pipelines["main.yaml"].Spec.Nodes["c"]
-			after.Inputs = map[string]contract.Port{"previous": {Schema: json.RawMessage(`{"type":"string"}`), Bind: &contract.Binding{From: "nodes.a.outputs.nonce"}}}
+			after.Inputs = map[string]contract.Port{"previous": {
+				Schema: json.RawMessage(`{"type":"string"}`),
+				Bind:   &contract.Binding{From: "nodes.a.outputs.nonce"},
+			}}
 			spec.Nodes = map[string]contract.Node{"a": node, "after": after}
 			report.Collect, report.Bind = nil, &contract.Binding{From: "nodes.a.outputs.report"}
-			spec.Outputs = map[string]contract.Port{"report": report, "nonce": {Schema: json.RawMessage(`{"type":"string"}`), Bind: &contract.Binding{From: "nodes.a.outputs.nonce"}}, "result": {Schema: json.RawMessage(`{"type":"string"}`), Bind: &contract.Binding{From: "nodes.after.outputs.answer"}}}
+			spec.Outputs = map[string]contract.Port{
+				"report": report,
+				"nonce": {
+					Schema: json.RawMessage(`{"type":"string"}`),
+					Bind:   &contract.Binding{From: "nodes.a.outputs.nonce"},
+				},
+				"result": {
+					Schema: json.RawMessage(`{"type":"string"}`),
+					Bind:   &contract.Binding{From: "nodes.after.outputs.answer"},
+				},
+			}
 			id := admitRuntimeRun(t, r, plan)
 			instance := execution.StableID("n", id+"/root/a")
 			afterInstance := execution.StableID("n", id+"/root/after")
@@ -81,7 +111,18 @@ func TestRuntimeArtifactPublicationProcessCrashBoundaries(t *testing.T) {
 			start := func(childMode string) *exec.Cmd {
 				t.Helper()
 				cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestRuntimeProcessCrashBoundaries$", "-test.timeout=2m")
-				cmd.Env = append(os.Environ(), "KNOTRA_RUNTIME_CHILD=1", "KNOTRA_RUNTIME_MODE="+childMode, "KNOTRA_RUNTIME_DSN="+dsn.String(), "KNOTRA_RUNTIME_DIRECTORY="+directory, "KNOTRA_RUNTIME_RUN="+id, "KNOTRA_RUNTIME_TIMEOUT=2m", "KNOTRA_RUNTIME_HOST="+r.HostID, "KNOTRA_RUNTIME_HELPER="+r.Host.Runner.HelperPath, "KNOTRA_RUNTIME_WAIT_CLEANUP=1")
+				cmd.Env = append(
+					os.Environ(),
+					"KNOTRA_RUNTIME_CHILD=1",
+					"KNOTRA_RUNTIME_MODE="+childMode,
+					"KNOTRA_RUNTIME_DSN="+dsn.String(),
+					"KNOTRA_RUNTIME_DIRECTORY="+directory,
+					"KNOTRA_RUNTIME_RUN="+id,
+					"KNOTRA_RUNTIME_TIMEOUT=2m",
+					"KNOTRA_RUNTIME_HOST="+r.HostID,
+					"KNOTRA_RUNTIME_HELPER="+r.Host.Runner.HelperPath,
+					"KNOTRA_RUNTIME_WAIT_CLEANUP=1",
+				)
 				log, err := os.Create(filepath.Join(directory, childMode+".log"))
 				if err != nil {
 					t.Fatal(err)
@@ -127,7 +168,15 @@ func TestRuntimeArtifactPublicationProcessCrashBoundaries(t *testing.T) {
 				case "next_delivery_before_commit":
 					table, event, when = "river_job", "BEFORE INSERT", "NEW.kind='knotra_execute_v1' AND NEW.args->'attempt'->>'instanceId'='"+afterInstance+"'"
 				}
-				if _, err := r.Store.Pool.Exec(ctx, fmt.Sprintf(`CREATE FUNCTION artifact_crash_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273655); RETURN NEW; END $$; CREATE TRIGGER artifact_crash_barrier %s ON %s FOR EACH ROW WHEN (%s) EXECUTE FUNCTION artifact_crash_barrier()`, event, table, when)); err != nil {
+				if _, err := r.Store.Pool.Exec(
+					ctx,
+					fmt.Sprintf(
+						`CREATE FUNCTION artifact_crash_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273655); RETURN NEW; END $$; CREATE TRIGGER artifact_crash_barrier %s ON %s FOR EACH ROW WHEN (%s) EXECUTE FUNCTION artifact_crash_barrier()`,
+						event,
+						table,
+						when,
+					),
+				); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -138,12 +187,21 @@ func TestRuntimeArtifactPublicationProcessCrashBoundaries(t *testing.T) {
 					return status == "succeeded", err
 				}
 				var waiting bool
-				err := r.Store.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event='advisory' AND pid<>pg_backend_pid())`, application).Scan(&waiting)
+				err := r.Store.Pool.QueryRow(
+					ctx,
+					`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event='advisory' AND pid<>pg_backend_pid())`,
+					application,
+				).Scan(&waiting)
 				return waiting, err
 			})
 			var rootDeadline, nodeDeadline time.Time
 			var key string
-			if err := r.Store.Pool.QueryRow(ctx, `SELECT r.execution_deadline,n.deadline,a.outcome_key FROM knotra_runs r JOIN knotra_execution_nodes n ON n.run_id=r.id JOIN knotra_execution_attempts a ON a.run_id=n.run_id AND a.instance_id=n.id WHERE r.id=$1 AND n.id=$2`, id, instance).Scan(&rootDeadline, &nodeDeadline, &key); err != nil {
+			if err := r.Store.Pool.QueryRow(
+				ctx,
+				`SELECT r.execution_deadline,n.deadline,a.outcome_key FROM knotra_runs r JOIN knotra_execution_nodes n ON n.run_id=r.id JOIN knotra_execution_attempts a ON a.run_id=n.run_id AND a.instance_id=n.id WHERE r.id=$1 AND n.id=$2`,
+				id,
+				instance,
+			).Scan(&rootDeadline, &nodeDeadline, &key); err != nil {
 				t.Fatal(err)
 			}
 			var sandbox string
@@ -171,7 +229,11 @@ func TestRuntimeArtifactPublicationProcessCrashBoundaries(t *testing.T) {
 				if !os.IsNotExist(envelopeErr) {
 					t.Fatalf("pre-journal envelope exists: %v", envelopeErr)
 				}
-			} else if envelopeErr != nil || outcome.Failure != nil || len(outcome.Artifacts) != 1 || outcome.Artifacts[0].SHA256 != hash || string(outcome.Outputs["nonce"].JSON) != `"`+string(nonce)+`"` {
+			} else if envelopeErr != nil ||
+				outcome.Failure != nil ||
+				len(outcome.Artifacts) != 1 ||
+				outcome.Artifacts[0].SHA256 != hash ||
+				string(outcome.Outputs["nonce"].JSON) != `"`+string(nonce)+`"` {
 				t.Fatalf("durable envelope=%+v error=%v", outcome, envelopeErr)
 			}
 			var artifactID string
@@ -184,12 +246,18 @@ func TestRuntimeArtifactPublicationProcessCrashBoundaries(t *testing.T) {
 			checkPublication := func(committed, downstream bool) {
 				t.Helper()
 				var published, evidence, results, successes, next int
-				if err := r.Store.Pool.QueryRow(ctx, `SELECT
+				if err := r.Store.Pool.QueryRow(
+					ctx,
+					`SELECT
 					(SELECT count(*) FROM knotra_artifacts WHERE document->'origin'->>'runId'=$1 AND published),
 					(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1 AND instance_id=$2 AND outcome IS NOT NULL),
 					(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1 AND instance_id=$2 AND result IS NOT NULL AND result->'failure' IS NULL),
 					(SELECT count(*) FROM knotra_events WHERE run_id=$1 AND document->>'type'='node' AND document->'data'->>'nodeId'='a' AND document->'data'->>'status'='succeeded'),
-					(SELECT count(*) FROM river_job WHERE kind='knotra_execute_v1' AND args->'attempt'->>'instanceId'=$3)`, id, instance, afterInstance).Scan(&published, &evidence, &results, &successes, &next); err != nil {
+					(SELECT count(*) FROM river_job WHERE kind='knotra_execute_v1' AND args->'attempt'->>'instanceId'=$3)`,
+					id,
+					instance,
+					afterInstance,
+				).Scan(&published, &evidence, &results, &successes, &next); err != nil {
 					t.Fatal(err)
 				}
 				want := 0
@@ -200,8 +268,23 @@ func TestRuntimeArtifactPublicationProcessCrashBoundaries(t *testing.T) {
 				if downstream {
 					wantNext = 1
 				}
-				if published != want || evidence != want || results != want || successes != want || next != wantNext || calls.Load() != int32(wantNext) {
-					t.Fatalf("publication/evidence/result/event/next=%d/%d/%d/%d/%d downstream calls=%d want=%d/%d", published, evidence, results, successes, next, calls.Load(), want, wantNext)
+				if published != want ||
+					evidence != want ||
+					results != want ||
+					successes != want ||
+					next != wantNext ||
+					calls.Load() != int32(wantNext) {
+					t.Fatalf(
+						"publication/evidence/result/event/next=%d/%d/%d/%d/%d downstream calls=%d want=%d/%d",
+						published,
+						evidence,
+						results,
+						successes,
+						next,
+						calls.Load(),
+						want,
+						wantNext,
+					)
 				}
 				response := httptest.NewRecorder()
 				handler.ServeHTTP(response, httptest.NewRequestWithContext(ctx, http.MethodGet, "/v1/artifacts/"+artifactID+"/content", nil))
@@ -251,7 +334,12 @@ func TestRuntimeArtifactPublicationProcessCrashBoundaries(t *testing.T) {
 				checkPublication(false, false)
 				var lost string
 				var requests int
-				if err := r.Store.Pool.QueryRow(ctx, `SELECT result->'failure'->>'code',(SELECT count(*) FROM knotra_requests WHERE run_id=$1 AND kind='resolution' AND status='open') FROM knotra_execution_attempts WHERE run_id=$1 AND instance_id=$2`, id, instance).Scan(&lost, &requests); err != nil || lost != "OUTCOME_UNKNOWN" || requests != 1 {
+				if err := r.Store.Pool.QueryRow(
+					ctx,
+					`SELECT result->'failure'->>'code',(SELECT count(*) FROM knotra_requests WHERE run_id=$1 AND kind='resolution' AND status='open') FROM knotra_execution_attempts WHERE run_id=$1 AND instance_id=$2`,
+					id,
+					instance,
+				).Scan(&lost, &requests); err != nil || lost != "OUTCOME_UNKNOWN" || requests != 1 {
 					t.Fatalf("lost attempt failure/request=%s/%d error=%v", lost, requests, err)
 				}
 				if w := runtimeCommand(t, handler, "/v1/runs/"+id+"/cancel", "cancel-unknown", `{}`); w.Code != 202 {
@@ -261,29 +349,55 @@ func TestRuntimeArtifactPublicationProcessCrashBoundaries(t *testing.T) {
 					t.Fatalf("unresolved run did not cancel: %s %v", status, err)
 				}
 			} else {
-				if run.Status != "succeeded" || string(run.Outputs["nonce"]) != `"`+string(nonce)+`"` || string(run.Outputs["result"]) != `"downstream confirmed"` || len(run.Artifacts) != 1 || run.Artifacts[0].ID != artifactID {
+				if run.Status != "succeeded" ||
+					string(run.Outputs["nonce"]) != `"`+string(nonce)+`"` ||
+					string(run.Outputs["result"]) != `"downstream confirmed"` ||
+					len(run.Artifacts) != 1 ||
+					run.Artifacts[0].ID != artifactID {
 					t.Fatalf("confirmed artifact/output changed: %+v", run)
 				}
 				checkPublication(true, true)
 			}
 			var attempts, tools, models, slots, resources, sandboxes int
 			var finalRootDeadline, finalNodeDeadline time.Time
-			if err := r.Store.Pool.QueryRow(ctx, `SELECT
+			if err := r.Store.Pool.QueryRow(
+				ctx,
+				`SELECT
 				(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1),
 				COALESCE((SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='tool'),0),
 				COALESCE((SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='model'),0),
 				(SELECT sum(active_attempts) FROM knotra_execution_scopes WHERE run_id=$1),
 				(SELECT count(*) FROM knotra_resources WHERE run_id=$1 AND state<>'closed'),
 				(SELECT count(*) FROM knotra_resources WHERE run_id=$1 AND kind='sandbox'),
-				r.execution_deadline,n.deadline FROM knotra_runs r JOIN knotra_execution_nodes n ON n.run_id=r.id AND n.id=$2 WHERE r.id=$1`, id, instance).Scan(&attempts, &tools, &models, &slots, &resources, &sandboxes, &finalRootDeadline, &finalNodeDeadline); err != nil {
+				r.execution_deadline,n.deadline FROM knotra_runs r JOIN knotra_execution_nodes n ON n.run_id=r.id AND n.id=$2 WHERE r.id=$1`,
+				id,
+				instance,
+			).Scan(&attempts, &tools, &models, &slots, &resources, &sandboxes, &finalRootDeadline, &finalNodeDeadline); err != nil {
 				t.Fatal(err)
 			}
 			wantAttempts, wantModels := 2, 1
 			if unknown {
 				wantAttempts, wantModels = 1, 0
 			}
-			if attempts != wantAttempts || tools != 1 || models != wantModels || slots != 0 || resources != 0 || sandboxes != 1 || !rootDeadline.Equal(finalRootDeadline) || !nodeDeadline.Equal(finalNodeDeadline) {
-				t.Fatalf("attempts/debits=%d/%d/%d slots/resources/sandboxes=%d/%d/%d deadlines=%v/%v", attempts, tools, models, slots, resources, sandboxes, rootDeadline.Equal(finalRootDeadline), nodeDeadline.Equal(finalNodeDeadline))
+			if attempts != wantAttempts ||
+				tools != 1 ||
+				models != wantModels ||
+				slots != 0 ||
+				resources != 0 ||
+				sandboxes != 1 ||
+				!rootDeadline.Equal(finalRootDeadline) ||
+				!nodeDeadline.Equal(finalNodeDeadline) {
+				t.Fatalf(
+					"attempts/debits=%d/%d/%d slots/resources/sandboxes=%d/%d/%d deadlines=%v/%v",
+					attempts,
+					tools,
+					models,
+					slots,
+					resources,
+					sandboxes,
+					rootDeadline.Equal(finalRootDeadline),
+					nodeDeadline.Equal(finalNodeDeadline),
+				)
 			}
 			if output, err := exec.CommandContext(ctx, "docker", "ps", "-a", "--filter", "name=^/sandbox-"+sandbox+"$", "--format", "{{.Names}}").CombinedOutput(); err != nil || len(output) != 0 {
 				t.Fatalf("recovery retained a physical sandbox: %s %v", output, err)

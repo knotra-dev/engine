@@ -130,7 +130,10 @@ func TestMigrationsResumeConcurrentlyWithSingleConnectionPools(t *testing.T) {
 	db := newTestDatabase(t, 1)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	m, err := rivermigrate.New(riverpgxv5.New(db.pool), &rivermigrate.Config{Schema: db.schema, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	m, err := rivermigrate.New(
+		riverpgxv5.New(db.pool),
+		&rivermigrate.Config{Schema: db.schema, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,7 +307,15 @@ func TestExecuteTimeoutDiscardsWithoutQueueRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := c.InsertExecute(ctx, tx, ExecuteArgs{Attempt: execution.AttemptID{RunID: "run", InstanceID: "a", Number: 1}, DispatchGeneration: 1, RoutingVersion: RoutingVersion}); err != nil {
+	if err := c.InsertExecute(
+		ctx,
+		tx,
+		ExecuteArgs{
+			Attempt:            execution.AttemptID{RunID: "run", InstanceID: "a", Number: 1},
+			DispatchGeneration: 1,
+			RoutingVersion:     RoutingVersion,
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -326,9 +337,12 @@ func TestDiscardedExecutionFinalizesOnceAcrossTwoClients(t *testing.T) {
 	if err := Migrate(ctx, db.pool, db.schema); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.pool.Exec(ctx, `CREATE TABLE spike_attempt(state text NOT NULL, outcome_key text NOT NULL, operation_complete bool NOT NULL DEFAULT false, result jsonb);
+	if _, err := db.pool.Exec(
+		ctx,
+		`CREATE TABLE spike_attempt(state text NOT NULL, outcome_key text NOT NULL, operation_complete bool NOT NULL DEFAULT false, result jsonb);
 		CREATE TABLE spike_events(id integer PRIMARY KEY);
-		INSERT INTO spike_attempt(state,outcome_key) VALUES('ready','')`); err != nil {
+		INSERT INTO spike_attempt(state,outcome_key) VALUES('ready','')`,
+	); err != nil {
 		t.Fatal(err)
 	}
 	files, err := execution.OpenOutcomeFiles(t.TempDir())
@@ -336,7 +350,11 @@ func TestDiscardedExecutionFinalizesOnceAcrossTwoClients(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = files.Close() }()
-	owner := execution.Ownership{AttemptID: execution.AttemptID{RunID: "run", InstanceID: "a", Number: 1}, WorkerID: "incarnation", Generation: 1}
+	owner := execution.Ownership{
+		AttemptID:  execution.AttemptID{RunID: "run", InstanceID: "a", Number: 1},
+		WorkerID:   "incarnation",
+		Generation: 1,
+	}
 	key, _ := owner.OutcomeKey()
 	var calls atomic.Int32
 	h := testHandlers()
@@ -352,7 +370,13 @@ func TestDiscardedExecutionFinalizesOnceAcrossTwoClients(t *testing.T) {
 		if _, err := db.pool.Exec(ctx, "UPDATE spike_attempt SET operation_complete=true WHERE state='claimed'"); err != nil {
 			return err
 		}
-		_, err = files.Put(execution.Outcome{FormatVersion: execution.StateFormatVersion, Ownership: owner, PlanID: "plan", CompletedAt: time.Now().UTC(), Outputs: contract.Values{"result": {JSON: []byte(`"confirmed"`)}}})
+		_, err = files.Put(execution.Outcome{
+			FormatVersion: execution.StateFormatVersion,
+			Ownership:     owner,
+			PlanID:        "plan",
+			CompletedAt:   time.Now().UTC(),
+			Outputs:       contract.Values{"result": {JSON: []byte(`"confirmed"`)}},
+		})
 		if err != nil {
 			return err
 		}
@@ -371,7 +395,12 @@ func TestDiscardedExecutionFinalizesOnceAcrossTwoClients(t *testing.T) {
 			return err
 		}
 		defer func() { _ = tx.Rollback(ctx) }()
-		updated, err := tx.Exec(ctx, "UPDATE spike_attempt SET state='completed',result=$2 WHERE state='claimed' AND operation_complete AND outcome_key=$1", job.Args.OutcomeKey, outcome.Outputs["result"].JSON)
+		updated, err := tx.Exec(
+			ctx,
+			"UPDATE spike_attempt SET state='completed',result=$2 WHERE state='claimed' AND operation_complete AND outcome_key=$1",
+			job.Args.OutcomeKey,
+			outcome.Outputs["result"].JSON,
+		)
 		if err != nil {
 			return err
 		}
@@ -380,7 +409,12 @@ func TestDiscardedExecutionFinalizesOnceAcrossTwoClients(t *testing.T) {
 				return err
 			}
 			client := river.ClientFromContext[pgx.Tx](ctx)
-			if _, err := client.InsertTx(ctx, tx, AdvanceArgs{RunID: "run", WakeGeneration: 2, RoutingVersion: RoutingVersion}, &river.InsertOpts{Queue: "knotra_advance_" + engineIDFromQueue(job.Queue)}); err != nil {
+			if _, err := client.InsertTx(
+				ctx,
+				tx,
+				AdvanceArgs{RunID: "run", WakeGeneration: 2, RoutingVersion: RoutingVersion},
+				&river.InsertOpts{Queue: "knotra_advance_" + engineIDFromQueue(job.Queue)},
+			); err != nil {
 				return err
 			}
 		}
@@ -524,7 +558,18 @@ func TestCleanupDeliveryIsIsolatedByEngineAndHost(t *testing.T) {
 	}
 	for _, client := range clients {
 		if err := pgx.BeginFunc(ctx, db.pool, func(tx pgx.Tx) error {
-			return client.InsertCleanup(ctx, tx, CleanupArgs{HostID: client.hostID, WorkerID: "original-owner", ResourceID: uuid.NewString(), OwnershipGeneration: 1, DispatchGeneration: 1, RoutingVersion: RoutingVersion})
+			return client.InsertCleanup(
+				ctx,
+				tx,
+				CleanupArgs{
+					HostID:              client.hostID,
+					WorkerID:            "original-owner",
+					ResourceID:          uuid.NewString(),
+					OwnershipGeneration: 1,
+					DispatchGeneration:  1,
+					RoutingVersion:      RoutingVersion,
+				},
+			)
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -533,7 +578,18 @@ func TestCleanupDeliveryIsIsolatedByEngineAndHost(t *testing.T) {
 		return deliveries[0].Load() == 1 && deliveries[1].Load() == 1, nil
 	})
 	if err := pgx.BeginFunc(ctx, db.pool, func(tx pgx.Tx) error {
-		return clients[0].InsertCleanup(ctx, tx, CleanupArgs{HostID: "host-two", WorkerID: "original-owner", ResourceID: uuid.NewString(), OwnershipGeneration: 1, DispatchGeneration: 1, RoutingVersion: RoutingVersion})
+		return clients[0].InsertCleanup(
+			ctx,
+			tx,
+			CleanupArgs{
+				HostID:              "host-two",
+				WorkerID:            "original-owner",
+				ResourceID:          uuid.NewString(),
+				OwnershipGeneration: 1,
+				DispatchGeneration:  1,
+				RoutingVersion:      RoutingVersion,
+			},
+		)
 	}); err == nil {
 		t.Fatal("client accepted cleanup for another host")
 	}

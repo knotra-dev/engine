@@ -74,7 +74,11 @@ func discoveryRemote(t *testing.T, sse bool, intercept func(http.ResponseWriter,
 		switch message.Method {
 		case "initialize":
 			w.Header().Set("Mcp-Session-Id", "discovery-session")
-			result = map[string]any{"protocolVersion": message.Params.ProtocolVersion, "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]any{"name": "fixture", "version": "1"}}
+			result = map[string]any{
+				"protocolVersion": message.Params.ProtocolVersion,
+				"capabilities":    map[string]any{"tools": map[string]any{}},
+				"serverInfo":      map[string]any{"name": "fixture", "version": "1"},
+			}
 		case "notifications/initialized":
 			w.WriteHeader(http.StatusAccepted)
 			return
@@ -83,9 +87,22 @@ func discoveryRemote(t *testing.T, sse bool, intercept func(http.ResponseWriter,
 				t.Error("catalog lost initialized session")
 			}
 			if message.Params.Cursor == "next" {
-				result = map[string]any{"tools": []any{map[string]any{"name": "alpha", "annotations": map[string]any{"title": "Readable alpha"}, "inputSchema": map[string]any{"type": "object"}}}}
+				result = map[string]any{"tools": []any{map[string]any{
+					"name":        "alpha",
+					"annotations": map[string]any{"title": "Readable alpha"},
+					"inputSchema": map[string]any{"type": "object"},
+				}}}
 			} else {
-				result = map[string]any{"tools": []any{map[string]any{"name": "zulu", "title": "Readable zulu", "description": "Find a document", "inputSchema": map[string]any{"type": "object"}, "outputSchema": map[string]any{"type": "object"}}}, "nextCursor": "next"}
+				result = map[string]any{
+					"tools": []any{map[string]any{
+						"name":         "zulu",
+						"title":        "Readable zulu",
+						"description":  "Find a document",
+						"inputSchema":  map[string]any{"type": "object"},
+						"outputSchema": map[string]any{"type": "object"},
+					}},
+					"nextCursor": "next",
+				}
 			}
 		default:
 			t.Errorf("unexpected discovery method %s", message.Method)
@@ -145,10 +162,20 @@ func TestMCPDiscoveryListsPaginatedToolsAndClosesSession(t *testing.T) {
 			if err := json.Unmarshal([]byte(out), &catalog); err != nil {
 				t.Fatal(err)
 			}
-			if len(catalog.Tools) != 2 || catalog.Tools[0].Name != "alpha" || catalog.Tools[0].Title != "Readable alpha" || len(catalog.Tools[0].OutputSchema) != 0 || catalog.Tools[1].Title != "Readable zulu" || catalog.Tools[1].Description != "Find a document" || !json.Valid(catalog.Tools[1].OutputSchema) {
+			if len(catalog.Tools) != 2 ||
+				catalog.Tools[0].Name != "alpha" ||
+				catalog.Tools[0].Title != "Readable alpha" ||
+				len(catalog.Tools[0].OutputSchema) != 0 ||
+				catalog.Tools[1].Title != "Readable zulu" ||
+				catalog.Tools[1].Description != "Find a document" ||
+				!json.Valid(catalog.Tools[1].OutputSchema) {
 				t.Fatalf("invalid catalog: %s", out)
 			}
-			if traffic.initializations.Load() != 1 || traffic.lists.Load() != 2 || traffic.deletions.Load() != 1 || traffic.calls.Load() != 0 || strings.Contains(out, "private-discovery-key") {
+			if traffic.initializations.Load() != 1 ||
+				traffic.lists.Load() != 2 ||
+				traffic.deletions.Load() != 1 ||
+				traffic.calls.Load() != 0 ||
+				strings.Contains(out, "private-discovery-key") {
 				t.Fatalf("unsafe discovery: %s %+v", out, traffic)
 			}
 		})
@@ -255,7 +282,13 @@ func TestMCPDiscoveryCancellationAndSessionErrors(t *testing.T) {
 			if failure == "unknown session" {
 				wantDeletes = 0
 			}
-			if err == nil || out != "" || !json.Valid([]byte(stderr)) || strings.Contains(stderr, "private-discovery-key") || traffic.initializations.Load() != 1 || traffic.deletions.Load() < wantDeletes || traffic.calls.Load() != 0 {
+			if err == nil ||
+				out != "" ||
+				!json.Valid([]byte(stderr)) ||
+				strings.Contains(stderr, "private-discovery-key") ||
+				traffic.initializations.Load() != 1 ||
+				traffic.deletions.Load() < wantDeletes ||
+				traffic.calls.Load() != 0 {
 				t.Fatalf("out=%s stderr=%s err=%v traffic=%+v", out, stderr, err, traffic)
 			}
 		})

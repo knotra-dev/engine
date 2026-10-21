@@ -25,13 +25,24 @@ func TestRuntimeForeachReadsOneElementAndOnlyReferencedInputs(t *testing.T) {
 	body := contract.Graph{Inputs: map[string]contract.Port{"item": compositePort(text, ""), "label": compositePort(text, "")},
 		Outputs: map[string]contract.Port{"result": {Schema: json.RawMessage(text), Bind: &contract.Binding{Expr: "inputs.label + inputs.item"}}}}
 	foreach := contract.Node{Type: "foreach", When: "inputs.enabled", Execution: contract.Execution{Timeout: "5m"},
-		Inputs:  map[string]contract.Port{"items": compositePort(array, "inputs.items"), "unused": compositePort(text, "inputs.unused"), "label": compositePort(text, "inputs.label")},
+		Inputs: map[string]contract.Port{
+			"items":  compositePort(array, "inputs.items"),
+			"unused": compositePort(text, "inputs.unused"),
+			"label":  compositePort(text, "inputs.label"),
+		},
 		Outputs: map[string]contract.Port{"result": compositePort(array, "")},
 		Foreach: &contract.ForeachNode{Over: "items", Concurrency: 8, Body: body,
 			With: map[string]contract.Binding{"item": {From: "iteration.item"}, "label": {From: "args.label"}}}}
 	plan.Pipelines[plan.Root].Spec.Graph = contract.Graph{
-		Inputs: map[string]contract.Port{"items": compositePort(array, ""), "unused": compositePort(text, ""), "label": compositePort(text, ""), "enabled": compositePort(`{"type":"boolean"}`, "")},
-		Nodes:  map[string]contract.Node{"map": foreach}, Outputs: map[string]contract.Port{"result": compositePort(array, "nodes.map.outputs.result")}}
+		Inputs: map[string]contract.Port{
+			"items":   compositePort(array, ""),
+			"unused":  compositePort(text, ""),
+			"label":   compositePort(text, ""),
+			"enabled": compositePort(`{"type":"boolean"}`, ""),
+		},
+		Nodes:   map[string]contract.Node{"map": foreach},
+		Outputs: map[string]contract.Port{"result": compositePort(array, "nodes.map.outputs.result")},
+	}
 	const count = 257
 	items, expected := make([]string, count), make([]string, count)
 	for i := range items {
@@ -40,7 +51,17 @@ func TestRuntimeForeachReadsOneElementAndOnlyReferencedInputs(t *testing.T) {
 	}
 	input, _ := json.Marshal(items)
 	unused, _ := json.Marshal(strings.Repeat("unrelated", 100000))
-	id := admitRuntimeRun(t, r, plan, contract.Values{"items": {JSON: input}, "unused": {JSON: unused}, "label": {JSON: json.RawMessage(`"prefix/"`)}, "enabled": {JSON: json.RawMessage(`true`)}})
+	id := admitRuntimeRun(
+		t,
+		r,
+		plan,
+		contract.Values{
+			"items":   {JSON: input},
+			"unused":  {JSON: unused},
+			"label":   {JSON: json.RawMessage(`"prefix/"`)},
+			"enabled": {JSON: json.RawMessage(`true`)},
+		},
+	)
 	rootID, parentID := execution.StableID("g", id+"/root"), execution.StableID("n", id+"/root/map")
 	for range 2 {
 		if err := pgx.BeginFunc(ctx, r.Store.Pool, func(tx pgx.Tx) error {
@@ -72,7 +93,12 @@ func TestRuntimeForeachReadsOneElementAndOnlyReferencedInputs(t *testing.T) {
 				return errors.New("partial inputs could overwrite the admitted node")
 			}
 			controls, err := store.ReadExecutionControls(ctx, tx, id, rootID, []string{parentID})
-			if err != nil || len(controls) != 1 || controls[0].ElementCount != count || controls[0].NextPosition != position || controls[0].Elements != nil || controls[0].CurrentElement == nil {
+			if err != nil ||
+				len(controls) != 1 ||
+				controls[0].ElementCount != count ||
+				controls[0].NextPosition != position ||
+				controls[0].Elements != nil ||
+				controls[0].CurrentElement == nil {
 				return errors.Join(errors.New("foreach did not load one element at its durable cursor"), err)
 			}
 			var item string
@@ -94,7 +120,12 @@ func TestRuntimeForeachReadsOneElementAndOnlyReferencedInputs(t *testing.T) {
 	}
 	assertSnapshot(r, 0)
 	var original []byte
-	if err := r.Store.Pool.QueryRow(ctx, "SELECT jsonb_build_array(inputs,execution_request) FROM knotra_execution_nodes WHERE run_id=$1 AND id=$2", id, parentID).Scan(&original); err != nil {
+	if err := r.Store.Pool.QueryRow(
+		ctx,
+		"SELECT jsonb_build_array(inputs,execution_request) FROM knotra_execution_nodes WHERE run_id=$1 AND id=$2",
+		id,
+		parentID,
+	).Scan(&original); err != nil {
 		t.Fatal(err)
 	}
 	before := sha256.Sum256(original)
@@ -139,7 +170,12 @@ func TestRuntimeForeachReadsOneElementAndOnlyReferencedInputs(t *testing.T) {
 		t.Fatalf("status=%s export bytes=%d diagnostics=%+v error=%v", run.Status, len(run.Outputs["result"]), run.Diagnostics, err)
 	}
 	var after []byte
-	if err := reopened.Pool.QueryRow(ctx, "SELECT jsonb_build_array(inputs,execution_request) FROM knotra_execution_nodes WHERE run_id=$1 AND id=$2", id, parentID).Scan(&after); err != nil {
+	if err := reopened.Pool.QueryRow(
+		ctx,
+		"SELECT jsonb_build_array(inputs,execution_request) FROM knotra_execution_nodes WHERE run_id=$1 AND id=$2",
+		id,
+		parentID,
+	).Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if sha256.Sum256(after) != before {
@@ -154,10 +190,16 @@ func TestRuntimeForeachPreservesExplicitWholeArrayArgument(t *testing.T) {
 	integer, array := `{"type":"integer"}`, `{"type":"array","items":{"type":"integer"}}`
 	body := contract.Graph{Inputs: map[string]contract.Port{"item": compositePort(integer, ""), "all": compositePort(array, "")},
 		Outputs: map[string]contract.Port{"count": {Schema: json.RawMessage(integer), Bind: &contract.Binding{Expr: "size(inputs.all)"}}}}
-	foreach := contract.Node{Type: "foreach", Inputs: map[string]contract.Port{"items": {Schema: json.RawMessage(array), Bind: &contract.Binding{Value: json.RawMessage(`[3,1,2]`)}}},
+	foreach := contract.Node{
+		Type: "foreach",
+		Inputs: map[string]contract.Port{"items": {
+			Schema: json.RawMessage(array),
+			Bind:   &contract.Binding{Value: json.RawMessage(`[3,1,2]`)},
+		}},
 		Outputs: map[string]contract.Port{"count": compositePort(array, "")},
 		Foreach: &contract.ForeachNode{Over: "items", Concurrency: 2, Body: body,
-			With: map[string]contract.Binding{"item": {From: "iteration.item"}, "all": {From: "args.items"}}}}
+			With: map[string]contract.Binding{"item": {From: "iteration.item"}, "all": {From: "args.items"}}},
+	}
 	plan.Pipelines[plan.Root].Spec.Graph = contract.Graph{Nodes: map[string]contract.Node{"map": foreach},
 		Outputs: map[string]contract.Port{"result": compositePort(array, "nodes.map.outputs.count")}}
 	id := admitRuntimeRun(t, r, plan)

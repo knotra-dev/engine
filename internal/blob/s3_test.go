@@ -26,7 +26,16 @@ func newTestS3(t *testing.T, handler http.HandlerFunc) Store {
 	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
-	store, err := NewS3(t.Context(), S3Config{Bucket: "bucket", Region: "region", Endpoint: server.URL, Prefix: "/deployment/engine/", PathStyle: true})
+	store, err := NewS3(
+		t.Context(),
+		S3Config{
+			Bucket:    "bucket",
+			Region:    "region",
+			Endpoint:  server.URL,
+			Prefix:    "/deployment/engine/",
+			PathStyle: true,
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +53,9 @@ func TestS3ConditionalPublicationAcrossClients(t *testing.T) {
 		if r.Header.Get("Authorization") == "" || r.Header.Get("X-Amz-Security-Token") != "test-token" {
 			t.Error("default environment credentials were not used")
 		}
-		if r.Header.Get("X-Amz-Sdk-Checksum-Algorithm") != "" || r.Header.Get("X-Amz-Checksum-Mode") != "" || r.Header.Get("X-Amz-Trailer") != "" {
+		if r.Header.Get("X-Amz-Sdk-Checksum-Algorithm") != "" ||
+			r.Header.Get("X-Amz-Checksum-Mode") != "" ||
+			r.Header.Get("X-Amz-Trailer") != "" {
 			t.Error("unexpected optional AWS checksum negotiation")
 		}
 		mu.Lock()
@@ -149,7 +160,9 @@ func TestS3ErrorsDistinguishMissingFromUnavailableAndRedactDetails(t *testing.T)
 		if errors.Is(err, os.ErrNotExist) != (key == "missing") {
 			t.Errorf("%s classified incorrectly: %v", key, err)
 		}
-		if strings.Contains(err.Error(), "test-") || strings.Contains(err.Error(), "127.0.0.1") || strings.Contains(err.Error(), "private-endpoint") {
+		if strings.Contains(err.Error(), "test-") ||
+			strings.Contains(err.Error(), "127.0.0.1") ||
+			strings.Contains(err.Error(), "private-endpoint") {
 			t.Errorf("provider details leaked: %v", err)
 		}
 	}
@@ -190,7 +203,13 @@ func TestS3RequestsHonorCancellationAndStreamingByteLimit(t *testing.T) {
 }
 
 func TestS3RejectsEndpointCredentialsWithoutEchoingThem(t *testing.T) {
-	for _, endpoint := range []string{"ftp://private", "https://user:secret@private/", "https://private/?token=secret", "https://private/#secret", "://secret"} {
+	for _, endpoint := range []string{
+		"ftp://private",
+		"https://user:secret@private/",
+		"https://private/?token=secret",
+		"https://private/#secret",
+		"://secret",
+	} {
 		_, err := NewS3(t.Context(), S3Config{Bucket: "bucket", Region: "region", Endpoint: endpoint})
 		if err == nil || strings.Contains(err.Error(), "secret") || strings.Contains(err.Error(), "private") {
 			t.Fatalf("unsafe endpoint error: %v", err)

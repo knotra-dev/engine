@@ -73,34 +73,38 @@ func testRiverFailFastProcessCrashBoundaries(t *testing.T, peerKind string) {
 				Value int `json:"value"`
 			}
 			server := mcp.NewServer(&mcp.Implementation{Name: "failfast-recovery", Version: "1"}, nil)
-			mcp.AddTool(server, &mcp.Tool{Name: "stats"}, func(call context.Context, request *mcp.CallToolRequest, input value) (*mcp.CallToolResult, value, error) {
-				sessionID.Store(request.Session.ID())
-				switch input.Value {
-				case 41:
-					calls[0].Add(1)
-					return nil, input, nil
-				case 42:
-					calls[1].Add(1)
-					select {
-					case blocked <- struct{}{}:
-					default:
-					}
-					select {
-					case <-call.Done():
+			mcp.AddTool(
+				server,
+				&mcp.Tool{Name: "stats"},
+				func(call context.Context, request *mcp.CallToolRequest, input value) (*mcp.CallToolResult, value, error) {
+					sessionID.Store(request.Session.ID())
+					switch input.Value {
+					case 41:
+						calls[0].Add(1)
+						return nil, input, nil
+					case 42:
+						calls[1].Add(1)
 						select {
-						case interrupted <- struct{}{}:
+						case blocked <- struct{}{}:
 						default:
 						}
-						return nil, value{}, call.Err()
-					case <-ctx.Done():
-						return nil, value{}, ctx.Err()
+						select {
+						case <-call.Done():
+							select {
+							case interrupted <- struct{}{}:
+							default:
+							}
+							return nil, value{}, call.Err()
+						case <-ctx.Done():
+							return nil, value{}, ctx.Err()
+						}
+					default:
+						calls[2].Add(1)
+						t.Error("downstream tool ran after fail-fast")
+						return nil, input, nil
 					}
-				default:
-					calls[2].Add(1)
-					t.Error("downstream tool ran after fail-fast")
-					return nil, input, nil
-				}
-			})
+				},
+			)
 			transport := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{SessionTimeout: time.Minute})
 			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 				method := ""
@@ -122,7 +126,9 @@ func testRiverFailFastProcessCrashBoundaries(t *testing.T, peerKind string) {
 					}
 				}
 				id, ok := sessionID.Load().(string)
-				cleanup := ok && request.Header.Get("Mcp-Session-Id") == id && (request.Method == http.MethodDelete || method == "notifications/cancelled")
+				cleanup := ok &&
+					request.Header.Get("Mcp-Session-Id") == id &&
+					(request.Method == http.MethodDelete || method == "notifications/cancelled")
 				if cleanup {
 					if request.Header.Get("X-Cleanup-Key") != "fixture-key" || request.Header.Get("Mcp-Protocol-Version") == "" {
 						t.Error("fail-fast cleanup lost original session credentials/protocol")
@@ -163,7 +169,14 @@ func testRiverFailFastProcessCrashBoundaries(t *testing.T, peerKind string) {
 					}
 					encoded, _ := json.Marshal(arguments)
 					w.Header().Set("Content-Type", "application/json")
-					_, _ = fmt.Fprintf(w, `{"status":"completed","output":[{"type":"function_call","id":"fc_%d","call_id":"call_%d","name":%q,"arguments":%s}]}`, turn, turn, name, encoded)
+					_, _ = fmt.Fprintf(
+						w,
+						`{"status":"completed","output":[{"type":"function_call","id":"fc_%d","call_id":"call_%d","name":%q,"arguments":%s}]}`,
+						turn,
+						turn,
+						name,
+						encoded,
+					)
 					return
 				}
 				models.Add(1)
@@ -188,11 +201,30 @@ func testRiverFailFastProcessCrashBoundaries(t *testing.T, peerKind string) {
 			}
 			profile.Spec.Limits.Timeout = "3m"
 			profile.Spec.Secrets = map[string]contract.SecretSource{"fixture": {Env: "KNOTRA_FAILFAST_FIXTURE_KEY"}}
-			profile.Spec.Models = map[string]contract.ModelConnection{"cloud": {Provider: "openai", Model: "fixture-model", BaseURL: provider.URL, Auth: map[string]contract.Credential{"key": {SecretRef: "fixture"}}}}
-			profile.Spec.MCP = map[string]contract.MCPConnection{"data": {Transport: "streamable_http", URL: remote.URL, AllowRunSession: true, Headers: map[string]contract.Credential{"X-Cleanup-Key": {SecretRef: "fixture"}}, AllowedTools: []string{"stats"}, ToolPolicies: map[string]contract.ToolPolicy{"stats": {Effect: "read"}}}}
+			profile.Spec.Models = map[string]contract.ModelConnection{"cloud": {
+				Provider: "openai",
+				Model:    "fixture-model",
+				BaseURL:  provider.URL,
+				Auth:     map[string]contract.Credential{"key": {SecretRef: "fixture"}},
+			}}
+			profile.Spec.MCP = map[string]contract.MCPConnection{"data": {
+				Transport:       "streamable_http",
+				URL:             remote.URL,
+				AllowRunSession: true,
+				Headers:         map[string]contract.Credential{"X-Cleanup-Key": {SecretRef: "fixture"}},
+				AllowedTools:    []string{"stats"},
+				ToolPolicies:    map[string]contract.ToolPolicy{"stats": {Effect: "read"}},
+			}}
 			profilePath := filepath.Join(work, "profile.json")
 			writeJSON(t, profilePath, profile)
-			options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), DataDir: filepath.Join(work, "engine"), HelperPath: os.Getenv("KNOTRA_TEST_HELPER"), Profiles: []string{profilePath}, Version: "failfast-recovery-test"}
+			options := app.Options{
+				Listen:      unusedAddress(t),
+				DatabaseURL: databaseSchema(t, ctx),
+				DataDir:     filepath.Join(work, "engine"),
+				HelperPath:  os.Getenv("KNOTRA_TEST_HELPER"),
+				Profiles:    []string{profilePath},
+				Version:     "failfast-recovery-test",
+			}
 			if peerKind != "mcp" {
 				options.DockerHost = failFastDockerHost(t, ctx, &allowCleanup)
 			}
@@ -216,15 +248,23 @@ func testRiverFailFastProcessCrashBoundaries(t *testing.T, peerKind string) {
 				if _, err := barrier.Exec(ctx, "SELECT pg_advisory_lock(918273652)"); err != nil {
 					t.Fatal(err)
 				}
-				if _, err := admin.Pool.Exec(ctx, `CREATE FUNCTION failfast_crash_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273652); RETURN NEW; END $$;
-					CREATE TRIGGER failfast_crash_barrier BEFORE UPDATE ON knotra_runs FOR EACH ROW WHEN (OLD.stop_cause IS NULL AND NEW.stop_cause IS NOT NULL) EXECUTE FUNCTION failfast_crash_barrier()`); err != nil {
+				if _, err := admin.Pool.Exec(
+					ctx,
+					`CREATE FUNCTION failfast_crash_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273652); RETURN NEW; END $$;
+					CREATE TRIGGER failfast_crash_barrier BEFORE UPDATE ON knotra_runs FOR EACH ROW WHEN (OLD.stop_cause IS NULL AND NEW.stop_cause IS NOT NULL) EXECUTE FUNCTION failfast_crash_barrier()`,
+				); err != nil {
 					t.Fatal(err)
 				}
 			}
 			var definition struct{ Definition protocol.Definition }
 			source := riverFailFastRecoveryPipeline
 			if peerKind != "mcp" {
-				source = strings.Replace(source, "  mcp: {data: {connection: data, session: run}}", "  mcp: {data: {connection: data, session: run}}\n  sandboxes: {box: {profile: python}}", 1)
+				source = strings.Replace(
+					source,
+					"  mcp: {data: {connection: data, session: run}}",
+					"  mcp: {data: {connection: data, session: run}}\n  sandboxes: {box: {profile: python}}",
+					1,
+				)
 				peer := riverFailFastSandboxPeer
 				if peerKind == "agent" {
 					peer = riverFailFastAgentPeer
@@ -233,12 +273,22 @@ func testRiverFailFastProcessCrashBoundaries(t *testing.T, peerKind string) {
 				start, end := strings.Index(source, "    peer:\n"), strings.Index(source, "    fail:\n")
 				source = source[:start] + peer + source[end:]
 			}
-			pkg := contract.Package{Entrypoint: "pipeline.yaml", Source: source, Files: []contract.File{{Path: "pipeline.yaml", Content: []byte(source)}}}
+			pkg := contract.Package{
+				Entrypoint: "pipeline.yaml",
+				Source:     source,
+				Files:      []contract.File{{Path: "pipeline.yaml", Content: []byte(source)}},
+			}
 			if err := api.Command(ctx, "/definitions", map[string]any{"package": pkg}, uuid.NewString(), &definition); err != nil {
 				t.Fatal(err)
 			}
 			var admitted struct{ Run protocol.Run }
-			if err := api.Command(ctx, "/runs", map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name}, uuid.NewString(), &admitted); err != nil {
+			if err := api.Command(
+				ctx,
+				"/runs",
+				map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name},
+				uuid.NewString(),
+				&admitted,
+			); err != nil {
 				t.Fatal(err)
 			}
 			var sandboxID string
@@ -275,7 +325,11 @@ func testRiverFailFastProcessCrashBoundaries(t *testing.T, peerKind string) {
 			var resourceID string
 			var identity execution.MCPSessionRecord
 			var encoded []byte
-			if err := admin.Pool.QueryRow(ctx, `SELECT execution_deadline,(SELECT deadline FROM knotra_execution_nodes WHERE run_id=$1 AND node_id='peer') FROM knotra_runs WHERE id=$1`, admitted.Run.ID).Scan(&rootDeadline, &peerDeadline); err != nil {
+			if err := admin.Pool.QueryRow(
+				ctx,
+				`SELECT execution_deadline,(SELECT deadline FROM knotra_execution_nodes WHERE run_id=$1 AND node_id='peer') FROM knotra_runs WHERE id=$1`,
+				admitted.Run.ID,
+			).Scan(&rootDeadline, &peerDeadline); err != nil {
 				t.Fatal(err)
 			}
 			if err := admin.Pool.QueryRow(ctx, "SELECT id,mcp_session FROM knotra_resources WHERE run_id=$1 AND kind='mcp_http'", admitted.Run.ID).Scan(&resourceID, &encoded); err != nil {
@@ -289,7 +343,10 @@ func testRiverFailFastProcessCrashBoundaries(t *testing.T, peerKind string) {
 			for {
 				var ready bool
 				if mode == "before_stop_commit" {
-					if err := admin.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event='advisory' AND query LIKE '%SetRunStopCause%')`).Scan(&ready); err != nil {
+					if err := admin.Pool.QueryRow(
+						ctx,
+						`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event='advisory' AND query LIKE '%SetRunStopCause%')`,
+					).Scan(&ready); err != nil {
 						t.Fatal(err)
 					}
 				} else {
@@ -307,7 +364,11 @@ func testRiverFailFastProcessCrashBoundaries(t *testing.T, peerKind string) {
 				}
 			}
 			var outcomeKey string
-			if err := admin.Pool.QueryRow(ctx, `SELECT a.outcome_key FROM knotra_execution_attempts a JOIN knotra_execution_nodes n ON n.run_id=a.run_id AND n.id=a.instance_id WHERE a.run_id=$1 AND n.node_id='fail'`, admitted.Run.ID).Scan(&outcomeKey); err != nil {
+			if err := admin.Pool.QueryRow(
+				ctx,
+				`SELECT a.outcome_key FROM knotra_execution_attempts a JOIN knotra_execution_nodes n ON n.run_id=a.run_id AND n.id=a.instance_id WHERE a.run_id=$1 AND n.node_id='fail'`,
+				admitted.Run.ID,
+			).Scan(&outcomeKey); err != nil {
 				t.Fatal(err)
 			}
 			files, err := execution.OpenOutcomeFiles(filepath.Join(options.DataDir, "outcomes"))
@@ -328,7 +389,15 @@ func testRiverFailFastProcessCrashBoundaries(t *testing.T, peerKind string) {
 				t.Fatalf("engine did not exit from SIGKILL: %v", first.command.ProcessState)
 			}
 			if peerKind == "sandbox" {
-				data, err := exec.CommandContext(ctx, "docker", "exec", "sandbox-"+sandboxID, "python", "-c", "import pathlib; p=pathlib.Path('/workspace'); print((p/'started').read_text().strip()); pid=int((p/'pid').read_text()); print(pathlib.Path('/proc',str(pid),'cmdline').read_bytes().split(b'\\0')[0].decode())").CombinedOutput()
+				data, err := exec.CommandContext(
+					ctx,
+					"docker",
+					"exec",
+					"sandbox-"+sandboxID,
+					"python",
+					"-c",
+					"import pathlib; p=pathlib.Path('/workspace'); print((p/'started').read_text().strip()); pid=int((p/'pid').read_text()); print(pathlib.Path('/proc',str(pid),'cmdline').read_bytes().split(b'\\0')[0].decode())",
+				).CombinedOutput()
 				if err != nil || string(data) != "physical-execution\npython\n" {
 					t.Fatalf("sandbox business process did not survive engine SIGKILL: output=%s error=%v", data, err)
 				}
@@ -349,9 +418,13 @@ func testRiverFailFastProcessCrashBoundaries(t *testing.T, peerKind string) {
 			}
 			var stopped, published bool
 			var failState, attemptState string
-			if err := admin.Pool.QueryRow(ctx, `SELECT r.stop_cause IS NOT NULL,n.state,a.state,a.evidence_key IS NOT NULL FROM knotra_runs r
+			if err := admin.Pool.QueryRow(
+				ctx,
+				`SELECT r.stop_cause IS NOT NULL,n.state,a.state,a.evidence_key IS NOT NULL FROM knotra_runs r
 				JOIN knotra_execution_nodes n ON n.run_id=r.id AND n.node_id='fail'
-				JOIN knotra_execution_attempts a ON a.run_id=n.run_id AND a.instance_id=n.id WHERE r.id=$1`, admitted.Run.ID).Scan(&stopped, &failState, &attemptState, &published); err != nil {
+				JOIN knotra_execution_attempts a ON a.run_id=n.run_id AND a.instance_id=n.id WHERE r.id=$1`,
+				admitted.Run.ID,
+			).Scan(&stopped, &failState, &attemptState, &published); err != nil {
 				t.Fatal(err)
 			}
 			if mode == "before_stop_commit" {
@@ -359,7 +432,13 @@ func testRiverFailFastProcessCrashBoundaries(t *testing.T, peerKind string) {
 					t.Fatalf("uncommitted fail-fast survived: stopped=%v published=%v node=%s attempt=%s", stopped, published, failState, attemptState)
 				}
 			} else if !stopped || !published || failState != "failed" || attemptState != "completed" {
-				t.Fatalf("fail-fast publication was not atomic: stopped=%v published=%v node=%s attempt=%s", stopped, published, failState, attemptState)
+				t.Fatalf(
+					"fail-fast publication was not atomic: stopped=%v published=%v node=%s attempt=%s",
+					stopped,
+					published,
+					failState,
+					attemptState,
+				)
 			}
 			select {
 			case <-interrupted:
@@ -381,7 +460,11 @@ func testRiverFailFastProcessCrashBoundaries(t *testing.T, peerKind string) {
 			}
 			for {
 				var closed bool
-				if err := admin.Pool.QueryRow(ctx, "SELECT NOT EXISTS(SELECT 1 FROM knotra_resources WHERE run_id=$1 AND state<>'closed')", admitted.Run.ID).Scan(&closed); err != nil {
+				if err := admin.Pool.QueryRow(
+					ctx,
+					"SELECT NOT EXISTS(SELECT 1 FROM knotra_resources WHERE run_id=$1 AND state<>'closed')",
+					admitted.Run.ID,
+				).Scan(&closed); err != nil {
 					t.Fatal(err)
 				}
 				if closed {
@@ -396,7 +479,9 @@ func testRiverFailFastProcessCrashBoundaries(t *testing.T, peerKind string) {
 			if peerKind != "mcp" {
 				data, err := exec.CommandContext(ctx, "docker", "inspect", "sandbox-"+sandboxID).CombinedOutput()
 				var exit *exec.ExitError
-				if !errors.As(err, &exit) || exit.ExitCode() != 1 || !strings.Contains(strings.ToLower(string(data)), "no such object: sandbox-"+sandboxID) {
+				if !errors.As(err, &exit) ||
+					exit.ExitCode() != 1 ||
+					!strings.Contains(strings.ToLower(string(data)), "no such object: sandbox-"+sandboxID) {
 					t.Fatalf("sandbox deletion is unproven: output=%s error=%v", data, err)
 				}
 				if err := filepath.WalkDir(filepath.Join(options.DataDir, "work"), func(path string, _ os.DirEntry, err error) error {
@@ -415,7 +500,9 @@ func testRiverFailFastProcessCrashBoundaries(t *testing.T, peerKind string) {
 			var attempts, tools, modelBudget, confirmed, slots, requests, openRequests, retainedRequests, prefixEvents, failEvents, artifacts int
 			var prefixState, prefixOutput, stopCode, peerState string
 			var finalRootDeadline, finalPeerDeadline time.Time
-			if err := admin.Pool.QueryRow(ctx, `SELECT
+			if err := admin.Pool.QueryRow(
+				ctx,
+				`SELECT
 				(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1),
 				COALESCE((SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='tool'),0),
 				COALESCE((SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='model'),0),
@@ -432,7 +519,27 @@ func testRiverFailFastProcessCrashBoundaries(t *testing.T, peerKind string) {
 				(SELECT outputs->'result'->>'json' FROM knotra_execution_nodes WHERE run_id=$1 AND node_id='prefix'),
 				COALESCE(stop_cause->>'code',''),execution_deadline,
 				(SELECT deadline FROM knotra_execution_nodes WHERE run_id=$1 AND node_id='peer'),
-				(SELECT state FROM knotra_execution_nodes WHERE run_id=$1 AND node_id='peer') FROM knotra_runs WHERE id=$1`, final.ID).Scan(&attempts, &tools, &modelBudget, &confirmed, &slots, &requests, &openRequests, &retainedRequests, &prefixEvents, &failEvents, &artifacts, &prefixState, &prefixOutput, &stopCode, &finalRootDeadline, &finalPeerDeadline, &peerState); err != nil {
+				(SELECT state FROM knotra_execution_nodes WHERE run_id=$1 AND node_id='peer') FROM knotra_runs WHERE id=$1`,
+				final.ID,
+			).Scan(
+				&attempts,
+				&tools,
+				&modelBudget,
+				&confirmed,
+				&slots,
+				&requests,
+				&openRequests,
+				&retainedRequests,
+				&prefixEvents,
+				&failEvents,
+				&artifacts,
+				&prefixState,
+				&prefixOutput,
+				&stopCode,
+				&finalRootDeadline,
+				&finalPeerDeadline,
+				&peerState,
+			); err != nil {
 				t.Fatal(err)
 			}
 			probe, err := http.NewRequestWithContext(ctx, http.MethodGet, remote.URL, nil)
@@ -462,10 +569,70 @@ func testRiverFailFastProcessCrashBoundaries(t *testing.T, peerKind string) {
 			if peerKind == "agent" {
 				wantTools, wantModels, wantConfirmed, wantAgentModels = 3, 3, 2, 2
 			}
-			if final.Status != "failed" || len(final.Outputs) != 0 || len(final.Artifacts) != 0 || attempts != 3 || tools != wantTools || modelBudget != wantModels || confirmed != wantConfirmed || slots != 0 || requests > 1 || openRequests != 0 || retainedRequests != requests || prefixEvents != 1 || failEvents != 1 || artifacts != 0 || prefixState != "succeeded" || prefix.Value != 41 || stopCode != "MODEL_REQUEST_REJECTED" || peerState != "cancelled" || calls[0].Load() != 1 || calls[1].Load() != wantPeerCalls || calls[2].Load() != 0 || models.Load() != 1 || agentModels.Load() != wantAgentModels || notifications.Load() < wantNotifications || deletes.Load() < 1 || initializations.Load() != initialized || response.StatusCode != http.StatusNotFound || !rootDeadline.Equal(finalRootDeadline) || !peerDeadline.Equal(finalPeerDeadline) {
-				t.Fatalf("status=%s attempts=%d budgets=%d/%d confirmed=%d slots=%d requests=%d/%d/%d events=%d/%d artifacts=%d prefix=%s:%s stop=%s peer=%s calls=%d/%d/%d models=%d cleanup=%d/%d init=%d/%d remote=%d deadlines=%v/%v", final.Status, attempts, tools, modelBudget, confirmed, slots, openRequests, retainedRequests, requests, prefixEvents, failEvents, artifacts, prefixState, prefixOutput, stopCode, peerState, calls[0].Load(), calls[1].Load(), calls[2].Load(), models.Load(), notifications.Load(), deletes.Load(), initializations.Load(), initialized, response.StatusCode, rootDeadline.Equal(finalRootDeadline), peerDeadline.Equal(finalPeerDeadline))
+			if final.Status != "failed" ||
+				len(final.Outputs) != 0 ||
+				len(final.Artifacts) != 0 ||
+				attempts != 3 ||
+				tools != wantTools ||
+				modelBudget != wantModels ||
+				confirmed != wantConfirmed ||
+				slots != 0 ||
+				requests > 1 ||
+				openRequests != 0 ||
+				retainedRequests != requests ||
+				prefixEvents != 1 ||
+				failEvents != 1 ||
+				artifacts != 0 ||
+				prefixState != "succeeded" ||
+				prefix.Value != 41 ||
+				stopCode != "MODEL_REQUEST_REJECTED" ||
+				peerState != "cancelled" ||
+				calls[0].Load() != 1 ||
+				calls[1].Load() != wantPeerCalls ||
+				calls[2].Load() != 0 ||
+				models.Load() != 1 ||
+				agentModels.Load() != wantAgentModels ||
+				notifications.Load() < wantNotifications ||
+				deletes.Load() < 1 ||
+				initializations.Load() != initialized ||
+				response.StatusCode != http.StatusNotFound ||
+				!rootDeadline.Equal(finalRootDeadline) ||
+				!peerDeadline.Equal(finalPeerDeadline) {
+				t.Fatalf(
+					"status=%s attempts=%d budgets=%d/%d confirmed=%d slots=%d requests=%d/%d/%d events=%d/%d artifacts=%d prefix=%s:%s stop=%s peer=%s calls=%d/%d/%d models=%d cleanup=%d/%d init=%d/%d remote=%d deadlines=%v/%v",
+					final.Status,
+					attempts,
+					tools,
+					modelBudget,
+					confirmed,
+					slots,
+					openRequests,
+					retainedRequests,
+					requests,
+					prefixEvents,
+					failEvents,
+					artifacts,
+					prefixState,
+					prefixOutput,
+					stopCode,
+					peerState,
+					calls[0].Load(),
+					calls[1].Load(),
+					calls[2].Load(),
+					models.Load(),
+					notifications.Load(),
+					deletes.Load(),
+					initializations.Load(),
+					initialized,
+					response.StatusCode,
+					rootDeadline.Equal(finalRootDeadline),
+					peerDeadline.Equal(finalPeerDeadline),
+				)
 			}
-			t.Logf("SIGKILL preserved confirmed sibling and failure envelope; replacement stopped original %s work, closed owned resources and retained fail-fast cause, one-time calls/events/debits and original deadlines", peerKind)
+			t.Logf(
+				"SIGKILL preserved confirmed sibling and failure envelope; replacement stopped original %s work, closed owned resources and retained fail-fast cause, one-time calls/events/debits and original deadlines",
+				peerKind,
+			)
 		})
 	}
 }

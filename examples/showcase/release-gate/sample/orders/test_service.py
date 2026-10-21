@@ -3,7 +3,6 @@ import service
 
 
 class RegressionTests(unittest.TestCase):
-
     def test_multiple_lines(self):
         self.assertEqual(service.total([(1200, 2), (99, 1)]), 2499)
 

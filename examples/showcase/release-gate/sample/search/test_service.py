@@ -3,7 +3,6 @@ import service
 
 
 class RegressionTests(unittest.TestCase):
-
     def test_case_folding(self):
         self.assertEqual(service.tokens("HELLO world"), ["hello", "world"])
 

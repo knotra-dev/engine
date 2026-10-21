@@ -51,6 +51,7 @@ func TestCloudProtocolsWithRealEngineRecovery(t *testing.T) {
 	if os.Getenv("KNOTRA_TEST_RECOVERY") != "1" {
 		t.Skip("set KNOTRA_TEST_RECOVERY=1 for provider fixture + real engine recovery")
 	}
+
 	root, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)
@@ -69,9 +70,15 @@ func TestCloudProtocolsWithRealEngineRecovery(t *testing.T) {
 				generations.Add(1)
 				w.Header().Set("Content-Type", "text/event-stream")
 				if provider == "openai" {
-					_, _ = fmt.Fprint(w, "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[{\"type\":\"function_call\",\"id\":\"fc_1\",\"call_id\":\"call_1\",\"name\":\"knotra_output\",\"arguments\":\"{\\\"answer\\\":42}\"}]}}\n\n")
+					_, _ = fmt.Fprint(
+						w,
+						"data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[{\"type\":\"function_call\",\"id\":\"fc_1\",\"call_id\":\"call_1\",\"name\":\"knotra_output\",\"arguments\":\"{\\\"answer\\\":42}\"}]}}\n\n",
+					)
 				} else {
-					_, _ = fmt.Fprint(w, "data: {\"type\":\"message_start\",\"message\":{\"type\":\"message\",\"role\":\"assistant\",\"content\":[]}}\n\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"knotra_output\",\"input\":{\"answer\":42}}}\n\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"}}\n\ndata: {\"type\":\"message_stop\"}\n\n")
+					_, _ = fmt.Fprint(
+						w,
+						"data: {\"type\":\"message_start\",\"message\":{\"type\":\"message\",\"role\":\"assistant\",\"content\":[]}}\n\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"knotra_output\",\"input\":{\"answer\":42}}}\n\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"}}\n\ndata: {\"type\":\"message_stop\"}\n\n",
+					)
 				}
 			}))
 			defer remote.Close()
@@ -90,14 +97,31 @@ func TestCloudProtocolsWithRealEngineRecovery(t *testing.T) {
 					t.Logf("evidence retained at %s", work)
 				}
 			})
-			profile := contract.Profile{APIVersion: "knotra/v1", Kind: "EngineProfile", Metadata: contract.Metadata{Name: "cloud"}, Spec: contract.ProfileSpec{
-				Secrets: map[string]contract.SecretSource{"key": {Env: "KNOTRA_CLOUD_FIXTURE_KEY"}},
-				Models:  map[string]contract.ModelConnection{"cloud": {Provider: provider, Model: "fixture-model", BaseURL: remote.URL, Auth: map[string]contract.Credential{"key": {SecretRef: "key"}}}},
-				Limits:  contract.Limits{Timeout: "3m", MaxConcurrentNodes: 2, MaxNodeInstances: 10, MaxModelCalls: 5, MaxToolCalls: 5},
-			}}
+			profile := contract.Profile{
+				APIVersion: "knotra/v1",
+				Kind:       "EngineProfile",
+				Metadata:   contract.Metadata{Name: "cloud"},
+				Spec: contract.ProfileSpec{
+					Secrets: map[string]contract.SecretSource{"key": {Env: "KNOTRA_CLOUD_FIXTURE_KEY"}},
+					Models: map[string]contract.ModelConnection{"cloud": {
+						Provider: provider,
+						Model:    "fixture-model",
+						BaseURL:  remote.URL,
+						Auth:     map[string]contract.Credential{"key": {SecretRef: "key"}},
+					}},
+					Limits: contract.Limits{Timeout: "3m", MaxConcurrentNodes: 2, MaxNodeInstances: 10, MaxModelCalls: 5, MaxToolCalls: 5},
+				},
+			}
 			profilePath := filepath.Join(work, "profile.json")
 			writeJSON(t, profilePath, profile)
-			options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), DataDir: filepath.Join(work, "engine"), HelperPath: snapshotHelper(t, root, work), Profiles: []string{profilePath}, Version: "cloud-test"}
+			options := app.Options{
+				Listen:      unusedAddress(t),
+				DatabaseURL: databaseSchema(t, ctx),
+				DataDir:     filepath.Join(work, "engine"),
+				HelperPath:  snapshotHelper(t, root, work),
+				Profiles:    []string{profilePath},
+				Version:     "cloud-test",
+			}
 			optionsPath := filepath.Join(work, "server.json")
 			writeJSON(t, optionsPath, options)
 			api := &client.Client{BaseURL: "http://" + options.Listen, StateDir: filepath.Join(work, "client")}
@@ -112,13 +136,29 @@ func TestCloudProtocolsWithRealEngineRecovery(t *testing.T) {
 			var definition struct {
 				Definition protocol.Definition `json:"definition"`
 			}
-			if err := api.Command(ctx, "/definitions", map[string]any{"package": contract.Package{Entrypoint: "pipeline.yaml", Source: cloudReviewPipeline, Files: []contract.File{{Path: "pipeline.yaml", Content: []byte(cloudReviewPipeline)}}}}, uuid.NewString(), &definition); err != nil {
+			if err := api.Command(
+				ctx,
+				"/definitions",
+				map[string]any{"package": contract.Package{
+					Entrypoint: "pipeline.yaml",
+					Source:     cloudReviewPipeline,
+					Files:      []contract.File{{Path: "pipeline.yaml", Content: []byte(cloudReviewPipeline)}},
+				}},
+				uuid.NewString(),
+				&definition,
+			); err != nil {
 				t.Fatal(err)
 			}
 			var accepted struct {
 				Run protocol.Run `json:"run"`
 			}
-			if err := api.Command(ctx, "/runs", map[string]any{"definitionId": definition.Definition.ID, "profile": "cloud"}, uuid.NewString(), &accepted); err != nil {
+			if err := api.Command(
+				ctx,
+				"/runs",
+				map[string]any{"definitionId": definition.Definition.ID, "profile": "cloud"},
+				uuid.NewString(),
+				&accepted,
+			); err != nil {
 				t.Fatal(err)
 			}
 			before := awaitHuman(t, ctx, api, accepted.Run.ID)

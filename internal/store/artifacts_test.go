@@ -96,7 +96,11 @@ func TestSharedArtifactAndOutcomePublicationSurvivesWriterExit(t *testing.T) {
 			t.Fatal(err)
 		}
 		outcome := execution.Outcome{FormatVersion: execution.StateFormatVersion, PlanID: "frozen-plan",
-			Ownership:   execution.Ownership{AttemptID: execution.AttemptID{RunID: "run", InstanceID: host, Number: 1}, WorkerID: host, Generation: 1},
+			Ownership: execution.Ownership{
+				AttemptID:  execution.AttemptID{RunID: "run", InstanceID: host, Number: 1},
+				WorkerID:   host,
+				Generation: 1,
+			},
 			CompletedAt: time.Date(2026, 10, 6, 0, 0, 0, 0, time.UTC),
 			Outputs:     contract.Values{"file": {Artifacts: []contract.Artifact{artifact}}},
 			Artifacts:   []execution.ArtifactReference{{ID: artifact.ID, SHA256: artifact.SHA256, Size: artifact.Size}}}
@@ -117,7 +121,12 @@ func TestSharedArtifactAndOutcomePublicationSurvivesWriterExit(t *testing.T) {
 	var done [2]chan error
 	for index := range 2 {
 		host := fmt.Sprintf("writer-%d", index)
-		command := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestSharedArtifactAndOutcomePublicationSurvivesWriterExit$", "-test.timeout=30s")
+		command := exec.CommandContext(
+			t.Context(),
+			os.Args[0],
+			"-test.run=^TestSharedArtifactAndOutcomePublicationSurvivesWriterExit$",
+			"-test.timeout=30s",
+		)
 		command.Env = append(os.Environ(), "KNOTRA_SHARED_STORAGE_WRITER="+host, "KNOTRA_SHARED_STORAGE_DIRECTORY="+directory)
 		command.Stdout, command.Stderr = &output[index], &output[index]
 		if err := command.Start(); err != nil {

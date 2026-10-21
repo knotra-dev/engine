@@ -34,11 +34,13 @@ func assertAgentEvidence(t *testing.T, ctx context.Context, dsn string, run prot
 		t.Fatal(err)
 	}
 	defer func() { _ = connection.Close(ctx) }()
+
 	tx, err := connection.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+
 	var rawPlan []byte
 	if err = tx.QueryRow(ctx, "SELECT plan FROM knotra_runs WHERE id=$1", run.ID).Scan(&rawPlan); err != nil {
 		t.Fatal(err)
@@ -175,7 +177,10 @@ func assertAgentEvidence(t *testing.T, ctx context.Context, dsn string, run prot
 		Summary string `json:"summary"`
 	}
 	var committedSummary string
-	if json.Unmarshal(finishArguments, &finish) != nil || json.Unmarshal(outputs["summary"].JSON, &committedSummary) != nil || finish.Summary == "" || finish.Summary != committedSummary {
+	if json.Unmarshal(finishArguments, &finish) != nil ||
+		json.Unmarshal(outputs["summary"].JSON, &committedSummary) != nil ||
+		finish.Summary == "" ||
+		finish.Summary != committedSummary {
 		t.Error("solitary finish arguments do not match committed agent result")
 	}
 	report := outputs["report"].Artifacts[0]
@@ -214,7 +219,12 @@ func successfulAgentTool(name string, arguments, response json.RawMessage, marke
 			Structured statsOutput `json:"structuredContent"`
 		}
 		var input statsInput
-		return json.Unmarshal(response, &mcpResult) == nil && !mcpResult.IsError && mcpResult.Structured.Count == 3 && mcpResult.Structured.Sum == 12 && json.Unmarshal(arguments, &input) == nil && input.Marker == marker
+		return json.Unmarshal(response, &mcpResult) == nil &&
+			!mcpResult.IsError &&
+			mcpResult.Structured.Count == 3 &&
+			mcpResult.Structured.Sum == 12 &&
+			json.Unmarshal(arguments, &input) == nil &&
+			input.Marker == marker
 	}
 	if json.Unmarshal(response, &result) != nil || result.IsError || result.Error != "" {
 		return false
@@ -232,10 +242,18 @@ func successfulAgentTool(name string, arguments, response json.RawMessage, marke
 		return strings.Contains(result.Content, "value,marker") && strings.Contains(result.Content, marker)
 	case "knotra_files_write":
 		var input struct{ Path, Content string }
-		return json.Unmarshal(arguments, &input) == nil && input.Path == "report.md" && strings.Contains(input.Content, marker) && result.BytesWritten > 0
+		return json.Unmarshal(arguments, &input) == nil &&
+			input.Path == "report.md" &&
+			strings.Contains(input.Content, marker) &&
+			result.BytesWritten > 0
 	case "knotra_process_exec":
 		var input struct{ Command []string }
-		return json.Unmarshal(arguments, &input) == nil && len(input.Command) >= 3 && strings.HasPrefix(input.Command[0], "python") && result.ExitCode != nil && *result.ExitCode == 0 && strings.Contains(result.Stdout, marker)
+		return json.Unmarshal(arguments, &input) == nil &&
+			len(input.Command) >= 3 &&
+			strings.HasPrefix(input.Command[0], "python") &&
+			result.ExitCode != nil &&
+			*result.ExitCode == 0 &&
+			strings.Contains(result.Stdout, marker)
 	default:
 		return false
 	}

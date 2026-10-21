@@ -117,6 +117,7 @@ func projectIdempotency(schema json.RawMessage, pointer string) (json.RawMessage
 	if err := json.Unmarshal(schema, &root); err != nil {
 		return nil, err
 	}
+
 	current := root
 
 	for i, raw := range strings.Split(strings.TrimPrefix(pointer, "/"), "/") {
@@ -131,6 +132,7 @@ func projectIdempotency(schema json.RawMessage, pointer string) (json.RawMessage
 		if !ok {
 			return nil, fmt.Errorf("idempotency schema requires explicit properties")
 		}
+
 		child, ok := properties[part].(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("idempotency field schema missing")
@@ -139,6 +141,7 @@ func projectIdempotency(schema json.RawMessage, pointer string) (json.RawMessage
 			if child["type"] != "string" {
 				return nil, fmt.Errorf("idempotency field must be a string")
 			}
+
 			for _, keyword := range []string{"minProperties", "maxProperties"} {
 				if _, ok := current[keyword]; ok {
 					return nil, fmt.Errorf("cannot safely project idempotency field through %s", keyword)
@@ -191,21 +194,25 @@ func (r *Runner) agent(ctx context.Context, req Request) (contract.Values, error
 			Unknown:     true,
 		}
 	}
+
 	s, err := r.nodeSandbox(ctx, req)
 	if err != nil {
 		return nil, &Failure{Code: "SANDBOX_FAILED", Message: err.Error(), Retryable: true}
 	}
+
 	defer func() { _ = s.close() }()
 	req.Inputs = s.inputs
 	tools, definitions, err := agentTools(req)
 	if err != nil {
 		return nil, err
 	}
+
 	n := req.Node.Agent
 	messages, err := initialMessages(req, n.Instructions, n.Prompt)
 	if err != nil {
 		return nil, err
 	}
+
 	messages = append(
 		[]message{{
 			Role:    "system",
@@ -242,6 +249,7 @@ func (r *Runner) agent(ctx context.Context, req Request) (contract.Values, error
 		if err != nil {
 			return nil, preventRetry(err, effects)
 		}
+
 		messages = append(messages, response)
 		finish := false
 
@@ -322,6 +330,7 @@ func (r *Runner) agent(ctx context.Context, req Request) (contract.Values, error
 			if !ok {
 				return nil, failure("PERMISSION_DENIED", fmt.Errorf("agent requested an ungranted tool %q", call.Function.Name))
 			}
+
 			name := tool.builtin
 			id := operationID(req, fmt.Sprintf("builtin/%d/%d", step, index), true)
 			if name == "" {
@@ -412,6 +421,7 @@ func (r *Runner) agent(ctx context.Context, req Request) (contract.Values, error
 			if err != nil {
 				return nil, preventRetry(err, effects)
 			}
+
 			messages = append(messages, message{
 				Role: "tool", ToolName: call.Function.Name, ToolCallID: call.ID,
 				Content: string(result),

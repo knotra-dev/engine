@@ -55,6 +55,7 @@ func (o Outcome) Validate() error {
 	if o.Failure != nil && (o.Failure.Code == "" || len(o.Outputs) > 0) {
 		return errors.New("failed outcome requires a failure code and no published outputs")
 	}
+
 	seen := make(map[string]bool, len(o.Artifacts))
 	for _, a := range o.Artifacts {
 		if a.ID == "" || !validKey(a.SHA256) || a.Size < 0 || seen[a.ID] {

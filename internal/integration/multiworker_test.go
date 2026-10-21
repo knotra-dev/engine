@@ -167,11 +167,25 @@ func TestMultiworkerServeWithS3AndIndependentDataDirectories(t *testing.T) {
 	}
 	var uploaded struct{ Artifact contract.Artifact }
 	content := []byte("artifact survives API replacement\x00\xff")
-	if err := api.Command(ctx, "/artifacts", map[string]any{"name": "evidence.bin", "mediaType": "application/octet-stream", "content": base64.StdEncoding.EncodeToString(content)}, uuid.NewString(), &uploaded); err != nil {
+	if err := api.Command(
+		ctx,
+		"/artifacts",
+		map[string]any{
+			"name":      "evidence.bin",
+			"mediaType": "application/octet-stream",
+			"content":   base64.StdEncoding.EncodeToString(content),
+		},
+		uuid.NewString(),
+		&uploaded,
+	); err != nil {
 		t.Fatal(err)
 	}
 	var definition struct{ Definition protocol.Definition }
-	pkg := contract.Package{Entrypoint: "pipeline.yaml", Source: multiworkerPipeline, Files: []contract.File{{Path: "pipeline.yaml", Content: []byte(multiworkerPipeline)}}}
+	pkg := contract.Package{
+		Entrypoint: "pipeline.yaml",
+		Source:     multiworkerPipeline,
+		Files:      []contract.File{{Path: "pipeline.yaml", Content: []byte(multiworkerPipeline)}},
+	}
 	if err := api.Command(ctx, "/definitions", map[string]any{"package": pkg}, uuid.NewString(), &definition); err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +195,13 @@ func TestMultiworkerServeWithS3AndIndependentDataDirectories(t *testing.T) {
 		runs := make([]string, count)
 		for i := range runs {
 			var accepted struct{ Run protocol.Run }
-			if err := api.Command(ctx, "/runs", map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name}, uuid.NewString(), &accepted); err != nil {
+			if err := api.Command(
+				ctx,
+				"/runs",
+				map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name},
+				uuid.NewString(),
+				&accepted,
+			); err != nil {
 				t.Fatal(err)
 			}
 			runs[i] = accepted.Run.ID
@@ -270,7 +290,10 @@ func TestMultiworkerRecoversS3OutcomeAfterExecutorCrash(t *testing.T) {
 			return
 		}
 		calls.Add(1)
-		_, _ = io.WriteString(w, `{"message":{"role":"assistant","content":"{\"answer\":\"shared remote result\"}"},"done":true,"done_reason":"stop"}`)
+		_, _ = io.WriteString(
+			w,
+			`{"message":{"role":"assistant","content":"{\"answer\":\"shared remote result\"}"},"done":true,"done_reason":"stop"}`,
+		)
 	}))
 	t.Cleanup(provider.Close)
 	work := t.TempDir()
@@ -327,12 +350,22 @@ func TestMultiworkerRecoversS3OutcomeAfterExecutorCrash(t *testing.T) {
 		t.Fatal(err)
 	}
 	var definition struct{ Definition protocol.Definition }
-	pkg := contract.Package{Entrypoint: "pipeline.yaml", Source: multiworkerPipeline, Files: []contract.File{{Path: "pipeline.yaml", Content: []byte(multiworkerPipeline)}}}
+	pkg := contract.Package{
+		Entrypoint: "pipeline.yaml",
+		Source:     multiworkerPipeline,
+		Files:      []contract.File{{Path: "pipeline.yaml", Content: []byte(multiworkerPipeline)}},
+	}
 	if err := api.Command(ctx, "/definitions", map[string]any{"package": pkg}, uuid.NewString(), &definition); err != nil {
 		t.Fatal(err)
 	}
 	var accepted struct{ Run protocol.Run }
-	if err := api.Command(ctx, "/runs", map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name}, uuid.NewString(), &accepted); err != nil {
+	if err := api.Command(
+		ctx,
+		"/runs",
+		map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name},
+		uuid.NewString(),
+		&accepted,
+	); err != nil {
 		t.Fatal(err)
 	}
 	awaitMultiworker(t, ctx, func() (bool, error) {
@@ -521,7 +554,8 @@ func multiworkerS3(t *testing.T) *httptest.Server {
 		switch req.Method {
 		case http.MethodPut:
 			etag := fmt.Sprintf(`"%x"`, sha256.Sum256(data))
-			if (exists && req.Header.Get("If-None-Match") == "*") || (req.Header.Get("If-Match") != "" && (!exists || req.Header.Get("If-Match") != etag)) {
+			if (exists && req.Header.Get("If-None-Match") == "*") ||
+				(req.Header.Get("If-Match") != "" && (!exists || req.Header.Get("If-Match") != etag)) {
 				w.WriteHeader(http.StatusPreconditionFailed)
 				_, _ = io.WriteString(w, `<Error><Code>PreconditionFailed</Code></Error>`)
 				return

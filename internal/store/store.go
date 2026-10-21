@@ -40,6 +40,7 @@ func Open(ctx context.Context, dsn string) (_ *Store, err error) {
 	if err != nil {
 		return nil, err
 	}
+
 	defer func() {
 		if err != nil {
 			p.Close()
@@ -49,10 +50,12 @@ func Open(ctx context.Context, dsn string) (_ *Store, err error) {
 	if err != nil {
 		return nil, err
 	}
+
 	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = db.New(tx).LockStoreSchema(ctx); err != nil {
 		return nil, err
 	}
+
 	initialized, err := db.New(tx).SchemaInitialized(ctx)
 	if err != nil {
 		return nil, err
@@ -65,6 +68,7 @@ func Open(ctx context.Context, dsn string) (_ *Store, err error) {
 	if _, err = db.New(tx).InsertEngineID(ctx, uuid.NewString()); err != nil {
 		return nil, err
 	}
+
 	s := &Store{Pool: p}
 	s.EngineID, err = db.New(tx).ReadEngineID(ctx)
 	if err != nil {
@@ -74,6 +78,7 @@ func Open(ctx context.Context, dsn string) (_ *Store, err error) {
 	if err = tx.Commit(ctx); err != nil {
 		return nil, err
 	}
+
 	return s, nil
 }
 
@@ -95,11 +100,13 @@ func (s *Store) Command(ctx context.Context, principal, key, route string, paylo
 	if err != nil {
 		return 0, nil, err
 	}
+
 	defer func() { _ = tx.Rollback(ctx) }()
 	_, err = db.New(tx).LockTransactionKey(ctx, principal+":"+key)
 	if err != nil {
 		return 0, nil, err
 	}
+
 	sum := sha256.Sum256(payload)
 	digest := hex.EncodeToString(sum[:])
 
@@ -120,14 +127,17 @@ func (s *Store) Command(ctx context.Context, principal, key, route string, paylo
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return 0, nil, err
 	}
+
 	status, value, err := action(tx)
 	if err != nil {
 		return 0, nil, err
 	}
+
 	response, err = raw(value)
 	if err != nil {
 		return 0, nil, err
 	}
+
 	_, err = db.New(tx).InsertCommandReceipt(ctx, db.InsertCommandReceiptParams{
 		Principal: principal,
 		ID:        key,
@@ -139,6 +149,7 @@ func (s *Store) Command(ctx context.Context, principal, key, route string, paylo
 	if err != nil {
 		return 0, nil, err
 	}
+
 	return status, response, tx.Commit(ctx)
 }
 
@@ -212,6 +223,7 @@ func (s *Store) Runs(ctx context.Context, cursor string) ([]protocol.Run, error)
 	if err != nil {
 		return nil, err
 	}
+
 	size := 0
 
 	for i := range runs {
@@ -258,10 +270,12 @@ func insertRun(ctx context.Context, tx pgx.Tx, run protocol.Run, plan contract.P
 	if e != nil {
 		return e
 	}
+
 	p, e := raw(plan)
 	if e != nil {
 		return e
 	}
+
 	i, e := raw(inputs)
 	if e != nil {
 		return e
@@ -281,6 +295,7 @@ func insertRun(ctx context.Context, tx pgx.Tx, run protocol.Run, plan contract.P
 	if e != nil {
 		return e
 	}
+
 	return nil
 }
 
@@ -338,6 +353,7 @@ func (s *Store) hydrateRun(ctx context.Context, run *protocol.Run) error {
 	if err != nil {
 		return err
 	}
+
 	run.Package = definition.Package
 	var b []byte
 	storedRunInputs, queryErr9 := db.New(s.Pool).ReadRunInputs(ctx, run.ID)
@@ -352,6 +368,7 @@ func (s *Store) hydrateRun(ctx context.Context, run *protocol.Run) error {
 	if err = json.Unmarshal(b, &inputs); err != nil {
 		return err
 	}
+
 	run.Inputs = map[string]json.RawMessage{}
 	run.InputArtifacts = map[string]any{}
 
@@ -393,6 +410,7 @@ func decodePage[T any](documents [][]byte, err error) ([]T, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	out := []T{}
 	size := 0
 

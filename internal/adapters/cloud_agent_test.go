@@ -22,9 +22,15 @@ func TestCloudToolConversationPreservesIDsAndPrivateContext(t *testing.T) {
 				body := decodeRequest(t, req)
 				if calls.Add(1) == 1 {
 					if provider == "openai" {
-						_, _ = fmt.Fprint(w, `{"status":"completed","output":[{"type":"reasoning","id":"rs_1","encrypted_content":"private-encrypted-context","summary":[]},{"type":"function_call","id":"fc_1","call_id":"call_1","name":"work","arguments":"{\"value\":7}"}],"usage":{"input_tokens":4,"output_tokens":3}}`)
+						_, _ = fmt.Fprint(
+							w,
+							`{"status":"completed","output":[{"type":"reasoning","id":"rs_1","encrypted_content":"private-encrypted-context","summary":[]},{"type":"function_call","id":"fc_1","call_id":"call_1","name":"work","arguments":"{\"value\":7}"}],"usage":{"input_tokens":4,"output_tokens":3}}`,
+						)
 					} else {
-						_, _ = fmt.Fprint(w, `{"type":"message","role":"assistant","content":[{"type":"thinking","thinking":"private-thinking","signature":"private-signature"},{"type":"tool_use","id":"call_1","name":"work","input":{"value":7}}],"stop_reason":"tool_use","usage":{"input_tokens":4,"output_tokens":3}}`)
+						_, _ = fmt.Fprint(
+							w,
+							`{"type":"message","role":"assistant","content":[{"type":"thinking","thinking":"private-thinking","signature":"private-signature"},{"type":"tool_use","id":"call_1","name":"work","input":{"value":7}}],"stop_reason":"tool_use","usage":{"input_tokens":4,"output_tokens":3}}`,
+						)
 					}
 					return
 				}
@@ -34,7 +40,10 @@ func TestCloudToolConversationPreservesIDsAndPrivateContext(t *testing.T) {
 						t.Error("reasoning/tool history lost")
 						return
 					}
-					if string(raw[1]["encrypted_content"]) != `"private-encrypted-context"` || string(raw[2]["call_id"]) != `"call_1"` || string(raw[3]["call_id"]) != `"call_1"` || string(raw[3]["type"]) != `"function_call_output"` {
+					if string(raw[1]["encrypted_content"]) != `"private-encrypted-context"` ||
+						string(raw[2]["call_id"]) != `"call_1"` ||
+						string(raw[3]["call_id"]) != `"call_1"` ||
+						string(raw[3]["type"]) != `"function_call_output"` {
 						t.Error("OpenAI context or call identity lost")
 					}
 				} else {
@@ -45,7 +54,11 @@ func TestCloudToolConversationPreservesIDsAndPrivateContext(t *testing.T) {
 					var assistant, user []map[string]json.RawMessage
 					_ = json.Unmarshal(raw[1]["content"], &assistant)
 					_ = json.Unmarshal(raw[2]["content"], &user)
-					if len(assistant) != 2 || len(user) != 1 || string(assistant[0]["signature"]) != `"private-signature"` || string(user[0]["tool_use_id"]) != `"call_1"` || string(user[0]["is_error"]) != "true" {
+					if len(assistant) != 2 ||
+						len(user) != 1 ||
+						string(assistant[0]["signature"]) != `"private-signature"` ||
+						string(user[0]["tool_use_id"]) != `"call_1"` ||
+						string(user[0]["is_error"]) != "true" {
 						t.Error("Anthropic context, ID or error feedback lost")
 					}
 				}
@@ -63,7 +76,16 @@ func TestCloudToolConversationPreservesIDsAndPrivateContext(t *testing.T) {
 			if err != nil || len(response.ToolCalls) != 1 {
 				t.Fatalf("first turn: %v", err)
 			}
-			messages = append(messages, response, message{Role: "tool", ToolName: "work", ToolCallID: response.ToolCalls[0].ID, Content: "Invalid arguments: value rejected"})
+			messages = append(
+				messages,
+				response,
+				message{
+					Role:       "tool",
+					ToolName:   "work",
+					ToolCallID: response.ToolCalls[0].ID,
+					Content:    "Invalid arguments: value rejected",
+				},
+			)
 			response, err = runner.chat(context.Background(), req, "model", 1, messages, tools, nil)
 			if err != nil || response.ToolCalls[0].Function.Name != "knotra_finish" {
 				t.Fatalf("second turn: %v", err)
@@ -112,7 +134,10 @@ func TestCloudDockerAgentToolsValidationAndReplay(t *testing.T) {
 			req.Node.Type, req.Node.Sandbox, req.Node.LLM = "agent", "box", nil
 			req.Node.Agent = &contract.AgentNode{Model: "model", Prompt: contract.TextSource{Text: "Write report and finish."}, MaxSteps: 4}
 			req.Node.Tools = &contract.ToolGrants{Sandbox: []string{"files.write"}}
-			req.Node.Outputs["report"] = contract.Port{Artifact: &contract.ArtifactPort{MediaTypes: []string{"text/plain"}}, Collect: &contract.Collect{Path: "report.txt", MediaType: "text/plain"}}
+			req.Node.Outputs["report"] = contract.Port{
+				Artifact: &contract.ArtifactPort{MediaTypes: []string{"text/plain"}},
+				Collect:  &contract.Collect{Path: "report.txt", MediaType: "text/plain"},
+			}
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
 			for range 2 {
@@ -150,7 +175,9 @@ func TestCloudStructuredStreamingObservations(t *testing.T) {
 					_, _ = fmt.Fprint(&deltas, event.Data["text"])
 				}
 				if event.Type == "model.completed" {
-					complete = event.Data["content"] == `{"answer":42}` && event.Data["inputTokens"] == json.Number("17") && event.Data["outputTokens"] == json.Number("9")
+					complete = event.Data["content"] == `{"answer":42}` &&
+						event.Data["inputTokens"] == json.Number("17") &&
+						event.Data["outputTokens"] == json.Number("9")
 				}
 			}
 			if deltas.String() != `{"answer":42}` || !complete {

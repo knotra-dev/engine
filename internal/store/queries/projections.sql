@@ -5,10 +5,17 @@ SELECT document,sequence FROM knotra_runs WHERE id=$1 FOR UPDATE;
 SELECT EXISTS(SELECT 1 FROM knotra_events WHERE run_id=$1 AND sequence=$2);
 
 -- name: PublishArtifact :execresult
-UPDATE knotra_artifacts SET published=true WHERE id=sqlc.arg(id) AND document->'origin'->>'runId'=sqlc.arg(origin_run_id)::text;
+UPDATE knotra_artifacts
+SET published=true
+WHERE id=sqlc.arg(id)
+    AND document->'origin'->>'runId'=sqlc.arg(origin_run_id)::text;
 
 -- name: UpsertInstanceProjection :execresult
-INSERT INTO knotra_instances(run_id,id,sequence,document) VALUES($1,$2,$3,$4) ON CONFLICT(run_id,id) DO UPDATE SET sequence=EXCLUDED.sequence,document=EXCLUDED.document WHERE knotra_instances.sequence<EXCLUDED.sequence;
+INSERT INTO knotra_instances(run_id,id,sequence,document)
+VALUES($1,$2,$3,$4)
+ON CONFLICT(run_id,id) DO UPDATE
+SET sequence=EXCLUDED.sequence,document=EXCLUDED.document
+WHERE knotra_instances.sequence<EXCLUDED.sequence;
 
 -- name: CancelOpenRequests :execresult
 UPDATE knotra_requests SET status='cancelled' WHERE run_id=$1 AND status IN ('open','pending');
@@ -52,4 +59,7 @@ SELECT pg_advisory_xact_lock(hashtextextended($1,0));
 SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$2 AND kind=$3;
 
 -- name: IncrementBudget :execresult
-INSERT INTO knotra_budgets(run_id,scope,kind,used) VALUES($1,$2,$3,1) ON CONFLICT(run_id,scope,kind) DO UPDATE SET used=knotra_budgets.used+1;
+INSERT INTO knotra_budgets(run_id,scope,kind,used)
+VALUES($1,$2,$3,1)
+ON CONFLICT(run_id,scope,kind) DO UPDATE
+SET used=knotra_budgets.used+1;

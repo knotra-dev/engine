@@ -73,10 +73,12 @@ func (r *Runner) docker(ctx context.Context) (*dockerClient, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	dial, err := dockerDialer(u)
 	if err != nil {
 		return nil, err
 	}
+
 	transport := &http.Transport{IdleConnTimeout: 30 * time.Second, MaxIdleConns: 2, MaxIdleConnsPerHost: 2, DialContext: dial}
 	return &dockerClient{client: &http.Client{Transport: transport}, base: "http://docker"}, nil
 }
@@ -87,6 +89,7 @@ func dockerDialer(u *url.URL) (dockerDialFunc, error) {
 	if u.Host != "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return nil, fmt.Errorf("docker host must be a local unix socket or named pipe")
 	}
+
 	switch u.Scheme {
 	case "unix":
 		if !strings.HasPrefix(u.Path, "/") || u.Path == "/" {
@@ -127,6 +130,7 @@ func (d *dockerClient) request(ctx context.Context, method, path string, input a
 	if err != nil {
 		return nil, err
 	}
+
 	req.Header.Set("Content-Type", "application/json")
 	res, err := d.client.Do(req)
 	if err != nil {
@@ -136,6 +140,7 @@ func (d *dockerClient) request(ctx context.Context, method, path string, input a
 		defer func() { _ = res.Body.Close() }()
 		return nil, &dockerAPIError{res.StatusCode, method, strings.Split(path, "?")[0]}
 	}
+
 	return res, nil
 }
 
@@ -210,6 +215,7 @@ func (r *Runner) newSandbox(ctx context.Context, req Request, profile contract.S
 	if r.HelperPath == "" || r.WorkDir == "" {
 		return nil, fmt.Errorf("sandbox helper path and work directory must be configured")
 	}
+
 	helper, err := filepath.Abs(r.HelperPath)
 	if err != nil {
 		return nil, err
@@ -237,7 +243,12 @@ func (r *Runner) newSandbox(ctx context.Context, req Request, profile contract.S
 			return nil, err
 		}
 	}
-	s := &sandbox{resource: resource, hooks: r.Hooks, env: append([]string{"KNOTRA_INPUT_JSON=/knotra/input.json", "KNOTRA_OUTPUT_JSON=/knotra/output.json"}, environment...), inputs: contract.Values{}}
+	s := &sandbox{
+		resource: resource,
+		hooks:    r.Hooks,
+		env:      append([]string{"KNOTRA_INPUT_JSON=/knotra/input.json", "KNOTRA_OUTPUT_JSON=/knotra/output.json"}, environment...),
+		inputs:   contract.Values{},
+	}
 	ok := false
 	defer func() {
 		if !ok {
@@ -250,6 +261,7 @@ func (r *Runner) newSandbox(ctx context.Context, req Request, profile contract.S
 	if err = os.MkdirAll(r.workRoot(), 0700); err != nil {
 		return nil, err
 	}
+
 	s.dir, err = filepath.Abs(filepath.Join(r.workRoot(), resource.Name()))
 	if err != nil {
 		return nil, err
@@ -257,12 +269,14 @@ func (r *Runner) newSandbox(ctx context.Context, req Request, profile contract.S
 	if err = os.Mkdir(s.dir, 0700); err != nil {
 		return nil, err
 	}
+
 	s.dirCreated = true
 	dir := s.dir
 	s.docker, err = r.docker(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	var deadline time.Time
 	if !req.service && (req.Node.Type == "agent" || req.Node.Type == "code") {
 		var bounded bool
@@ -274,10 +288,12 @@ func (r *Runner) newSandbox(ctx context.Context, req Request, profile contract.S
 	if err = s.startLease(deadline); err != nil {
 		return nil, err
 	}
+
 	packageDir := filepath.Join(dir, "package")
 	if err = os.Mkdir(packageDir, 0755); err != nil {
 		return nil, err
 	}
+
 	requestDir := filepath.Join(dir, "requests")
 	if err = os.Mkdir(requestDir, 0755); err != nil {
 		return nil, err
@@ -344,15 +360,18 @@ func (r *Runner) newSandbox(ctx context.Context, req Request, profile contract.S
 	if err != nil {
 		return nil, err
 	}
+
 	inputPath := filepath.Join(dir, "input.json")
 	if err = os.WriteFile(inputPath, input, 0444); err != nil {
 		return nil, err
 	}
+
 	mounts = append(mounts, dockerMount{"bind", inputPath, "/knotra/input.json", true})
 	disk := profile.Resources.DiskMiB << 20
 	if disk < 1<<20 {
 		return nil, fmt.Errorf("sandbox disk limit too small")
 	}
+
 	small := disk / 20
 	workspace := disk - 2*small - 4096
 	network := "none"
@@ -429,6 +448,7 @@ func (r *Runner) newSandbox(ctx context.Context, req Request, profile contract.S
 	if err = s.docker.json(ctx, "POST", "/containers/create?name="+url.QueryEscape(resource.Name()), body, &created); err != nil {
 		return nil, err
 	}
+
 	s.id = created.ID
 	if err = s.docker.json(ctx, "POST", "/containers/"+s.id+"/start", nil, nil); err != nil {
 		return nil, err
@@ -446,6 +466,7 @@ func (r *Runner) installFirewall(ctx context.Context, s *sandbox, ips []string, 
 	if image == "" {
 		return fmt.Errorf("allowlist requires configured firewall image")
 	}
+
 	sort.Strings(ips)
 	ips = slices.Compact(ips)
 	script := "set -eu\niptables -P OUTPUT DROP\niptables -P FORWARD DROP\nip6tables -P OUTPUT DROP\nip6tables -P FORWARD DROP\n"
@@ -485,6 +506,7 @@ func (r *Runner) installFirewall(ctx context.Context, s *sandbox, ips []string, 
 	if err := s.docker.json(ctx, "POST", "/containers/create?name="+url.QueryEscape(s.resource.Name()+"-firewall"), body, &created); err != nil {
 		return err
 	}
+
 	defer func() {
 		cleanup, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -493,6 +515,7 @@ func (r *Runner) installFirewall(ctx context.Context, s *sandbox, ips []string, 
 	if err := s.docker.json(ctx, "POST", "/containers/"+created.ID+"/start", nil, nil); err != nil {
 		return err
 	}
+
 	var status struct{ StatusCode int }
 	if err := s.docker.json(ctx, "POST", "/containers/"+created.ID+"/wait?condition=not-running", nil, &status); err != nil {
 		return err
@@ -500,6 +523,7 @@ func (r *Runner) installFirewall(ctx context.Context, s *sandbox, ips []string, 
 	if status.StatusCode != 0 {
 		return fmt.Errorf("sandbox firewall initialization failed")
 	}
+
 	return nil
 }
 
@@ -508,10 +532,12 @@ func (s *sandbox) helper(ctx context.Context, operation string, payload any) (js
 	if err != nil {
 		return nil, err
 	}
+
 	file, err := os.CreateTemp(filepath.Join(s.dir, "requests"), "request-")
 	if err != nil {
 		return nil, err
 	}
+
 	defer func() { _ = os.Remove(file.Name()) }()
 	if err = file.Chmod(0444); err != nil {
 		_ = file.Close()
@@ -524,6 +550,7 @@ func (s *sandbox) helper(ctx context.Context, operation string, payload any) (js
 	if err = file.Close(); err != nil {
 		return nil, err
 	}
+
 	cmd := []string{"/knotra/bin/helper", operation, "@/knotra/requests/" + filepath.Base(file.Name())}
 	var created struct {
 		ID string `json:"Id"`
@@ -539,15 +566,18 @@ func (s *sandbox) helper(ctx context.Context, operation string, payload any) (js
 	if err = s.docker.json(ctx, "POST", "/containers/"+s.id+"/exec", body, &created); err != nil {
 		return nil, s.diagnose(err)
 	}
+
 	res, err := s.docker.request(ctx, "POST", "/exec/"+created.ID+"/start", map[string]any{"Detach": false, "Tty": false})
 	if err != nil {
 		return nil, s.diagnose(err)
 	}
+
 	defer func() { _ = res.Body.Close() }()
 	stdout, _, err := demultiplex(res.Body, 360<<20)
 	if err != nil {
 		return nil, s.diagnose(err)
 	}
+
 	var inspection struct {
 		ExitCode int
 		Running  bool
@@ -565,6 +595,7 @@ func (s *sandbox) helper(ctx context.Context, operation string, payload any) (js
 		}
 		return nil, fmt.Errorf("%s", e.Error)
 	}
+
 	return stdout, nil
 }
 
@@ -581,11 +612,13 @@ func demultiplex(reader io.Reader, limit int64) ([]byte, []byte, error) {
 		if err != nil {
 			return nil, nil, err
 		}
+
 		size := int64(binary.BigEndian.Uint32(header[4:]))
 		total += size
 		if total > limit {
 			return nil, nil, fmt.Errorf("docker output exceeds limit")
 		}
+
 		var out io.Writer
 
 		switch header[0] {
@@ -609,6 +642,7 @@ func (r *Runner) nodeSandbox(ctx context.Context, req Request) (*sandbox, error)
 	if !ok {
 		return nil, fmt.Errorf("sandbox profile missing")
 	}
+
 	environment := []string{}
 
 	for name, value := range req.Node.Env {
@@ -645,20 +679,24 @@ func (r *Runner) collect(ctx context.Context, req Request, s *sandbox, values co
 		if err != nil {
 			return nil, failure("OUTPUT_INVALID", err)
 		}
+
 		var file struct {
 			Content string `json:"content"`
 		}
 		if err = json.Unmarshal(b, &file); err != nil {
 			return nil, err
 		}
+
 		data, err := base64.StdEncoding.DecodeString(file.Content)
 		if err != nil {
 			return nil, err
 		}
+
 		artifact, err := r.Hooks.PutArtifact(ctx, path.Base(port.Collect.Path), port.Collect.MediaType, data)
 		if err != nil {
 			return nil, err
 		}
+
 		values[name] = contract.Value{Artifacts: []contract.Artifact{artifact}}
 	}
 
@@ -684,14 +722,17 @@ func (r *Runner) code(ctx context.Context, req Request) (contract.Values, error)
 			Unknown:     true,
 		}
 	}
+
 	s, err := r.nodeSandbox(ctx, req)
 	if err != nil {
 		return nil, &Failure{Code: "SANDBOX_FAILED", Message: err.Error(), Retryable: true}
 	}
+
 	defer func() { _ = s.close() }()
 	if err = r.Hooks.Reserve(ctx, "tool"); err != nil {
 		return nil, err
 	}
+
 	timeout := "30m"
 	if deadline, ok := ctx.Deadline(); ok {
 		timeout = time.Until(deadline).String()
@@ -700,6 +741,7 @@ func (r *Runner) code(ctx context.Context, req Request) (contract.Values, error)
 	if err != nil {
 		return nil, &Failure{Code: "OUTCOME_UNKNOWN", Message: err.Error(), OperationID: op.ID, Unknown: true}
 	}
+
 	var process struct {
 		ExitCode int `json:"exitCode"`
 	}
@@ -709,22 +751,27 @@ func (r *Runner) code(ctx context.Context, req Request) (contract.Values, error)
 	if process.ExitCode != 0 {
 		return nil, failure("PROCESS_FAILED", fmt.Errorf("process exited with code %d", process.ExitCode))
 	}
+
 	b, err := s.helper(ctx, "collect", map[string]any{"path": "output.json", "root": "output", "encoding": "utf8"})
 	if err != nil {
 		return nil, failure("OUTPUT_INVALID", err)
 	}
+
 	var file struct{ Content string }
 	if err = json.Unmarshal(b, &file); err != nil {
 		return nil, err
 	}
+
 	values, err := jsonOutputs(req.Node.Outputs, []byte(file.Content))
 	if err != nil {
 		return nil, err
 	}
+
 	values, err = r.collect(ctx, req, s, values)
 	if err != nil {
 		return nil, err
 	}
+
 	data, err := json.Marshal(values)
 	if err != nil {
 		return nil, err
@@ -737,5 +784,6 @@ func (r *Runner) code(ctx context.Context, req Request) (contract.Values, error)
 			Unknown:     true,
 		}
 	}
+
 	return values, nil
 }

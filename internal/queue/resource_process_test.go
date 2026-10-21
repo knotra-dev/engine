@@ -30,7 +30,17 @@ func TestRuntimeReconcilesKilledSandboxOwnerAndProtectsLivePeer(t *testing.T) {
 	plan := resourceCodePlan(t, r, 45*time.Second)
 	id := admitRuntimeRun(t, r, plan)
 	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestRuntimeProcessCrashBoundaries$", "-test.timeout=2m")
-	cmd.Env = append(os.Environ(), "KNOTRA_RUNTIME_CHILD=1", "KNOTRA_RUNTIME_MODE=resource_owner", "KNOTRA_RUNTIME_DSN="+r.Store.Pool.Config().ConnString(), "KNOTRA_RUNTIME_DIRECTORY="+directory, "KNOTRA_RUNTIME_RUN="+id, "KNOTRA_RUNTIME_TIMEOUT=2m", "KNOTRA_RUNTIME_HOST="+r.HostID, "KNOTRA_RUNTIME_HELPER="+r.Host.Runner.HelperPath)
+	cmd.Env = append(
+		os.Environ(),
+		"KNOTRA_RUNTIME_CHILD=1",
+		"KNOTRA_RUNTIME_MODE=resource_owner",
+		"KNOTRA_RUNTIME_DSN="+r.Store.Pool.Config().ConnString(),
+		"KNOTRA_RUNTIME_DIRECTORY="+directory,
+		"KNOTRA_RUNTIME_RUN="+id,
+		"KNOTRA_RUNTIME_TIMEOUT=2m",
+		"KNOTRA_RUNTIME_HOST="+r.HostID,
+		"KNOTRA_RUNTIME_HELPER="+r.Host.Runner.HelperPath,
+	)
 	log, err := os.Create(filepath.Join(directory, "owner.log"))
 	if err != nil {
 		t.Fatal(err)
@@ -100,7 +110,13 @@ func TestRuntimeReconcilesKilledSandboxOwnerAndProtectsLivePeer(t *testing.T) {
 		if err := r.advanceTx(ctx, tx, badPlan, badID, ""); err != nil {
 			return err
 		}
-		claim, err := r.Store.ClaimAttempt(ctx, tx, execution.AttemptID{RunID: badID, InstanceID: execution.StableID("n", badID+"/root/a"), Number: 1}, 1, ownedLabels["io.knotra.worker"])
+		claim, err := r.Store.ClaimAttempt(
+			ctx,
+			tx,
+			execution.AttemptID{RunID: badID, InstanceID: execution.StableID("n", badID+"/root/a"), Number: 1},
+			1,
+			ownedLabels["io.knotra.worker"],
+		)
 		if err == nil && claim == nil {
 			return errors.New("incompatible run fixture did not claim its attempt")
 		}
@@ -108,7 +124,11 @@ func TestRuntimeReconcilesKilledSandboxOwnerAndProtectsLivePeer(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.Store.Pool.Exec(ctx, "UPDATE knotra_execution_attempts SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE run_id=$1", badID); err != nil {
+	if _, err := r.Store.Pool.Exec(
+		ctx,
+		"UPDATE knotra_execution_attempts SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE run_id=$1",
+		badID,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := r.Store.Pool.Exec(ctx, "UPDATE knotra_runs SET scheduler_version=$2 WHERE id=$1", badID, execution.SchedulerVersion+1); err != nil {
@@ -135,10 +155,14 @@ func TestRuntimeReconcilesKilledSandboxOwnerAndProtectsLivePeer(t *testing.T) {
 		t.Fatalf("replacement deleted live peer: %s %v", output, err)
 	}
 	var completed, attempts, debits int
-	if err := r.Store.Pool.QueryRow(ctx, `SELECT
+	if err := r.Store.Pool.QueryRow(
+		ctx,
+		`SELECT
 		(SELECT count(*) FROM river_job WHERE kind='knotra_cleanup_v1' AND state='completed'),
 		(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1),
-		(SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='tool')`, id).Scan(&completed, &attempts, &debits); err != nil || completed != 1 || attempts != 1 || debits != 1 {
+		(SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='tool')`,
+		id,
+	).Scan(&completed, &attempts, &debits); err != nil || completed != 1 || attempts != 1 || debits != 1 {
 		t.Fatalf("cleanup=%d attempts=%d calls=%d error=%v", completed, attempts, debits, err)
 	}
 	// Model the daemon completing an unanswered create after the ledger closed.

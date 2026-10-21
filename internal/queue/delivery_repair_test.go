@@ -24,7 +24,10 @@ func deliveryPlan(endpoint string) contract.Plan {
 	node := plan.Pipelines[plan.Root].Spec.Nodes["a"]
 	export := node.Outputs["answer"]
 	export.Bind = &contract.Binding{From: "nodes.a.outputs.answer"}
-	plan.Pipelines[plan.Root].Spec.Graph = contract.Graph{Nodes: map[string]contract.Node{"a": node}, Outputs: map[string]contract.Port{"result": export}}
+	plan.Pipelines[plan.Root].Spec.Graph = contract.Graph{
+		Nodes:   map[string]contract.Node{"a": node},
+		Outputs: map[string]contract.Port{"result": export},
+	}
 	return plan
 }
 
@@ -143,11 +146,19 @@ func TestRuntimeRepairsMissingDeliveryWithSameBusinessAttempt(t *testing.T) {
 						t.Fatal(err)
 					}
 				case "running_expired":
-					if _, err := r.Store.Pool.Exec(ctx, "UPDATE river_job SET state='running',attempted_at=clock_timestamp()-interval '2 hours' WHERE kind=$1", jobKind); err != nil {
+					if _, err := r.Store.Pool.Exec(
+						ctx,
+						"UPDATE river_job SET state='running',attempted_at=clock_timestamp()-interval '2 hours' WHERE kind=$1",
+						jobKind,
+					); err != nil {
 						t.Fatal(err)
 					}
 				case "future_backoff":
-					if _, err := r.Store.Pool.Exec(ctx, "UPDATE river_job SET state='retryable',scheduled_at=clock_timestamp()+interval '1 day' WHERE kind=$1", jobKind); err != nil {
+					if _, err := r.Store.Pool.Exec(
+						ctx,
+						"UPDATE river_job SET state='retryable',scheduled_at=clock_timestamp()+interval '1 day' WHERE kind=$1",
+						jobKind,
+					); err != nil {
 						t.Fatal(err)
 					}
 				case "malformed_args", "wrong_run", "future_generation":
@@ -158,12 +169,23 @@ func TestRuntimeRepairsMissingDeliveryWithSameBusinessAttempt(t *testing.T) {
 					if state == "future_generation" {
 						value = "1000"
 					}
-					if _, err := r.Store.Pool.Exec(ctx, "UPDATE river_job SET args=jsonb_set(args,ARRAY[$2]::text[],$3::jsonb) WHERE kind=$1", jobKind, field, value); err != nil {
+					if _, err := r.Store.Pool.Exec(
+						ctx,
+						"UPDATE river_job SET args=jsonb_set(args,ARRAY[$2]::text[],$3::jsonb) WHERE kind=$1",
+						jobKind,
+						field,
+						value,
+					); err != nil {
 						t.Fatal(err)
 					}
 				case "healthy":
 				default:
-					if _, err := r.Store.Pool.Exec(ctx, "UPDATE river_job SET state=$2::river_job_state,finalized_at=clock_timestamp() WHERE kind=$1", jobKind, state); err != nil {
+					if _, err := r.Store.Pool.Exec(
+						ctx,
+						"UPDATE river_job SET state=$2::river_job_state,finalized_at=clock_timestamp() WHERE kind=$1",
+						jobKind,
+						state,
+					); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -204,8 +226,12 @@ func TestRuntimeRepairsMissingDeliveryWithSameBusinessAttempt(t *testing.T) {
 				})
 				run, err := r.Store.Run(ctx, id)
 				var attempts, number, debits int
-				if err := r.Store.Pool.QueryRow(ctx, `SELECT count(*),max(number),(SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='model')
-					FROM knotra_execution_attempts WHERE run_id=$1`, id).Scan(&attempts, &number, &debits); err != nil {
+				if err := r.Store.Pool.QueryRow(
+					ctx,
+					`SELECT count(*),max(number),(SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='model')
+					FROM knotra_execution_attempts WHERE run_id=$1`,
+					id,
+				).Scan(&attempts, &number, &debits); err != nil {
 					t.Fatal(err)
 				}
 				if err != nil || run.Status != "succeeded" || calls.Load() != 1 || attempts != 1 || number != 1 || debits != 1 {
@@ -233,7 +259,12 @@ func TestRuntimeDeliveryScanPassesHealthyJobsAndHonorsCapacityAndPause(t *testin
 	if err := r.Store.Pool.QueryRow(ctx, "SELECT max(instance_id) FROM knotra_execution_attempts WHERE run_id=$1", id).Scan(&last); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.Store.Pool.Exec(ctx, "DELETE FROM river_job WHERE kind=$1 AND args->'attempt'->>'instanceId'=$2", (ExecuteArgs{}).Kind(), last); err != nil {
+	if _, err := r.Store.Pool.Exec(
+		ctx,
+		"DELETE FROM river_job WHERE kind=$1 AND args->'attempt'->>'instanceId'=$2",
+		(ExecuteArgs{}).Kind(),
+		last,
+	); err != nil {
 		t.Fatal(err)
 	}
 	generation := func() int64 {
@@ -261,12 +292,22 @@ func TestRuntimeDeliveryScanPassesHealthyJobsAndHonorsCapacityAndPause(t *testin
 	}
 	consumeTestWakes(t, r, plan, id)
 	var attempts, number, dispatch int
-	if err := r.Store.Pool.QueryRow(ctx, `SELECT count(*),max(number),
+	if err := r.Store.Pool.QueryRow(
+		ctx,
+		`SELECT count(*),max(number),
 		(SELECT dispatch_generation FROM knotra_execution_attempts WHERE run_id=$1 AND instance_id=$2)
-		FROM knotra_execution_attempts WHERE run_id=$1`, id, last).Scan(&attempts, &number, &dispatch); err != nil || attempts != 80 || number != 1 || dispatch != 2 {
+		FROM knotra_execution_attempts WHERE run_id=$1`,
+		id,
+		last,
+	).Scan(&attempts, &number, &dispatch); err != nil || attempts != 80 || number != 1 || dispatch != 2 {
 		t.Fatalf("attempts=%d number=%d dispatch=%d error=%v", attempts, number, dispatch, err)
 	}
-	if _, err := r.Store.Pool.Exec(ctx, "DELETE FROM river_job WHERE kind=$1 AND args->'attempt'->>'instanceId'=$2", (ExecuteArgs{}).Kind(), last); err != nil {
+	if _, err := r.Store.Pool.Exec(
+		ctx,
+		"DELETE FROM river_job WHERE kind=$1 AND args->'attempt'->>'instanceId'=$2",
+		(ExecuteArgs{}).Kind(),
+		last,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := r.Store.Pool.Exec(ctx, "UPDATE knotra_execution_scopes SET active_attempts=1 WHERE run_id=$1 AND id=$1", id); err != nil {
@@ -395,7 +436,12 @@ func TestRuntimeDeliveryTracksWorkerHeartbeatBeforeClaim(t *testing.T) {
 	if err := r.Store.BindWorkerDeliveryClient(ctx, r.WorkerID, "different-client"); !errors.Is(err, store.ErrConflict) {
 		t.Fatalf("rebinding=%v", err)
 	}
-	if _, err := r.Store.Pool.Exec(ctx, "UPDATE river_job SET state='running',attempted_at=clock_timestamp(),attempted_by=ARRAY[$1] WHERE kind=$2", r.Client.River.ID(), (ExecuteArgs{}).Kind()); err != nil {
+	if _, err := r.Store.Pool.Exec(
+		ctx,
+		"UPDATE river_job SET state='running',attempted_at=clock_timestamp(),attempted_by=ARRAY[$1] WHERE kind=$2",
+		r.Client.River.ID(),
+		(ExecuteArgs{}).Kind(),
+	); err != nil {
 		t.Fatal(err)
 	}
 	check := func(want bool) {
@@ -405,7 +451,16 @@ func TestRuntimeDeliveryTracksWorkerHeartbeatBeforeClaim(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			ok, err := r.Client.hasDelivery(ctx, tx, ExecuteArgs{Attempt: attempts[0].AttemptID, DispatchGeneration: attempts[0].DispatchGeneration, RoutingVersion: RoutingVersion}, time.Now())
+			ok, err := r.Client.hasDelivery(
+				ctx,
+				tx,
+				ExecuteArgs{
+					Attempt:            attempts[0].AttemptID,
+					DispatchGeneration: attempts[0].DispatchGeneration,
+					RoutingVersion:     RoutingVersion,
+				},
+				time.Now(),
+			)
 			if err == nil && ok != want {
 				return fmt.Errorf("delivery viable=%v want=%v", ok, want)
 			}
@@ -415,14 +470,22 @@ func TestRuntimeDeliveryTracksWorkerHeartbeatBeforeClaim(t *testing.T) {
 		}
 	}
 	check(true)
-	if _, err := r.Store.Pool.Exec(ctx, "UPDATE knotra_workers SET heartbeat_at=clock_timestamp()-interval '21 seconds' WHERE id=$1", r.WorkerID); err != nil {
+	if _, err := r.Store.Pool.Exec(
+		ctx,
+		"UPDATE knotra_workers SET heartbeat_at=clock_timestamp()-interval '21 seconds' WHERE id=$1",
+		r.WorkerID,
+	); err != nil {
 		t.Fatal(err)
 	}
 	check(false)
 	if _, err := r.Store.Pool.Exec(ctx, "UPDATE knotra_workers SET heartbeat_at=clock_timestamp() WHERE id=$1", r.WorkerID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.Store.Pool.Exec(ctx, "UPDATE river_job SET attempted_at=clock_timestamp()-interval '2 hours' WHERE kind=$1", (ExecuteArgs{}).Kind()); err != nil {
+	if _, err := r.Store.Pool.Exec(
+		ctx,
+		"UPDATE river_job SET attempted_at=clock_timestamp()-interval '2 hours' WHERE kind=$1",
+		(ExecuteArgs{}).Kind(),
+	); err != nil {
 		t.Fatal(err)
 	}
 	check(false)

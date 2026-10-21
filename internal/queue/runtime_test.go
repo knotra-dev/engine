@@ -77,12 +77,29 @@ func runtimePlan(endpoint string) contract.Plan {
 	dependent.Inputs = map[string]contract.Port{"previous": input}
 	export := port
 	export.Bind = &contract.Binding{From: "nodes.c.outputs.answer"}
-	return contract.Plan{Version: "knotra/v1", CompilerVersion: contract.CompilerVersion, CELVersion: contract.CELVersion, Root: "main.yaml", Digest: "runtime-frozen-plan",
+	return contract.Plan{
+		Version:         "knotra/v1",
+		CompilerVersion: contract.CompilerVersion,
+		CELVersion:      contract.CELVersion,
+		Root:            "main.yaml",
+		Digest:          "runtime-frozen-plan",
 		Pipelines: map[string]*contract.Pipeline{"main.yaml": {Spec: contract.Spec{
-			Graph:    contract.Graph{Nodes: map[string]contract.Node{"a": node, "b": node, "c": dependent}, Outputs: map[string]contract.Port{"result": export}},
-			Defaults: contract.Defaults{Execution: contract.Execution{Timeout: "30s"}}, Models: map[string]contract.Model{"model": {Connection: "local"}}}}},
-		Profile: contract.Profile{Spec: contract.ProfileSpec{Limits: contract.Limits{Timeout: "1m", MaxConcurrentNodes: 1, MaxNodeInstances: 100, MaxModelCalls: 100, MaxToolCalls: 100},
-			Models: map[string]contract.ModelConnection{"local": {Provider: "ollama", Model: "fixture", BaseURL: endpoint}}}}}
+			Graph: contract.Graph{
+				Nodes:   map[string]contract.Node{"a": node, "b": node, "c": dependent},
+				Outputs: map[string]contract.Port{"result": export},
+			},
+			Defaults: contract.Defaults{Execution: contract.Execution{Timeout: "30s"}},
+			Models:   map[string]contract.Model{"model": {Connection: "local"}},
+		}}},
+		Profile: contract.Profile{Spec: contract.ProfileSpec{Limits: contract.Limits{
+			Timeout:            "1m",
+			MaxConcurrentNodes: 1,
+			MaxNodeInstances:   100,
+			MaxModelCalls:      100,
+			MaxToolCalls:       100,
+		},
+			Models: map[string]contract.ModelConnection{"local": {Provider: "ollama", Model: "fixture", BaseURL: endpoint}}}},
+	}
 }
 
 func admitRuntimeRun(t *testing.T, r *Runtime, plan contract.Plan, values ...contract.Values) string {
@@ -125,7 +142,11 @@ func TestRuntimePublishesFullDAGAndRedispatchesCapacityMiss(t *testing.T) {
 				return
 			}
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"message": map[string]string{"role": "assistant", "content": string(content)}, "done": true, "done_reason": "stop"})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"message":     map[string]string{"role": "assistant", "content": string(content)},
+			"done":        true,
+			"done_reason": "stop",
+		})
 	}))
 	defer server.Close()
 	defer once.Do(func() { close(release) })
@@ -141,7 +162,11 @@ func TestRuntimePublishesFullDAGAndRedispatchesCapacityMiss(t *testing.T) {
 	}
 	await(t, 10*time.Second, func() (bool, error) {
 		var missed bool
-		err := r.Store.Pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM knotra_execution_attempts WHERE run_id=$1 AND state='ready' AND dispatch_pending)", id).Scan(&missed)
+		err := r.Store.Pool.QueryRow(
+			ctx,
+			"SELECT EXISTS(SELECT 1 FROM knotra_execution_attempts WHERE run_id=$1 AND state='ready' AND dispatch_pending)",
+			id,
+		).Scan(&missed)
 		return missed, err
 	})
 	once.Do(func() { close(release) })
@@ -168,12 +193,24 @@ func TestRuntimePublishesFullDAGAndRedispatchesCapacityMiss(t *testing.T) {
 		t.Fatal(err)
 	}
 	if calls.Load() != 3 || used != 3 || slots != 0 || outcomes != 3 || succeeded != 3 || redispatched < 1 {
-		t.Fatalf("calls=%d budget=%d slots=%d outcomes=%d successes=%d redispatched=%d", calls.Load(), used, slots, outcomes, succeeded, redispatched)
+		t.Fatalf(
+			"calls=%d budget=%d slots=%d outcomes=%d successes=%d redispatched=%d",
+			calls.Load(),
+			used,
+			slots,
+			outcomes,
+			succeeded,
+			redispatched,
+		)
 	}
 	var previous string
 	var truncated bool
-	if err := r.Store.Pool.QueryRow(ctx, `SELECT n.inputs->'previous'->>'json', (i.document->>'dataTruncated')::boolean
-		FROM knotra_execution_nodes n JOIN knotra_instances i ON i.run_id=n.run_id AND i.id=n.id WHERE n.run_id=$1 AND n.node_id='c'`, id).Scan(&previous, &truncated); err != nil {
+	if err := r.Store.Pool.QueryRow(
+		ctx,
+		`SELECT n.inputs->'previous'->>'json', (i.document->>'dataTruncated')::boolean
+		FROM knotra_execution_nodes n JOIN knotra_instances i ON i.run_id=n.run_id AND i.id=n.id WHERE n.run_id=$1 AND n.node_id='c'`,
+		id,
+	).Scan(&previous, &truncated); err != nil {
 		t.Fatal(err)
 	}
 	if previous != answer || !truncated {
@@ -206,12 +243,16 @@ func TestRuntimePublishesFullDAGAndRedispatchesCapacityMiss(t *testing.T) {
 	// Use River's real cleaner and default retention periods. Recent terminal
 	// rows must survive; expired queue evidence must not delete domain history.
 	retentionStarted := time.Now()
-	if _, err := r.Store.Pool.Exec(ctx, `UPDATE river_job SET finalized_at=clock_timestamp()-interval '8 days' WHERE state='completed';
+	if _, err := r.Store.Pool.Exec(
+		ctx,
+		`UPDATE river_job SET finalized_at=clock_timestamp()-interval '8 days' WHERE state='completed';
 		INSERT INTO river_job(kind,args,queue,state,finalized_at,max_attempts)
 		SELECT 'retention_fixture','{}'::jsonb,'retention_fixture',state::river_job_state,
 			clock_timestamp()-age,1 FROM
 			(VALUES ('completed',interval '0 days'),('cancelled',interval '0 days'),('discarded',interval '2 days'),
-			('completed',interval '2 days'),('cancelled',interval '2 days'),('discarded',interval '8 days')) AS fixture(state,age)`, pgx.QueryExecModeSimpleProtocol); err != nil {
+			('completed',interval '2 days'),('cancelled',interval '2 days'),('discarded',interval '8 days')) AS fixture(state,age)`,
+		pgx.QueryExecModeSimpleProtocol,
+	); err != nil {
 		t.Fatal(err)
 	}
 	await(t, 45*time.Second, func() (bool, error) {
@@ -237,10 +278,26 @@ func TestRuntimePublishesFullDAGAndRedispatchesCapacityMiss(t *testing.T) {
 			return err
 		}
 		for _, attempt := range attempts {
-			if err := r.Client.InsertExecute(ctx, tx, ExecuteArgs{Attempt: attempt.AttemptID, DispatchGeneration: attempt.DispatchGeneration, RoutingVersion: RoutingVersion}); err != nil {
+			if err := r.Client.InsertExecute(
+				ctx,
+				tx,
+				ExecuteArgs{
+					Attempt:            attempt.AttemptID,
+					DispatchGeneration: attempt.DispatchGeneration,
+					RoutingVersion:     RoutingVersion,
+				},
+			); err != nil {
 				return err
 			}
-			if err := r.Client.InsertFinalize(ctx, tx, FinalizeArgs{Attempt: attempt.AttemptID, OutcomeKey: attempt.OutcomeKey, RoutingVersion: RoutingVersion}); err != nil {
+			if err := r.Client.InsertFinalize(
+				ctx,
+				tx,
+				FinalizeArgs{
+					Attempt:        attempt.AttemptID,
+					OutcomeKey:     attempt.OutcomeKey,
+					RoutingVersion: RoutingVersion,
+				},
+			); err != nil {
 				return err
 			}
 		}
@@ -271,7 +328,10 @@ func TestRuntimeOutcomePublicationRollsBackAndRecoversExpiredOwner(t *testing.T)
 	node.Outputs = map[string]contract.Port{"file": port}
 	export := port
 	export.Bind = &contract.Binding{From: "nodes.a.outputs.file"}
-	plan.Pipelines[plan.Root].Spec.Graph = contract.Graph{Nodes: map[string]contract.Node{"a": node}, Outputs: map[string]contract.Port{"result": export}}
+	plan.Pipelines[plan.Root].Spec.Graph = contract.Graph{
+		Nodes:   map[string]contract.Node{"a": node},
+		Outputs: map[string]contract.Port{"result": export},
+	}
 	id := admitRuntimeRun(t, r, plan)
 	if err := r.Store.RegisterWorker(ctx, r.WorkerID, r.HostID); err != nil {
 		t.Fatal(err)
@@ -282,19 +342,40 @@ func TestRuntimeOutcomePublicationRollsBackAndRecoversExpiredOwner(t *testing.T)
 			return err
 		}
 		var err error
-		claim, err = r.Store.ClaimAttempt(ctx, tx, execution.AttemptID{RunID: id, InstanceID: execution.StableID("n", id+"/root/a"), Number: 1}, 1, r.WorkerID)
+		claim, err = r.Store.ClaimAttempt(
+			ctx,
+			tx,
+			execution.AttemptID{RunID: id, InstanceID: execution.StableID("n", id+"/root/a"), Number: 1},
+			1,
+			r.WorkerID,
+		)
 		return err
 	}); err != nil || claim == nil {
 		t.Fatalf("claim=%+v error=%v", claim, err)
 	}
-	artifact, err := r.Store.PutOwnedArtifact(ctx, claim.Ownership, r.Host.Artifacts, "answer.txt", "text/plain", []byte("complete artifact"), map[string]string{"runId": id, "instanceId": claim.InstanceID})
+	artifact, err := r.Store.PutOwnedArtifact(
+		ctx,
+		claim.Ownership,
+		r.Host.Artifacts,
+		"answer.txt",
+		"text/plain",
+		[]byte("complete artifact"),
+		map[string]string{"runId": id, "instanceId": claim.InstanceID},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	outputArtifact := artifact
 	outputArtifact.Path = "/worker-local/answer.txt"
 	outputs := contract.Values{"file": {Artifacts: []contract.Artifact{outputArtifact}}}
-	outcome := execution.Outcome{FormatVersion: execution.StateFormatVersion, Ownership: claim.Ownership, PlanID: plan.Digest, CompletedAt: time.Now(), Outputs: outputs, Artifacts: outcomeArtifacts(outputs)}
+	outcome := execution.Outcome{
+		FormatVersion: execution.StateFormatVersion,
+		Ownership:     claim.Ownership,
+		PlanID:        plan.Digest,
+		CompletedAt:   time.Now(),
+		Outputs:       outputs,
+		Artifacts:     outcomeArtifacts(outputs),
+	}
 	key, err := r.Outcomes.Put(outcome)
 	if err != nil {
 		t.Fatal(err)
@@ -320,10 +401,18 @@ func TestRuntimeOutcomePublicationRollsBackAndRecoversExpiredOwner(t *testing.T)
 	}
 	assert("running", 1, 0, false)
 	var resultRows int
-	if err := r.Store.Pool.QueryRow(ctx, "SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1 AND (result IS NOT NULL OR outcome IS NOT NULL)", id).Scan(&resultRows); err != nil || resultRows != 0 {
+	if err := r.Store.Pool.QueryRow(
+		ctx,
+		"SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1 AND (result IS NOT NULL OR outcome IS NOT NULL)",
+		id,
+	).Scan(&resultRows); err != nil || resultRows != 0 {
 		t.Fatalf("publication evidence escaped rollback: rows=%d error=%v", resultRows, err)
 	}
-	if _, err := r.Store.Pool.Exec(ctx, "UPDATE knotra_execution_attempts SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE run_id=$1", id); err != nil {
+	if _, err := r.Store.Pool.Exec(
+		ctx,
+		"UPDATE knotra_execution_attempts SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE run_id=$1",
+		id,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.publish(ctx, outcome, false, func(pgx.Tx) error { return nil }); !errors.Is(err, store.ErrExecutionOwnership) {
@@ -340,7 +429,11 @@ func TestRuntimeOutcomePublicationRollsBackAndRecoversExpiredOwner(t *testing.T)
 		assert("succeeded", 0, 1, true)
 	}
 	run, err := r.Store.Run(ctx, id)
-	if err != nil || run.Status != "succeeded" || len(run.Artifacts) != 1 || run.Artifacts[0].ID != artifact.ID || run.Artifacts[0].Path != "" {
+	if err != nil ||
+		run.Status != "succeeded" ||
+		len(run.Artifacts) != 1 ||
+		run.Artifacts[0].ID != artifact.ID ||
+		run.Artifacts[0].Path != "" {
 		t.Fatalf("artifact export missing: %+v %v", run, err)
 	}
 }
@@ -358,7 +451,10 @@ func TestRuntimeBusinessRetryUsesDurableBackoffAndOriginalDeadline(t *testing.T)
 					w.WriteHeader(http.StatusTooManyRequests)
 					return
 				}
-				_, _ = fmt.Fprint(w, `{"status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"knotra_output","arguments":"{\"answer\":\"retried\"}"}],"usage":{"input_tokens":17,"output_tokens":9}}`)
+				_, _ = fmt.Fprint(
+					w,
+					`{"status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"knotra_output","arguments":"{\"answer\":\"retried\"}"}],"usage":{"input_tokens":17,"output_tokens":9}}`,
+				)
 			}))
 			defer server.Close()
 			plan := runtimePlan(server.URL)
@@ -370,7 +466,10 @@ func TestRuntimeBusinessRetryUsesDurableBackoffAndOriginalDeadline(t *testing.T)
 			}
 			export := node.Outputs["answer"]
 			export.Bind = &contract.Binding{From: "nodes.a.outputs.answer"}
-			plan.Pipelines[plan.Root].Spec.Graph = contract.Graph{Nodes: map[string]contract.Node{"a": node}, Outputs: map[string]contract.Port{"result": export}}
+			plan.Pipelines[plan.Root].Spec.Graph = contract.Graph{
+				Nodes:   map[string]contract.Node{"a": node},
+				Outputs: map[string]contract.Port{"result": export},
+			}
 			credential := "fixture-key"
 			plan.Profile.Spec.Models["local"] = contract.ModelConnection{Provider: "openai", Model: "fixture", BaseURL: server.URL,
 				Auth: map[string]contract.Credential{"key": {Value: &credential}}}
@@ -396,7 +495,14 @@ func TestRuntimeBusinessRetryUsesDurableBackoffAndOriginalDeadline(t *testing.T)
 					t.Fatal(err)
 				}
 				replacement := &Runtime{Store: r.Store, Host: r.Host, Outcomes: r.Outcomes, WorkerID: uuid.NewString(), HostID: r.HostID}
-				replacement.Client = newTestClient(t, testDatabase{pool: r.Store.Pool, schema: schema}, r.Store.EngineID, replacement.HostID, time.Minute, replacement.Handlers())
+				replacement.Client = newTestClient(
+					t,
+					testDatabase{pool: r.Store.Pool, schema: schema},
+					r.Store.EngineID,
+					replacement.HostID,
+					time.Minute,
+					replacement.Handlers(),
+				)
 				t.Cleanup(func() {
 					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 					defer cancel()
@@ -426,10 +532,14 @@ func TestRuntimeBusinessRetryUsesDurableBackoffAndOriginalDeadline(t *testing.T)
 			}
 			var used, attempts int
 			var originalDeadline bool
-			if err := r.Store.Pool.QueryRow(ctx, `SELECT
+			if err := r.Store.Pool.QueryRow(
+				ctx,
+				`SELECT
 				(SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='model'),
 				(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1),
-				(SELECT bool_and((execution_request->>'deadline')::timestamptz=deadline) FROM knotra_execution_nodes WHERE run_id=$1)`, id).Scan(&used, &attempts, &originalDeadline); err != nil {
+				(SELECT bool_and((execution_request->>'deadline')::timestamptz=deadline) FROM knotra_execution_nodes WHERE run_id=$1)`,
+				id,
+			).Scan(&used, &attempts, &originalDeadline); err != nil {
 				t.Fatal(err)
 			}
 			if run.Status != wantStatus || int(calls.Load()) != wantCalls || used != wantCalls || attempts != wantCalls || !originalDeadline {

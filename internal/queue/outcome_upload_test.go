@@ -107,8 +107,12 @@ func TestAttemptLeaseCoversBlockedOutcomeUpload(t *testing.T) {
 	})
 	var state string
 	var live bool
-	if err := r.Store.Pool.QueryRow(ctx, `SELECT a.state,a.lease_expires_at>clock_timestamp() AND w.heartbeat_at>clock_timestamp()-interval '20 seconds'
-		FROM knotra_execution_attempts a JOIN knotra_workers w ON w.id=a.owner WHERE a.run_id=$1`, id).Scan(&state, &live); err != nil || state != "claimed" || !live {
+	if err := r.Store.Pool.QueryRow(
+		ctx,
+		`SELECT a.state,a.lease_expires_at>clock_timestamp() AND w.heartbeat_at>clock_timestamp()-interval '20 seconds'
+		FROM knotra_execution_attempts a JOIN knotra_workers w ON w.id=a.owner WHERE a.run_id=$1`,
+		id,
+	).Scan(&state, &live); err != nil || state != "claimed" || !live {
 		t.Fatalf("blocked upload lost its live owner: state=%s live=%t error=%v", state, live, err)
 	}
 	unblock()
@@ -121,8 +125,12 @@ func TestAttemptLeaseCoversBlockedOutcomeUpload(t *testing.T) {
 		t.Fatalf("slow upload lost or repeated result: run=%+v calls=%d error=%v", run, calls.Load(), err)
 	}
 	var attempts, published, used int
-	if err := r.Store.Pool.QueryRow(ctx, `SELECT count(*),count(*) FILTER (WHERE state='completed' AND outcome IS NOT NULL),
-		(SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='model') FROM knotra_execution_attempts WHERE run_id=$1`, id).Scan(&attempts, &published, &used); err != nil || attempts != 1 || published != 1 || used != 1 {
+	if err := r.Store.Pool.QueryRow(
+		ctx,
+		`SELECT count(*),count(*) FILTER (WHERE state='completed' AND outcome IS NOT NULL),
+		(SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='model') FROM knotra_execution_attempts WHERE run_id=$1`,
+		id,
+	).Scan(&attempts, &published, &used); err != nil || attempts != 1 || published != 1 || used != 1 {
 		t.Fatalf("slow upload repeated publication or spending: attempts=%d published=%d budget=%d error=%v", attempts, published, used, err)
 	}
 }

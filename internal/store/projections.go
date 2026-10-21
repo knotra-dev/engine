@@ -28,10 +28,12 @@ func (s *Store) ProjectTx(ctx context.Context, tx pgx.Tx, p execution.Projection
 	if e != nil {
 		return e
 	}
+
 	var run protocol.Run
 	if e = json.Unmarshal(b, &run); e != nil {
 		return e
 	}
+
 	var duplicate bool
 	duplicate, e = db.New(tx).EventSequenceExists(ctx, db.EventSequenceExistsParams{RunID: p.RunID, Sequence: new(p.Sequence)})
 	if e != nil {
@@ -40,6 +42,7 @@ func (s *Store) ProjectTx(ctx context.Context, tx pgx.Tx, p execution.Projection
 	if duplicate {
 		return nil
 	}
+
 	switch {
 	case p.InstanceID != "" && p.Kind == "node":
 		if p.Status == "succeeded" {
@@ -127,6 +130,7 @@ func (s *Store) ProjectTx(ctx context.Context, tx pgx.Tx, p execution.Projection
 	if e != nil {
 		return e
 	}
+
 	data := map[string]any{
 		"status": p.Status, "reason": shortEventText(p.Reason),
 		"nodeId": p.NodeID, "scope": p.Pipeline,
@@ -168,10 +172,12 @@ func (s *Store) ProjectTx(ctx context.Context, tx pgx.Tx, p execution.Projection
 	if e != nil {
 		return e
 	}
+
 	_, e = db.New(tx).InsertExecutionEvent(ctx, db.InsertExecutionEventParams{RunID: p.RunID, Sequence: new(p.Sequence), Document: b})
 	if e != nil {
 		return e
 	}
+
 	return nil
 }
 
@@ -245,6 +251,7 @@ func (s *Store) Requests(ctx context.Context, cursor string) ([]protocol.HumanRe
 		if e = json.Unmarshal(b, &r); e != nil {
 			return nil, e
 		}
+
 		v.ID = r.ID
 		v.RunID = r.RunID
 		v.InstanceID = r.InstanceID
@@ -258,6 +265,7 @@ func (s *Store) Requests(ctx context.Context, cursor string) ([]protocol.HumanRe
 		if err != nil {
 			return nil, err
 		}
+
 		size += len(encoded)
 		if len(out) > 1 && size > MaxListPageBytes {
 			break

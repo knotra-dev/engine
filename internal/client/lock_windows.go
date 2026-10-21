@@ -17,10 +17,12 @@ func (c *Client) lockCommand(ctx context.Context, id string) (func(), error) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, err
 	}
+
 	f, err := os.OpenFile(filepath.Join(dir, id+".lock"), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, err
 	}
+
 	handle := windows.Handle(f.Fd())
 	var overlapped windows.Overlapped
 	for {

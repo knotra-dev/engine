@@ -176,6 +176,7 @@ func (s *commandState) table(headers []string, rows [][]string) error {
 		_, err := fmt.Fprintln(s.options.Out, "No results.")
 		return err
 	}
+
 	writer := tabwriter.NewWriter(s.options.Out, 0, 4, 2, ' ', 0)
 	if _, err := fmt.Fprintln(writer, strings.Join(headers, "\t")); err != nil {
 		return err
@@ -239,6 +240,7 @@ func (s *commandState) catalogCommand(kind string) *cobra.Command {
 		if kind == "info" {
 			return s.printInfo(response)
 		}
+
 		items, _ := response["items"].([]any)
 		rows := [][]string{}
 

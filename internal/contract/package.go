@@ -19,7 +19,13 @@ import (
 )
 
 func validPath(name string) error {
-	if name == "" || len(name) > 1024 || !utf8.ValidString(name) || !norm.NFC.IsNormalString(name) || path.IsAbs(name) || path.Clean(name) != name || strings.Contains(name, "\\") {
+	if name == "" ||
+		len(name) > 1024 ||
+		!utf8.ValidString(name) ||
+		!norm.NFC.IsNormalString(name) ||
+		path.IsAbs(name) ||
+		path.Clean(name) != name ||
+		strings.Contains(name, "\\") {
 		return fmt.Errorf("invalid package path %q", name)
 	}
 	if len(name) >= 2 && ((name[0] >= 'a' && name[0] <= 'z') || (name[0] >= 'A' && name[0] <= 'Z')) && name[1] == ':' {
@@ -66,10 +72,12 @@ func LoadPackageRoot(root, entrypoint string) (Package, error) {
 	if err := validPath(entrypoint); err != nil {
 		return Package{}, err
 	}
+
 	fs, err := os.OpenRoot(root)
 	if err != nil {
 		return Package{}, err
 	}
+
 	defer func() { _ = fs.Close() }()
 	files := map[string][]byte{}
 	total := 0
@@ -80,6 +88,7 @@ func LoadPackageRoot(root, entrypoint string) (Package, error) {
 		if b, ok := files[name]; ok {
 			return b, nil
 		}
+
 		segments := strings.Split(name, "/")
 
 		for i := range segments {
@@ -96,6 +105,7 @@ func LoadPackageRoot(root, entrypoint string) (Package, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		defer func() { _ = f.Close() }()
 		info, err := f.Stat()
 		if err != nil {
@@ -104,6 +114,7 @@ func LoadPackageRoot(root, entrypoint string) (Package, error) {
 		if !info.Mode().IsRegular() {
 			return nil, fmt.Errorf("not a regular file: %s", name)
 		}
+
 		stat := reflect.Indirect(reflect.ValueOf(info.Sys()))
 		if stat.IsValid() && stat.Kind() == reflect.Struct {
 			nlink := stat.FieldByName("Nlink")
@@ -114,14 +125,17 @@ func LoadPackageRoot(root, entrypoint string) (Package, error) {
 		if info.Size() > 64<<20 {
 			return nil, fmt.Errorf("package exceeds 64 MiB")
 		}
+
 		b, err := io.ReadAll(io.LimitReader(f, (64<<20)+1))
 		if err != nil {
 			return nil, err
 		}
+
 		total += len(b)
 		if total > 64<<20 || len(files) >= 512 {
 			return nil, fmt.Errorf("package size/file limit exceeded")
 		}
+
 		files[name] = b
 		return b, nil
 	}
@@ -135,11 +149,13 @@ func LoadPackageRoot(root, entrypoint string) (Package, error) {
 		if seen[name] {
 			return nil
 		}
+
 		seen[name] = true
 		b, err := read(name)
 		if err != nil {
 			return err
 		}
+
 		p, diags := parsePipeline(b, name)
 		if len(diags) > 0 {
 			return fmt.Errorf("%s: %s", name, diags[0].Message)
@@ -167,6 +183,7 @@ func LoadPackageRoot(root, entrypoint string) (Package, error) {
 	if err := visit(entrypoint, 0); err != nil {
 		return Package{}, err
 	}
+
 	p := Package{Entrypoint: entrypoint, Source: string(files[entrypoint])}
 
 	for _, name := range sortedKeys(files) {
@@ -204,6 +221,7 @@ func packageFiles(p Package) (map[string][]byte, string, error) {
 	if err := validPath(p.Entrypoint); err != nil {
 		return nil, "", err
 	}
+
 	files := map[string][]byte{}
 	names := map[string]string{}
 	total := 0
@@ -236,6 +254,7 @@ func packageFiles(p Package) (map[string][]byte, string, error) {
 	if total > 64<<20 {
 		return nil, "", fmt.Errorf("package exceeds 64 MiB")
 	}
+
 	source, ok := files[p.Entrypoint]
 	if !ok {
 		return nil, "", fmt.Errorf("entrypoint absent from package")
@@ -261,10 +280,12 @@ func packageFiles(p Package) (map[string][]byte, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
+
 	canonical, err := jsoncanonicalizer.Transform(raw)
 	if err != nil {
 		return nil, "", err
 	}
+
 	digest := sha256.Sum256(canonical)
 	return files, "sha256:" + hex.EncodeToString(digest[:]), nil
 }
@@ -282,6 +303,7 @@ func parsePipeline(data []byte, file string) (Pipeline, []Diagnostic) {
 	if err = ValidateStructure(value); err != nil {
 		return p, []Diagnostic{locateDiagnostic(diagnostic("STRUCTURE_INVALID", "structural", file, "", err), data)}
 	}
+
 	raw, err := marshalJSON(value)
 	if err != nil {
 		return p, []Diagnostic{diagnostic("PARSE_INVALID", "parse", file, "", err)}
@@ -292,6 +314,7 @@ func parsePipeline(data []byte, file string) (Pipeline, []Diagnostic) {
 	if p.Kind != "Pipeline" {
 		return p, []Diagnostic{diagnostic("DOCUMENT_KIND", "package", file, "/kind", fmt.Errorf("expected Pipeline"))}
 	}
+
 	return p, nil
 }
 
@@ -306,6 +329,7 @@ func ParseProfile(data []byte) (Profile, []Diagnostic) {
 	if err = ValidateStructure(value); err != nil {
 		return p, []Diagnostic{diagnostic("STRUCTURE_INVALID", "structural", "", "", err)}
 	}
+
 	raw, err := marshalJSON(value)
 	if err != nil {
 		return p, []Diagnostic{diagnostic("PARSE_INVALID", "parse", "", "", err)}
@@ -316,6 +340,7 @@ func ParseProfile(data []byte) (Profile, []Diagnostic) {
 	if p.Kind != "EngineProfile" {
 		return p, []Diagnostic{diagnostic("DOCUMENT_KIND", "semantic", "", "/kind", fmt.Errorf("expected EngineProfile"))}
 	}
+
 	diags := validateProfile(p)
 
 	for i := range diags {

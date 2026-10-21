@@ -42,24 +42,28 @@ func TestRiverCancellationStopsAgentAndMCPAndReleasesResources(t *testing.T) {
 				Value int `json:"value"`
 			}
 			server := mcp.NewServer(&mcp.Implementation{Name: "cancellation-fixture", Version: "1"}, nil)
-			mcp.AddTool(server, &mcp.Tool{Name: "stats", Description: "Measure a value"}, func(call context.Context, req *mcp.CallToolRequest, input value) (*mcp.CallToolResult, value, error) {
-				toolCalls.Add(1)
-				runSession.Store(req.Session.ID())
-				if input.Value != 42 {
-					t.Errorf("downstream tool executed after cancellation: %+v", input)
-				}
-				if mode != "agent" {
-					blocked <- struct{}{}
-					select {
-					case <-call.Done():
-						interrupted <- struct{}{}
-					case <-ctx.Done():
-						return nil, value{}, ctx.Err()
+			mcp.AddTool(
+				server,
+				&mcp.Tool{Name: "stats", Description: "Measure a value"},
+				func(call context.Context, req *mcp.CallToolRequest, input value) (*mcp.CallToolResult, value, error) {
+					toolCalls.Add(1)
+					runSession.Store(req.Session.ID())
+					if input.Value != 42 {
+						t.Errorf("downstream tool executed after cancellation: %+v", input)
 					}
-					return nil, value{}, call.Err()
-				}
-				return nil, input, nil
-			})
+					if mode != "agent" {
+						blocked <- struct{}{}
+						select {
+						case <-call.Done():
+							interrupted <- struct{}{}
+						case <-ctx.Done():
+							return nil, value{}, ctx.Err()
+						}
+						return nil, value{}, call.Err()
+					}
+					return nil, input, nil
+				},
+			)
 			transport := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{SessionTimeout: time.Minute})
 			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				id, ok := runSession.Load().(string)
@@ -105,28 +109,61 @@ func TestRiverCancellationStopsAgentAndMCPAndReleasesResources(t *testing.T) {
 				}
 				encoded, _ := json.Marshal(args)
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = fmt.Fprintf(w, `{"status":"completed","output":[{"type":"function_call","id":"fc_%d","call_id":"call_%d","name":%q,"arguments":%s}]}`, turn, turn, name, encoded)
+				_, _ = fmt.Fprintf(
+					w,
+					`{"status":"completed","output":[{"type":"function_call","id":"fc_%d","call_id":"call_%d","name":%q,"arguments":%s}]}`,
+					turn,
+					turn,
+					name,
+					encoded,
+				)
 			}))
 			defer func() { cancel(); model.Close() }()
 			profile := recoveryProfile()
 			profile.Spec.Limits.Timeout = "3m"
 			profile.Spec.Limits.MaxModelCalls, profile.Spec.Limits.MaxToolCalls = 4, 4
 			profile.Spec.Secrets = map[string]contract.SecretSource{"fixture": {Env: "KNOTRA_TEST_CANCELLATION_KEY"}}
-			profile.Spec.Models = map[string]contract.ModelConnection{"cloud": {Provider: "openai", Model: "fixture-model", BaseURL: model.URL, Auth: map[string]contract.Credential{"key": {SecretRef: "fixture"}}}}
-			profile.Spec.Sandboxes["python"] = contract.SandboxProfile{Image: "python:3.13-alpine", Network: contract.Network{Mode: "none"}, AllowedTools: []string{"files.write"}, Resources: contract.Resources{CPU: 1, MemoryMiB: 128, DiskMiB: 32, Pids: 32}}
-			profile.Spec.MCP = map[string]contract.MCPConnection{"data": {Transport: "streamable_http", URL: remote.URL, AllowedTools: []string{"stats"}, AllowRunSession: true, ToolPolicies: map[string]contract.ToolPolicy{"stats": {Effect: "read"}}}}
+			profile.Spec.Models = map[string]contract.ModelConnection{"cloud": {
+				Provider: "openai",
+				Model:    "fixture-model",
+				BaseURL:  model.URL,
+				Auth:     map[string]contract.Credential{"key": {SecretRef: "fixture"}},
+			}}
+			profile.Spec.Sandboxes["python"] = contract.SandboxProfile{
+				Image:        "python:3.13-alpine",
+				Network:      contract.Network{Mode: "none"},
+				AllowedTools: []string{"files.write"},
+				Resources:    contract.Resources{CPU: 1, MemoryMiB: 128, DiskMiB: 32, Pids: 32},
+			}
+			profile.Spec.MCP = map[string]contract.MCPConnection{"data": {
+				Transport:       "streamable_http",
+				URL:             remote.URL,
+				AllowedTools:    []string{"stats"},
+				AllowRunSession: true,
+				ToolPolicies:    map[string]contract.ToolPolicy{"stats": {Effect: "read"}},
+			}}
 			options, api, _ := startRiverService(t, ctx, profile)
 			source := riverToolCancellationPipeline
 			if mode == "agent" {
 				source = riverAgentCancellationPipeline
 			}
 			var definition struct{ Definition protocol.Definition }
-			pkg := contract.Package{Entrypoint: "pipeline.yaml", Source: source, Files: []contract.File{{Path: "pipeline.yaml", Content: []byte(source)}}}
+			pkg := contract.Package{
+				Entrypoint: "pipeline.yaml",
+				Source:     source,
+				Files:      []contract.File{{Path: "pipeline.yaml", Content: []byte(source)}},
+			}
 			if err := api.Command(ctx, "/definitions", map[string]any{"package": pkg}, uuid.NewString(), &definition); err != nil {
 				t.Fatal(err)
 			}
 			var admitted struct{ Run protocol.Run }
-			if err := api.Command(ctx, "/runs", map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name}, uuid.NewString(), &admitted); err != nil {
+			if err := api.Command(
+				ctx,
+				"/runs",
+				map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name},
+				uuid.NewString(),
+				&admitted,
+			); err != nil {
 				t.Fatal(err)
 			}
 			select {
@@ -191,7 +228,9 @@ func TestRiverCancellationStopsAgentAndMCPAndReleasesResources(t *testing.T) {
 			}
 			var attempts, models, tools, confirmed, slots, requests, resources, published, receipts int
 			var finalDeadline time.Time
-			if err := admin.Pool.QueryRow(ctx, `SELECT
+			if err := admin.Pool.QueryRow(
+				ctx,
+				`SELECT
 				(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1),
 				COALESCE((SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='model'),0),
 				COALESCE((SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='tool'),0),
@@ -201,15 +240,43 @@ func TestRiverCancellationStopsAgentAndMCPAndReleasesResources(t *testing.T) {
 				(SELECT count(*) FROM knotra_resources WHERE run_id=$1 AND state<>'closed'),
 				(SELECT count(*) FROM knotra_artifacts WHERE published AND document->'origin'->>'runId'=$1),
 				(SELECT count(*) FROM knotra_commands WHERE id=$2),
-				(SELECT deadline FROM knotra_execution_nodes WHERE run_id=$1 AND node_id='work')`, final.ID, key).Scan(&attempts, &models, &tools, &confirmed, &slots, &requests, &resources, &published, &receipts, &finalDeadline); err != nil {
+				(SELECT deadline FROM knotra_execution_nodes WHERE run_id=$1 AND node_id='work')`,
+				final.ID,
+				key,
+			).Scan(&attempts, &models, &tools, &confirmed, &slots, &requests, &resources, &published, &receipts, &finalDeadline); err != nil {
 				t.Fatal(err)
 			}
 			wantModels, wantTools, wantConfirmed := 0, 1, 0
 			if mode == "agent" {
 				wantModels, wantTools, wantConfirmed = 3, 2, 2
 			}
-			if attempts != 1 || models != wantModels || modelCalls.Load() != int32(wantModels) || tools != wantTools || toolCalls.Load() != 1 || confirmed != wantConfirmed || slots != 0 || requests != 0 || resources != 0 || published != 0 || receipts != 1 || !deadline.Equal(finalDeadline) {
-				t.Fatalf("attempts=%d models=%d/%d tools=%d/%d confirmed=%d slots=%d requests=%d resources=%d published=%d receipts=%d deadline=%v", attempts, models, modelCalls.Load(), tools, toolCalls.Load(), confirmed, slots, requests, resources, published, receipts, deadline.Equal(finalDeadline))
+			if attempts != 1 ||
+				models != wantModels ||
+				modelCalls.Load() != int32(wantModels) ||
+				tools != wantTools ||
+				toolCalls.Load() != 1 ||
+				confirmed != wantConfirmed ||
+				slots != 0 ||
+				requests != 0 ||
+				resources != 0 ||
+				published != 0 ||
+				receipts != 1 ||
+				!deadline.Equal(finalDeadline) {
+				t.Fatalf(
+					"attempts=%d models=%d/%d tools=%d/%d confirmed=%d slots=%d requests=%d resources=%d published=%d receipts=%d deadline=%v",
+					attempts,
+					models,
+					modelCalls.Load(),
+					tools,
+					toolCalls.Load(),
+					confirmed,
+					slots,
+					requests,
+					resources,
+					published,
+					receipts,
+					deadline.Equal(finalDeadline),
+				)
 			}
 			if mode == "agent" {
 				var resourceID string
@@ -218,7 +285,9 @@ func TestRiverCancellationStopsAgentAndMCPAndReleasesResources(t *testing.T) {
 				}
 				data, inspectErr := exec.CommandContext(ctx, "docker", "inspect", "sandbox-"+resourceID).CombinedOutput()
 				var exit *exec.ExitError
-				if !errors.As(inspectErr, &exit) || exit.ExitCode() != 1 || !strings.Contains(strings.ToLower(string(data)), "no such object: sandbox-"+resourceID) {
+				if !errors.As(inspectErr, &exit) ||
+					exit.ExitCode() != 1 ||
+					!strings.Contains(strings.ToLower(string(data)), "no such object: sandbox-"+resourceID) {
 					t.Fatalf("sandbox deletion is unproven: output=%s error=%v", data, inspectErr)
 				}
 				if err := filepath.WalkDir(filepath.Join(options.DataDir, "work"), func(path string, _ os.DirEntry, err error) error {

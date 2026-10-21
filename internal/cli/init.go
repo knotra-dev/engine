@@ -26,6 +26,7 @@ func (s *commandState) initCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			data, err := starter.Files.ReadFile("hello/pipeline.yaml")
 			if err != nil {
 				return err
@@ -42,8 +43,15 @@ func (s *commandState) initCommand() *cobra.Command {
 			if s.json {
 				return s.printJSON(map[string]string{"path": path})
 			}
+
 			quoted := "'" + strings.ReplaceAll(path, "'", "'\"'\"'") + "'"
-			_, err = fmt.Fprintf(s.options.Out, "Created %q.\n\nValidate offline:\n  knotra validate %s\n\nRun with your local engine:\n  knotra run %s --profile local --wait\n", path, quoted, quoted)
+			_, err = fmt.Fprintf(
+				s.options.Out,
+				"Created %q.\n\nValidate offline:\n  knotra validate %s\n\nRun with your local engine:\n  knotra run %s --profile local --wait\n",
+				path,
+				quoted,
+				quoted,
+			)
 			return err
 		},
 	}

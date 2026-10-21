@@ -17,9 +17,16 @@ func responsePriority(node execution.NodeRecord, records map[string]execution.Re
 
 func requestDecision(node execution.NodeRecord, records map[string]execution.RequestRecord) (*execution.ExecuteResult, *execution.Request) {
 	r, found := records[execution.NodeRequestID(node)]
-	if !found || node.Request == nil || r.RunID != node.RunID || r.InstanceID != node.ID || r.ResponseID == "" || r.AcceptedAt.IsZero() || !r.AcceptedAt.Before(node.Deadline) {
+	if !found ||
+		node.Request == nil ||
+		r.RunID != node.RunID ||
+		r.InstanceID != node.ID ||
+		r.ResponseID == "" ||
+		r.AcceptedAt.IsZero() ||
+		!r.AcceptedAt.Before(node.Deadline) {
 		return nil, nil
 	}
+
 	closed := r.Request
 	var result execution.ExecuteResult
 	switch {
@@ -30,7 +37,11 @@ func requestDecision(node execution.NodeRecord, records map[string]execution.Req
 		closed.Status = "accepted"
 	case node.State == "waiting_resolution" && r.Kind == "resolution" && r.Status == "resolved":
 		var signal execution.ResolutionSignal
-		if err := json.Unmarshal(r.Answer, &signal); err != nil || node.Failure == nil || signal.InstanceID != node.ID || signal.OperationID != node.Failure.OperationID || strings.TrimSpace(signal.Evidence) == "" {
+		if err := json.Unmarshal(r.Answer, &signal); err != nil ||
+			node.Failure == nil ||
+			signal.InstanceID != node.ID ||
+			signal.OperationID != node.Failure.OperationID ||
+			strings.TrimSpace(signal.Evidence) == "" {
 			result.Failure = failure("RESOLUTION_INVALID", "persisted resolution does not match its admitted operation")
 		} else {
 			closed.Evidence = signal.Evidence
@@ -38,7 +49,11 @@ func requestDecision(node execution.NodeRecord, records map[string]execution.Req
 			case "completed":
 				result.Outputs = signal.Outputs
 			case "not_executed":
-				result.Failure = &execution.Failure{Code: "NOT_EXECUTED", Message: "operator confirmed operation did not execute", Retryable: node.Failure.CanRetryIfNotExecuted}
+				result.Failure = &execution.Failure{
+					Code:      "NOT_EXECUTED",
+					Message:   "operator confirmed operation did not execute",
+					Retryable: node.Failure.CanRetryIfNotExecuted,
+				}
 			case "failed":
 				result.Failure = failure("EXTERNAL_FAILED", "operator confirmed external operation failed")
 			default:

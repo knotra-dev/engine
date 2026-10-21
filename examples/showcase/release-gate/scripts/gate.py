@@ -47,12 +47,14 @@ def relative_path(name):
         or any(ord(char) < 32 for char in name)
     ):
         raise ValueError(f"Unsafe snapshot path: {name!r}")
+
     return path
 
 
 def snapshot_files(path):
     if path.stat().st_size > MAX_BYTES:
         raise ValueError("Snapshot exceeds the archive size limit")
+
     files = {}
     total = 0
     with zipfile.ZipFile(path) as archive:
@@ -82,9 +84,11 @@ def load_manifest(files):
         manifest["release"], str
     ):
         raise ValueError("Expected a release name and services manifest")
+
     services = manifest["services"]
     if not isinstance(services, list) or not 1 <= len(services) <= 50:
         raise ValueError("A release must declare 1 to 50 services")
+
     ids = set()
     for service in services:
         if set(service) != {
@@ -121,6 +125,7 @@ def prepare(values, workdir):
     actual = sorted(service["id"] for service in manifest["services"])
     if actual != sorted(values["expected_services"]):
         raise ValueError("Snapshot service set differs from the compiled release lanes")
+
     (workdir / "repository.zip").write_bytes(source.read_bytes())
     inventory = {
         "release": manifest["release"],
@@ -155,6 +160,7 @@ def regression(files, service, workdir):
         target = root / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
+
     env = {
         key: value for key, value in os.environ.items() if not key.startswith("KNOTRA_")
     }
@@ -170,10 +176,12 @@ def regression(files, service, workdir):
         )
     except subprocess.TimeoutExpired:
         return False, ["Regression tests exceeded the 30-second budget."], {"tests": 0}
+
     try:
         metrics = read_json(result.stdout.strip().splitlines()[-1])
     except (ValueError, IndexError):
         return False, ["Test runner did not produce valid metrics."], {"tests": 0}
+
     unchanged = all((root / name).read_bytes() == data for name, data in files.items())
     passed = (
         result.returncode == 0
@@ -182,6 +190,7 @@ def regression(files, service, workdir):
         and not metrics["failures"]
         and not metrics["errors"]
     )
+
     log = (result.stdout + result.stderr)[-12000:]
     (workdir / "test-log.txt").write_text(log)
     details = [
@@ -210,6 +219,7 @@ def validate_schema(schema):
         "null",
     }:
         raise ValueError("Every API schema must declare a supported type")
+
     properties = schema.get("properties", {})
     required = schema.get("required", [])
     if schema["type"] != "object" and ("properties" in schema or "required" in schema):
@@ -230,6 +240,7 @@ def validate_schema(schema):
         not isinstance(schema["enum"], list) or not schema["enum"]
     ):
         raise ValueError("API enum must be a nonempty list")
+
     scalar_types = {
         "string": (str,),
         "integer": (int,),
@@ -257,6 +268,7 @@ def schema_changes(old, new, direction, path):
         changes.append(f"{path}: new required request fields.")
     if direction == "response" and old_required - new_required:
         changes.append(f"{path}: required response fields became optional.")
+
     old_enum, new_enum = old.get("enum"), new.get("enum")
     if direction == "request" and new_enum is not None:
         if old_enum is None or any(value not in new_enum for value in old_enum):
@@ -296,6 +308,7 @@ def compatibility(files, service):
                 raise ValueError("Operations require request and response schemas")
             for schema in operation.values():
                 validate_schema(schema)
+
     changes = []
     for name, operation in old["operations"].items():
         if name not in new["operations"]:
@@ -333,6 +346,7 @@ def deployment_policy(files, service):
     }
     if not isinstance(config, dict) or set(config) != fields:
         raise ValueError("Deployment config must use the nine declared adapter fields")
+
     rules = {
         "non-root identity": type(config.get("run_as_uid")) is int
         and config["run_as_uid"] > 0,
@@ -375,6 +389,7 @@ def check(values, workdir):
         != digest((workdir / "incoming/repository.zip").read_bytes())
     ):
         raise ValueError("Previous check belongs to a different service or snapshot")
+
     kind = values["kind"]
     if kind == "tests":
         passed, details, metrics = regression(files, service, workdir)
@@ -384,6 +399,7 @@ def check(values, workdir):
         passed, details, metrics = deployment_policy(files, service)
     else:
         raise ValueError("Unknown release check")
+
     report = {
         "id": f"{service['id']}/{kind}",
         "service": service["id"],
@@ -412,6 +428,7 @@ def aggregate(values, workdir):
         raise ValueError("Release matrix has missing or duplicate checks")
     if any(item["snapshot_sha256"] != inventory["snapshot_sha256"] for item in reports):
         raise ValueError("Checks belong to different repository snapshots")
+
     evidence = {
         "inventory": inventory,
         "checks": reports,
@@ -425,6 +442,7 @@ def aggregate(values, workdir):
         },
     }
     write_json(workdir / "release-checks.json", evidence)
+
     for scope, kinds in {
         "security": {"deployment"},
         "compatibility": {"api"},
@@ -475,6 +493,7 @@ def assemble(values, workdir):
     evidence = values["evidence"]
     if not evidence["eligible"]:
         raise ValueError("Cannot assemble a release candidate with blocked checks")
+
     reviews = [values[key] for key in ("security", "compatibility", "operations")]
     coverage = evidence["coverage"]
     lines = [
@@ -507,9 +526,11 @@ def assemble(values, workdir):
         "",
         "Snapshot SHA-256: " + evidence["inventory"]["snapshot_sha256"],
     ]
+
     (workdir / "release-readiness.md").write_text("\n".join(lines) + "\n")
     write_json(workdir / "release-checks.json", evidence)
     write_json(workdir / "agent-reviews.json", reviews)
+
     entries = {
         name: (workdir / name).read_bytes()
         for name in (
@@ -532,6 +553,7 @@ def publish(values, workdir):
         or not values["change_ticket"].strip()
     ):
         raise ValueError("Publication requires explicit approval and a reviewer")
+
     dossier = (workdir / "incoming/release-readiness.md").read_bytes()
     checks = (workdir / "incoming/release-checks.json").read_bytes()
     with zipfile.ZipFile(workdir / "incoming/release-candidate.zip") as archive:
@@ -541,6 +563,7 @@ def publish(values, workdir):
         or entries["release-checks.json"] != checks
     ):
         raise ValueError("Candidate packet differs from the reviewed files")
+
     evidence = read_json(checks)
     if not evidence["eligible"] or any(
         not item["passed"] for item in evidence["checks"]
@@ -548,6 +571,7 @@ def publish(values, workdir):
         raise ValueError("A response cannot override a failed release check")
     if digest(entries["repository.zip"]) != evidence["inventory"]["snapshot_sha256"]:
         raise ValueError("Snapshot bytes differ from executed evidence")
+
     record = {
         "approved": True,
         "reviewer": values["reviewer"],

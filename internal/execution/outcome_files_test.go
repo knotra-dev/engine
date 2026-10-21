@@ -25,8 +25,17 @@ func TestMCPEvidenceFencesOwnershipAndBoundsRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = files.Close() }()
-	resource := ResourceRecord{ID: uuid.NewString(), EngineID: "engine", HostID: "host", Kind: "mcp_http", Lifetime: "run", State: "active", DispatchGeneration: 1,
-		Ownership: fixtureOutcome().Ownership, MCP: &MCPSessionRecord{Connection: "tools", SessionID: "original-session", ProtocolVersion: "2025-11-25"}}
+	resource := ResourceRecord{
+		ID:                 uuid.NewString(),
+		EngineID:           "engine",
+		HostID:             "host",
+		Kind:               "mcp_http",
+		Lifetime:           "run",
+		State:              "active",
+		DispatchGeneration: 1,
+		Ownership:          fixtureOutcome().Ownership,
+		MCP:                &MCPSessionRecord{Connection: "tools", SessionID: "original-session", ProtocolVersion: "2025-11-25"},
+	}
 	for range 2 {
 		if err := files.PutMCPSession(resource); err != nil {
 			t.Fatal(err)
@@ -70,12 +79,29 @@ func TestMCPCallRecoveryRetainsOnlyCurrentIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resource := ResourceRecord{ID: uuid.NewString(), EngineID: "engine", HostID: "host", Kind: "mcp_http", Lifetime: "run", State: "active", DispatchGeneration: 1,
-		Ownership: fixtureOutcome().Ownership, MCP: &MCPSessionRecord{Connection: "tools", SessionID: "original-session", ProtocolVersion: "2025-11-25"}}
+	resource := ResourceRecord{
+		ID:                 uuid.NewString(),
+		EngineID:           "engine",
+		HostID:             "host",
+		Kind:               "mcp_http",
+		Lifetime:           "run",
+		State:              "active",
+		DispatchGeneration: 1,
+		Ownership:          fixtureOutcome().Ownership,
+		MCP:                &MCPSessionRecord{Connection: "tools", SessionID: "original-session", ProtocolVersion: "2025-11-25"},
+	}
 	if err := files.PutMCPSession(resource); err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range []json.RawMessage{[]byte(`null`), []byte(` null `), []byte(`true`), []byte(`1.5`), []byte(`{}`), []byte(`[]`), []byte(`"` + strings.Repeat("x", 1024) + `"`)} {
+	for _, id := range []json.RawMessage{
+		[]byte(`null`),
+		[]byte(` null `),
+		[]byte(`true`),
+		[]byte(`1.5`),
+		[]byte(`{}`),
+		[]byte(`[]`),
+		[]byte(`"` + strings.Repeat("x", 1024) + `"`),
+	} {
 		if err := files.PutMCPCall(resource, id, false); err == nil {
 			t.Fatalf("accepted invalid request ID: %s", id)
 		}
@@ -135,7 +161,18 @@ func TestHostIdentityValidation(t *testing.T) {
 			t.Fatalf("rejected portable host identity %q: %v", id, err)
 		}
 	}
-	for _, id := range []string{"", "../host", "/host", ".host", "-host", "host\nforeign", " host", "host ", "хост", strings.Repeat("a", 129)} {
+	for _, id := range []string{
+		"",
+		"../host",
+		"/host",
+		".host",
+		"-host",
+		"host\nforeign",
+		" host",
+		"host ",
+		"хост",
+		strings.Repeat("a", 129),
+	} {
 		if err := ValidateHostID(id); err == nil {
 			t.Fatalf("accepted invalid host identity %q", id)
 		}

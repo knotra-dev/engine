@@ -84,6 +84,7 @@ func TestKubernetesCodeTransfersArtifactsAcrossPods(t *testing.T) {
 		"profile": env("KNOTRA_TEST_KUBE_SANDBOX_PROFILE", "kubernetes-sandbox")}, uuid.NewString(), &accepted); err != nil {
 		t.Fatal(err)
 	}
+
 	final := awaitTerminal(t, ctx, api, accepted.Run.ID)
 	if final.Status != "succeeded" || len(final.Instances) != 5 {
 		t.Fatalf("sandbox run=%s status=%s diagnostics=%+v", final.ID, final.Status, final.Diagnostics)
@@ -158,20 +159,27 @@ func TestKubernetesCodeTransfersArtifactsAcrossPods(t *testing.T) {
 	}
 	var attempts, invalid, toolBudget, modelBudget, slots, resources, open int
 	kube.await(func() (bool, error) {
-		err := admin.QueryRow(ctx, `SELECT count(*),count(*) FILTER (WHERE state<>'completed' OR number<>1),
+		err := admin.QueryRow(
+			ctx,
+			`SELECT count(*),count(*) FILTER (WHERE state<>'completed' OR number<>1),
 			COALESCE((SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='tool'),0),
 			COALESCE((SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='model'),0),
 			(SELECT count(*) FROM knotra_execution_slots WHERE run_id=$1 AND released_at IS NULL),
 			(SELECT count(*) FROM knotra_resources WHERE run_id=$1 AND kind='sandbox'),
 			(SELECT count(*) FROM knotra_resources WHERE run_id=$1 AND state<>'closed')
-			FROM knotra_execution_attempts WHERE run_id=$1`, final.ID).Scan(&attempts, &invalid, &toolBudget, &modelBudget, &slots, &resources, &open)
+			FROM knotra_execution_attempts WHERE run_id=$1`,
+			final.ID,
+		).Scan(&attempts, &invalid, &toolBudget, &modelBudget, &slots, &resources, &open)
 		return open == 0, err
 	})
 	if attempts != 5 || invalid != 0 || toolBudget != 5 || modelBudget != 0 || slots != 0 || resources != 5 {
 		t.Fatalf("sandbox totals: attempts=%d invalid=%d toolBudget=%d modelBudget=%d slots=%d resources=%d open=%d",
 			attempts, invalid, toolBudget, modelBudget, slots, resources, open)
 	}
-	t.Logf("five sandbox attempts/debits, three executor pods, verified S3 artifact transfers and five closed sandbox resources; run=%s", final.ID)
+	t.Logf(
+		"five sandbox attempts/debits, three executor pods, verified S3 artifact transfers and five closed sandbox resources; run=%s",
+		final.ID,
+	)
 }
 
 func kubernetesSandboxPackage(t *testing.T) contract.Package {
@@ -189,19 +197,37 @@ func kubernetesSandboxPackage(t *testing.T) contract.Package {
 	}
 	nodes := map[string]contract.Node{
 		"produce": {Type: "code", Sandbox: "work", Code: &contract.CodeNode{Command: []string{"python3", "/package/produce.py"}},
-			Outputs: map[string]contract.Port{"nonce": scalar("string", ""), "sha256": scalar("string", ""), "file": file("text/plain", "source.txt")}},
+			Outputs: map[string]contract.Port{
+				"nonce":  scalar("string", ""),
+				"sha256": scalar("string", ""),
+				"file":   file("text/plain", "source.txt"),
+			}},
 	}
 	verify := contract.Node{Type: "code", Sandbox: "work", Code: &contract.CodeNode{Command: []string{"python3", "/package/verify.py"}},
-		Inputs:  map[string]contract.Port{"nonce": scalar("string", "nodes.produce.outputs.nonce"), "sha256": scalar("string", "nodes.produce.outputs.sha256")},
+		Inputs: map[string]contract.Port{
+			"nonce":  scalar("string", "nodes.produce.outputs.nonce"),
+			"sha256": scalar("string", "nodes.produce.outputs.sha256"),
+		},
 		Outputs: map[string]contract.Port{"summary": scalar("object", ""), "file": file("application/json", "accepted.json")}}
 	for _, branch := range []string{"left", "center", "right"} {
 		branchPort := scalar("string", "")
 		branchPort.Bind = &contract.Binding{Value: json.RawMessage(`"` + branch + `"`)}
-		nodes[branch] = contract.Node{Type: "code", Sandbox: "work", Code: &contract.CodeNode{Command: []string{"python3", "/package/consume.py"}},
+		nodes[branch] = contract.Node{
+			Type:    "code",
+			Sandbox: "work",
+			Code:    &contract.CodeNode{Command: []string{"python3", "/package/consume.py"}},
 			Inputs: map[string]contract.Port{
-				"nonce": scalar("string", "nodes.produce.outputs.nonce"), "sha256": scalar("string", "nodes.produce.outputs.sha256"), "branch": branchPort,
-				"source": {Artifact: &contract.ArtifactPort{MediaTypes: []string{"text/plain"}}, Mount: "source.txt", Bind: &contract.Binding{From: "nodes.produce.outputs.file"}}},
-			Outputs: map[string]contract.Port{"file": file("application/json", "report.json")}}
+				"nonce":  scalar("string", "nodes.produce.outputs.nonce"),
+				"sha256": scalar("string", "nodes.produce.outputs.sha256"),
+				"branch": branchPort,
+				"source": {
+					Artifact: &contract.ArtifactPort{MediaTypes: []string{"text/plain"}},
+					Mount:    "source.txt",
+					Bind:     &contract.Binding{From: "nodes.produce.outputs.file"},
+				},
+			},
+			Outputs: map[string]contract.Port{"file": file("application/json", "report.json")},
+		}
 		verify.Inputs[branch] = contract.Port{Artifact: &contract.ArtifactPort{MediaTypes: []string{"application/json"}},
 			Mount: "report_" + branch + ".json", Bind: &contract.Binding{From: "nodes." + branch + ".outputs.file"}}
 	}
@@ -211,9 +237,15 @@ func kubernetesSandboxPackage(t *testing.T) contract.Package {
 			Sandboxes: map[string]contract.SandboxResource{"work": {Profile: "python_box"}},
 			Defaults:  contract.Defaults{Execution: contract.Execution{Timeout: "1m"}},
 			Graph: contract.Graph{Nodes: nodes, Outputs: map[string]contract.Port{
-				"summary":  scalar("object", "nodes.verify.outputs.summary"),
-				"source":   {Artifact: &contract.ArtifactPort{MediaTypes: []string{"text/plain"}}, Bind: &contract.Binding{From: "nodes.produce.outputs.file"}},
-				"accepted": {Artifact: &contract.ArtifactPort{MediaTypes: []string{"application/json"}}, Bind: &contract.Binding{From: "nodes.verify.outputs.file"}}}}}}
+				"summary": scalar("object", "nodes.verify.outputs.summary"),
+				"source": {
+					Artifact: &contract.ArtifactPort{MediaTypes: []string{"text/plain"}},
+					Bind:     &contract.Binding{From: "nodes.produce.outputs.file"},
+				},
+				"accepted": {
+					Artifact: &contract.ArtifactPort{MediaTypes: []string{"application/json"}},
+					Bind:     &contract.Binding{From: "nodes.verify.outputs.file"},
+				}}}}}
 	source, err := json.Marshal(pipeline)
 	if err != nil {
 		t.Fatal(err)

@@ -16,6 +16,7 @@ const lines = [
 ];
 const empty = () => Array(9).fill(null);
 const other = (player) => (player === 'X' ? 'O' : 'X');
+
 function result(board) {
   for (const [a, b, c] of lines)
     if (board[a] && board[a] === board[b] && board[a] === board[c]) return board[a];
@@ -24,6 +25,7 @@ function result(board) {
 
 export function verifyGame(source) {
   assert(Buffer.byteLength(source) <= 64 * 1024, 'game.js must be no larger than 64 KiB');
+
   const context = vm.createContext({}, { codeGeneration: { strings: false, wasm: false } });
   vm.runInContext('var module = { exports: {} }; var exports = module.exports;', context);
   new vm.Script(source, { filename: 'game.js' }).runInContext(context, { timeout: 2000 });
@@ -38,6 +40,7 @@ export function verifyGame(source) {
   let positions = 0;
   let completedGames = 0;
   const tests = [];
+
   function call(name, ...args) {
     // Arguments and return values cross as JSON, not host objects or host functions.
     const value = vm.runInContext(
@@ -56,6 +59,7 @@ export function verifyGame(source) {
     assert.notEqual(value, undefined, `${name} returned undefined`);
     return JSON.parse(value);
   }
+
   function test(name, check) {
     const before = checks;
     try {
@@ -65,6 +69,7 @@ export function verifyGame(source) {
     }
     tests.push({ name, status: 'passed', checks: checks - before });
   }
+
   test('Recognizes all eight winning lines for both players', () => {
     for (const player of ['X', 'O'])
       for (const line of lines) {
@@ -73,12 +78,14 @@ export function verifyGame(source) {
         assert.equal(call('winner', board), player, `winning line ${line} for ${player}`);
       }
   });
+
   test('Distinguishes empty boards, unfinished games, draws, and full-board wins', () => {
     assert.equal(call('winner', empty()), null);
     assert.equal(call('winner', ['X', null, null, null, 'O', null, null, null, null]), null);
     assert.equal(call('winner', ['X', 'O', 'X', 'X', 'O', 'O', 'O', 'X', 'X']), 'draw');
     assert.equal(call('winner', ['X', 'O', 'X', 'O', 'X', 'O', 'O', 'X', 'X']), 'X');
   });
+
   test('Creates immutable legal moves and rejects invalid moves', () => {
     for (const player of ['X', 'O'])
       for (let index = 0; index < 9; index++) {
@@ -91,6 +98,7 @@ export function verifyGame(source) {
         );
         assert.deepEqual(actual, expected, `makeMove must change only square ${index}`);
       }
+
     for (const [board, index, player] of [
       [empty(), -1, 'X'],
       [empty(), 9, 'X'],
@@ -107,6 +115,7 @@ export function verifyGame(source) {
       checks++;
     }
   });
+
   test('Returns null for terminal positions and takes wins before blocking', () => {
     for (const player of ['X', 'O']) {
       assert.equal(
@@ -133,12 +142,14 @@ export function verifyGame(source) {
       );
     }
   });
+
   for (const computer of ['X', 'O'])
     test(`Never loses as ${computer} against any legal opponent continuation`, () => {
       const visited = new Set();
       function play(board, turn) {
         const key = board.map((cell) => cell ?? '-').join('') + turn;
         if (visited.has(key)) return;
+
         visited.add(key);
         positions++;
         const outcome = result(board);
@@ -152,6 +163,7 @@ export function verifyGame(source) {
           completedGames++;
           return;
         }
+
         const moves = board.flatMap((cell, index) => (cell === null ? [index] : []));
         if (turn === computer) {
           const move = call('chooseMove', board, computer);
@@ -166,6 +178,7 @@ export function verifyGame(source) {
           );
           moves.splice(0, moves.length, move);
         }
+
         for (const move of moves) {
           const next = [...board];
           next[move] = turn;
@@ -175,6 +188,7 @@ export function verifyGame(source) {
       }
       play(empty(), 'X');
     });
+
   return {
     passed: true,
     tests,

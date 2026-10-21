@@ -48,6 +48,7 @@ func (s *Store) AcquireServiceLease(ctx context.Context, hostID string) (_ *Leas
 	if err != nil {
 		return nil, err
 	}
+
 	defer func() {
 		if err != nil {
 			_ = conn.Close(context.Background())

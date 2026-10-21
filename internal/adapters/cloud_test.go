@@ -49,9 +49,17 @@ func checkCloudAuth(t *testing.T, provider string, req *http.Request) {
 func cloudOutput(provider, name, arguments string) string {
 	args, _ := json.Marshal(arguments)
 	if provider == "openai" {
-		return fmt.Sprintf(`{"status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":%q,"arguments":%s}],"usage":{"input_tokens":17,"output_tokens":9}}`, name, args)
+		return fmt.Sprintf(
+			`{"status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":%q,"arguments":%s}],"usage":{"input_tokens":17,"output_tokens":9}}`,
+			name,
+			args,
+		)
 	}
-	return fmt.Sprintf(`{"type":"message","role":"assistant","content":[{"type":"tool_use","id":"call_1","name":%q,"input":%s}],"stop_reason":"tool_use","usage":{"input_tokens":17,"output_tokens":9}}`, name, arguments)
+	return fmt.Sprintf(
+		`{"type":"message","role":"assistant","content":[{"type":"tool_use","id":"call_1","name":%q,"input":%s}],"stop_reason":"tool_use","usage":{"input_tokens":17,"output_tokens":9}}`,
+		name,
+		arguments,
+	)
 }
 
 func writeCloudOutput(w http.ResponseWriter, provider, name, args string, streaming bool) {
@@ -64,7 +72,11 @@ func writeCloudOutput(w http.ResponseWriter, provider, name, args string, stream
 	w.Header().Set("Content-Type", "text/event-stream")
 	if provider == "openai" {
 		_, _ = fmt.Fprint(w, ": keep-alive\r\n\r\n")
-		_, _ = fmt.Fprintf(w, "event: response.output_item.added\r\ndata: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"type\":\"function_call\",\"id\":\"fc_1\",\"call_id\":\"call_1\",\"name\":%q,\"arguments\":\"\"}}\r\n\r\n", name)
+		_, _ = fmt.Fprintf(
+			w,
+			"event: response.output_item.added\r\ndata: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"type\":\"function_call\",\"id\":\"fc_1\",\"call_id\":\"call_1\",\"name\":%q,\"arguments\":\"\"}}\r\n\r\n",
+			name,
+		)
 		for _, fragment := range []string{args[:len(args)/2], args[len(args)/2:]} {
 			encoded, _ := json.Marshal(fragment)
 			_, _ = fmt.Fprintf(w, "data: {\"type\":\"response.function_call_arguments.delta\",\"output_index\":0,\"delta\":%s}\n\n", encoded)
@@ -72,13 +84,27 @@ func writeCloudOutput(w http.ResponseWriter, provider, name, args string, stream
 		_, _ = fmt.Fprintf(w, "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":%s}\n\n", response)
 		return
 	}
-	_, _ = fmt.Fprint(w, "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"usage\":{\"input_tokens\":17,\"output_tokens\":1}}}\n\n")
-	_, _ = fmt.Fprintf(w, "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":%q,\"input\":{}}}\n\n", name)
+	_, _ = fmt.Fprint(
+		w,
+		"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"usage\":{\"input_tokens\":17,\"output_tokens\":1}}}\n\n",
+	)
+	_, _ = fmt.Fprintf(
+		w,
+		"event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":%q,\"input\":{}}}\n\n",
+		name,
+	)
 	for _, fragment := range []string{args[:len(args)/2], args[len(args)/2:]} {
 		encoded, _ := json.Marshal(fragment)
-		_, _ = fmt.Fprintf(w, "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":%s}}\n\n", encoded)
+		_, _ = fmt.Fprintf(
+			w,
+			"data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":%s}}\n\n",
+			encoded,
+		)
 	}
-	_, _ = fmt.Fprint(w, "data: {\"type\":\"content_block_stop\",\"index\":0}\n\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{\"output_tokens\":9}}\n\ndata: {\"type\":\"message_stop\"}\n\n")
+	_, _ = fmt.Fprint(
+		w,
+		"data: {\"type\":\"content_block_stop\",\"index\":0}\n\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{\"output_tokens\":9}}\n\ndata: {\"type\":\"message_stop\"}\n\n",
+	)
 }
 
 func TestCloudStructuredOutputAndReplay(t *testing.T) {
@@ -297,8 +323,16 @@ func TestCloudConfigurationRejectsInvalidParameters(t *testing.T) {
 		provider, name string
 		value          any
 	}{
-		{"openai", "num_predict", 256}, {"openai", "max_output_tokens", 1.5}, {"openai", "temperature", 3}, {"openai", "top_p", "0.5"}, {"openai", "reasoning_effort", "unknown"},
-		{"anthropic", "max_tokens", 0}, {"anthropic", "temperature", 1.1}, {"anthropic", "stop_sequences", []string{""}}, {"anthropic", "top_k", -1}, {"anthropic", "store", false},
+		{"openai", "num_predict", 256},
+		{"openai", "max_output_tokens", 1.5},
+		{"openai", "temperature", 3},
+		{"openai", "top_p", "0.5"},
+		{"openai", "reasoning_effort", "unknown"},
+		{"anthropic", "max_tokens", 0},
+		{"anthropic", "temperature", 1.1},
+		{"anthropic", "stop_sequences", []string{""}},
+		{"anthropic", "top_k", -1},
+		{"anthropic", "store", false},
 	}
 	for _, c := range cases {
 		t.Run(c.provider+"/"+c.name, func(t *testing.T) {
@@ -344,7 +378,12 @@ func TestOpenAIStreamSeparatesTextAndStructuredArguments(t *testing.T) {
 		_, _ = fmt.Fprint(w, `data: {"type":"response.output_text.delta","delta":"Ready."}`+"\n\n")
 		_, _ = fmt.Fprint(w, `data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","name":"knotra_output"}}`+"\n\n")
 		_, _ = fmt.Fprint(w, `data: {"type":"response.function_call_arguments.delta","output_index":1,"delta":"{\"answer\":42}"}`+"\n\n")
-		final := strings.Replace(cloudOutput("openai", "knotra_output", `{"answer":42}`), `"output":[`, `"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Ready."}]},`, 1)
+		final := strings.Replace(
+			cloudOutput("openai", "knotra_output", `{"answer":42}`),
+			`"output":[`,
+			`"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Ready."}]},`,
+			1,
+		)
 		_, _ = fmt.Fprintf(w, "data: {\"type\":\"response.completed\",\"response\":%s}\n\n", final)
 	}))
 	defer server.Close()

@@ -36,7 +36,11 @@ func TestSessionAffinityFencesOtherWorkersAndSurvivesDrain(t *testing.T) {
 				}
 			}
 			if state == "expired" {
-				if _, err := s.Pool.Exec(ctx, "UPDATE knotra_workers SET heartbeat_at=clock_timestamp()-interval '21 seconds' WHERE id=$1", workers[0]); err != nil {
+				if _, err := s.Pool.Exec(
+					ctx,
+					"UPDATE knotra_workers SET heartbeat_at=clock_timestamp()-interval '21 seconds' WHERE id=$1",
+					workers[0],
+				); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -61,7 +65,9 @@ func TestSessionAffinityFencesOtherWorkersAndSurvivesDrain(t *testing.T) {
 			if err := s.Pool.QueryRow(ctx, "SELECT session_worker_id FROM knotra_runs WHERE id=$1", ids[0].RunID).Scan(&owner); err != nil || owner != workers[0] {
 				t.Fatalf("session affinity changed: owner=%s error=%v", owner, err)
 			}
-			if claim.Validate() != nil || claim.Request.Ownership == nil || *claim.Request.Ownership != (execution.Ownership{AttemptID: ids[3], WorkerID: claim.WorkerID, Generation: claim.Generation}) {
+			if claim.Validate() != nil ||
+				claim.Request.Ownership == nil ||
+				*claim.Request.Ownership != (execution.Ownership{AttemptID: ids[3], WorkerID: claim.WorkerID, Generation: claim.Generation}) {
 				t.Fatal("claim lost the publication ownership fence")
 			}
 		})

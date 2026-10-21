@@ -129,7 +129,12 @@ func TestAdmittedModelDiscoveryFailures(t *testing.T) {
 					t.Fatal("discovery failure leaked private data")
 				}
 				if generations != 0 || hooks.calls["model"] != 0 || discoveries > 1 {
-					t.Fatalf("failure generated, debited budget, or retried internally: generations=%d budgets=%v discoveries=%d", generations, hooks.calls, discoveries)
+					t.Fatalf(
+						"failure generated, debited budget, or retried internally: generations=%d budgets=%v discoveries=%d",
+						generations,
+						hooks.calls,
+						discoveries,
+					)
 				}
 			})
 		}

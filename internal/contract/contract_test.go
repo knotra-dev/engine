@@ -556,9 +556,12 @@ func testObject(t *testing.T, value any) map[string]any {
 
 func TestPortDependenciesIncludeCoalesceAndCheckedCELReferences(t *testing.T) {
 	deps, err := PortDependencies(map[string]Port{
-		"fallback": {Bind: &Binding{Coalesce: []Binding{{From: "nodes.a.outputs.result"}, {Expr: `false ? nodes.b.outputs.result : nodes.c.outputs.result`}}}},
-		"literal":  {Bind: &Binding{Value: json.RawMessage(`"nodes.fake.outputs.result"`)}},
-		"input":    {Bind: &Binding{From: "inputs.value"}},
+		"fallback": {Bind: &Binding{Coalesce: []Binding{
+			{From: "nodes.a.outputs.result"},
+			{Expr: `false ? nodes.b.outputs.result : nodes.c.outputs.result`},
+		}}},
+		"literal": {Bind: &Binding{Value: json.RawMessage(`"nodes.fake.outputs.result"`)}},
+		"input":   {Bind: &Binding{From: "inputs.value"}},
 	})
 	if err != nil || !reflect.DeepEqual(deps, []string{"a", "b", "c"}) {
 		t.Fatalf("dependencies=%v error=%v", deps, err)

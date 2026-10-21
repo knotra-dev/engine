@@ -154,7 +154,12 @@ func TestResourceInventoryPagesAndRejectsForeignLabels(t *testing.T) {
 		if err := json.Unmarshal([]byte(r.URL.Query().Get("filters")), &filters); err != nil {
 			t.Error(err)
 		}
-		if r.Method != http.MethodGet || r.URL.Query().Get("limit") != "64" || r.URL.Query().Get("all") != "true" || len(filters["label"]) != 2 || filters["label"][0] != "io.knotra.engine="+resource.EngineID || filters["label"][1] != "io.knotra.host="+resource.HostID {
+		if r.Method != http.MethodGet ||
+			r.URL.Query().Get("limit") != "64" ||
+			r.URL.Query().Get("all") != "true" ||
+			len(filters["label"]) != 2 ||
+			filters["label"][0] != "io.knotra.engine="+resource.EngineID ||
+			filters["label"][1] != "io.knotra.host="+resource.HostID {
 			t.Errorf("unbounded or unconfined inventory: %s %s", r.Method, r.URL)
 		}
 		count := calls.Add(1)
@@ -181,7 +186,11 @@ func TestResourceInventoryPagesAndRejectsForeignLabels(t *testing.T) {
 		if count == 4 {
 			foreign := resource.Labels()
 			foreign["io.knotra.host"] = "foreign"
-			containers = append(containers, map[string]any{"Id": "foreign", "Labels": foreign}, map[string]any{"Id": "invalid", "Labels": map[string]string{"io.knotra.engine": resource.EngineID}})
+			containers = append(
+				containers,
+				map[string]any{"Id": "foreign", "Labels": foreign},
+				map[string]any{"Id": "invalid", "Labels": map[string]string{"io.knotra.engine": resource.EngineID}},
+			)
 		}
 		if err := json.NewEncoder(w).Encode(containers); err != nil {
 			t.Error(err)

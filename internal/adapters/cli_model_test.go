@@ -160,12 +160,28 @@ func TestCLIAccountStructuredOutputAndReplay(t *testing.T) {
 				t.Fatalf("replay called CLI again: %s %v", data, err)
 			}
 			var call cliFixtureCall
-			if json.Unmarshal(data, &call) != nil || strings.Contains(strings.Join(call.Env, "\n"), "secret-value") || !strings.Contains(call.Input, "Knotra input context") || slices.Contains(call.Args, "--model") {
+			if json.Unmarshal(data, &call) != nil ||
+				strings.Contains(strings.Join(call.Env, "\n"), "secret-value") ||
+				!strings.Contains(call.Input, "Knotra input context") ||
+				slices.Contains(call.Args, "--model") {
 				t.Fatalf("unsafe CLI invocation: %s", data)
 			}
 			flags := []string{"--restricted", "--tools", "--disallowedTools", "--strict-mcp-config", "--settings", "--no-session-persistence"}
 			if provider == "codex" {
-				flags = []string{"--ignore-user-config", "--ignore-rules", "--ephemeral", "read-only", "shell_tool", "hooks", "plugins", "apps", "multi_agent", "view_image", "browser_use", `forced_login_method="chatgpt"`}
+				flags = []string{
+					"--ignore-user-config",
+					"--ignore-rules",
+					"--ephemeral",
+					"read-only",
+					"shell_tool",
+					"hooks",
+					"plugins",
+					"apps",
+					"multi_agent",
+					"view_image",
+					"browser_use",
+					`forced_login_method="chatgpt"`,
+				}
 			}
 			for _, flag := range flags {
 				if !slices.Contains(call.Args, flag) {
@@ -189,7 +205,10 @@ func TestCLIAccountToolsRemainKnotraManaged(t *testing.T) {
 			messages := []message{{Role: "user", Content: "Use work then finish."}}
 			tools := []functionTool{toolDefinition("work", "Work", json.RawMessage(`{"type":"object","properties":{"value":{"type":"integer"}}}`))}
 			response, err := runner.chat(context.Background(), req, "model", 0, messages, tools, nil)
-			if err != nil || len(response.ToolCalls) != 1 || response.ToolCalls[0].Function.Name != "work" || string(response.ToolCalls[0].Function.Arguments) != `{"value":7}` {
+			if err != nil ||
+				len(response.ToolCalls) != 1 ||
+				response.ToolCalls[0].Function.Name != "work" ||
+				string(response.ToolCalls[0].Function.Arguments) != `{"value":7}` {
 				t.Fatalf("tool decision lost: %+v %v", response, err)
 			}
 		})
@@ -204,7 +223,13 @@ func TestCLIRejectsAPIKeyLoginAndHidesDiagnostics(t *testing.T) {
 				t.Fatalf("API-key login accepted: %v", err)
 			}
 			writeCLIFixture(t, cliFixture{Fail: true})
-			_, err := (&Runner{}).cliResponse(context.Background(), contract.ModelConnection{Provider: provider, Model: "default"}, nil, nil, json.RawMessage(`{"type":"object"}`))
+			_, err := (&Runner{}).cliResponse(
+				context.Background(),
+				contract.ModelConnection{Provider: provider, Model: "default"},
+				nil,
+				nil,
+				json.RawMessage(`{"type":"object"}`),
+			)
 			if err == nil || strings.Contains(err.Error(), "secret-value") || strings.Contains(err.Error(), "private prompt") {
 				t.Fatalf("private diagnostics escaped: %v", err)
 			}
@@ -237,7 +262,10 @@ func TestCodexRejectsNativeToolsAndIncompleteEvents(t *testing.T) {
 
 func TestClaudeIsolationDoesNotConsumeAuthSubcommand(t *testing.T) {
 	args := append(claudeIsolationArgs(), "auth", "status")
-	if slices.Contains(args, "--mcp-config") || !slices.Contains(args, `--mcp-config={"mcpServers":{}}`) || args[len(args)-2] != "auth" || args[len(args)-1] != "status" {
+	if slices.Contains(args, "--mcp-config") ||
+		!slices.Contains(args, `--mcp-config={"mcpServers":{}}`) ||
+		args[len(args)-2] != "auth" ||
+		args[len(args)-1] != "status" {
 		t.Fatalf("variadic MCP config would consume auth/status: %v", args)
 	}
 }

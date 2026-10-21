@@ -15,10 +15,12 @@ func TestStartersCompileWithLocalProfileAndDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	profile, diags := contract.ParseProfile(data)
 	if contract.HasErrors(diags) {
 		t.Fatal(diags)
 	}
+
 	for _, name := range []string{"hello", "research-dossier", "tic-tac-toe", "publication", "research-dossier/review.yaml"} {
 		t.Run(name, func(t *testing.T) {
 			entry := filepath.Join(name, "pipeline.yaml")
@@ -29,10 +31,12 @@ func TestStartersCompileWithLocalProfileAndDefaults(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			plan, diags := contract.Compile(pkg, &profile)
 			if contract.HasErrors(diags) {
 				t.Fatal(diags)
 			}
+
 			pipeline := plan.Pipelines[plan.Root]
 			if _, err := contract.ValidatePorts(pipeline.Spec.Inputs, contract.Values{}, true); err != nil {
 				t.Fatalf("starter requires non-default inputs: %v", err)
@@ -54,6 +58,7 @@ func TestStartersCompileWithLocalProfileAndDefaults(t *testing.T) {
 					t.Fatalf("unexpected sandbox profile: %s", sandbox.Profile)
 				}
 			}
+
 			artifacts := 0
 			for _, output := range pipeline.Spec.Outputs {
 				if output.Artifact != nil {

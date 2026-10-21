@@ -54,7 +54,10 @@ func TestRiverAdmissionProcessCrashBoundaries(t *testing.T) {
 					t.Errorf("provider received changed/truncated input or credentials: bytes=%d error=%v", len(body), err)
 				}
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = fmt.Fprint(w, `{"status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"knotra_output","arguments":"{\"answer\":42}"}]}`)
+				_, _ = fmt.Fprint(
+					w,
+					`{"status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"knotra_output","arguments":"{\"answer\":42}"}]}`,
+				)
 			}))
 			defer provider.Close()
 			work := t.TempDir()
@@ -62,10 +65,20 @@ func TestRiverAdmissionProcessCrashBoundaries(t *testing.T) {
 			profile.Spec.Sandboxes = nil
 			profile.Spec.Limits.Timeout = "3m"
 			profile.Spec.Secrets = map[string]contract.SecretSource{"fixture": {Env: "KNOTRA_ADMISSION_FIXTURE_KEY"}}
-			profile.Spec.Models = map[string]contract.ModelConnection{"cloud": {Provider: "openai", Model: "fixture-model", BaseURL: provider.URL, Auth: map[string]contract.Credential{"key": {SecretRef: "fixture"}}}}
+			profile.Spec.Models = map[string]contract.ModelConnection{"cloud": {
+				Provider: "openai",
+				Model:    "fixture-model",
+				BaseURL:  provider.URL,
+				Auth:     map[string]contract.Credential{"key": {SecretRef: "fixture"}},
+			}}
 			profilePath := filepath.Join(work, "profile.json")
 			writeJSON(t, profilePath, profile)
-			options := app.Options{Listen: unusedAddress(t), DatabaseURL: databaseSchema(t, ctx), DataDir: filepath.Join(work, "engine"), Profiles: []string{profilePath}}
+			options := app.Options{
+				Listen:      unusedAddress(t),
+				DatabaseURL: databaseSchema(t, ctx),
+				DataDir:     filepath.Join(work, "engine"),
+				Profiles:    []string{profilePath},
+			}
 			optionsPath := filepath.Join(work, "server.json")
 			writeJSON(t, optionsPath, options)
 			api := &client.Client{BaseURL: "http://" + options.Listen, StateDir: filepath.Join(work, "client")}
@@ -96,13 +109,21 @@ func TestRiverAdmissionProcessCrashBoundaries(t *testing.T) {
 				t.Fatal(ctx.Err())
 			}
 			var definition struct{ Definition protocol.Definition }
-			pkg := contract.Package{Entrypoint: "pipeline.yaml", Source: riverAdmissionRecoveryPipeline, Files: []contract.File{{Path: "pipeline.yaml", Content: []byte(riverAdmissionRecoveryPipeline)}}}
+			pkg := contract.Package{
+				Entrypoint: "pipeline.yaml",
+				Source:     riverAdmissionRecoveryPipeline,
+				Files:      []contract.File{{Path: "pipeline.yaml", Content: []byte(riverAdmissionRecoveryPipeline)}},
+			}
 			if err := api.Command(ctx, "/definitions", map[string]any{"package": pkg}, uuid.NewString(), &definition); err != nil {
 				t.Fatal(err)
 			}
 			commands, received, release := commandReceiptProxy(t, ctx, api, "/v1/runs", filepath.Join(work, "admission-client"), mode == "committed_before_receipt")
 			key := uuid.NewString()
-			payload := map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name, "inputs": map[string]any{"marker": marker}}
+			payload := map[string]any{
+				"definitionId": definition.Definition.ID,
+				"profile":      profile.Metadata.Name,
+				"inputs":       map[string]any{"marker": marker},
+			}
 			var barrier *pgx.Conn
 			var table string
 			var barrierPID uint32
@@ -121,7 +142,14 @@ func TestRiverAdmissionProcessCrashBoundaries(t *testing.T) {
 				if mode == "before_delivery_insert" {
 					table, when = "river_job", "NEW.kind IN ('knotra_advance_v1','knotra_execute_v1')"
 				}
-				if _, err := admin.Pool.Exec(ctx, fmt.Sprintf(`CREATE FUNCTION admission_crash_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273656); RETURN NEW; END $$; CREATE TRIGGER admission_crash_barrier BEFORE INSERT ON %s FOR EACH ROW WHEN (%s) EXECUTE FUNCTION admission_crash_barrier()`, table, when)); err != nil {
+				if _, err := admin.Pool.Exec(
+					ctx,
+					fmt.Sprintf(
+						`CREATE FUNCTION admission_crash_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(918273656); RETURN NEW; END $$; CREATE TRIGGER admission_crash_barrier BEFORE INSERT ON %s FOR EACH ROW WHEN (%s) EXECUTE FUNCTION admission_crash_barrier()`,
+						table,
+						when,
+					),
+				); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -133,7 +161,11 @@ func TestRiverAdmissionProcessCrashBoundaries(t *testing.T) {
 				defer ticker.Stop()
 				for {
 					var waiting bool
-					if err := admin.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event='advisory' AND $1::integer=ANY(pg_blocking_pids(pid)))`, int64(barrierPID)).Scan(&waiting); err != nil {
+					if err := admin.Pool.QueryRow(
+						ctx,
+						`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event='advisory' AND $1::integer=ANY(pg_blocking_pids(pid)))`,
+						int64(barrierPID),
+					).Scan(&waiting); err != nil {
 						t.Fatal(err)
 					}
 					if waiting {
@@ -163,7 +195,9 @@ func TestRiverAdmissionProcessCrashBoundaries(t *testing.T) {
 			checkAdmission := func(want int) {
 				t.Helper()
 				var runs, graphs, scopes, nodes, attempts, receipts, advances, executes, effects, budgets, slots int
-				if err := admin.Pool.QueryRow(ctx, `SELECT
+				if err := admin.Pool.QueryRow(
+					ctx,
+					`SELECT
 					(SELECT count(*) FROM knotra_runs),(SELECT count(*) FROM knotra_execution_graphs),
 					(SELECT count(*) FROM knotra_execution_scopes),(SELECT count(*) FROM knotra_execution_nodes),
 					(SELECT count(*) FROM knotra_execution_attempts WHERE state='ready' AND owner IS NULL AND number=1),
@@ -171,11 +205,39 @@ func TestRiverAdmissionProcessCrashBoundaries(t *testing.T) {
 					(SELECT count(*) FROM river_job WHERE kind='knotra_advance_v1'),
 					(SELECT count(*) FROM river_job WHERE kind='knotra_execute_v1'),
 					(SELECT count(*) FROM knotra_operations),COALESCE((SELECT sum(used) FROM knotra_budgets),0),
-					COALESCE((SELECT sum(active_attempts) FROM knotra_execution_scopes),0)`, key).Scan(&runs, &graphs, &scopes, &nodes, &attempts, &receipts, &advances, &executes, &effects, &budgets, &slots); err != nil {
+					COALESCE((SELECT sum(active_attempts) FROM knotra_execution_scopes),0)`,
+					key,
+				).Scan(&runs, &graphs, &scopes, &nodes, &attempts, &receipts, &advances, &executes, &effects, &budgets, &slots); err != nil {
 					t.Fatal(err)
 				}
-				if runs != want || graphs != want || scopes != want || nodes != want || attempts != want || receipts != want || advances != want || executes != want || effects != 0 || budgets != 0 || slots != 0 || calls.Load() != 0 {
-					t.Fatalf("admission run/graph/scope/node/attempt/receipt/jobs=%d/%d/%d/%d/%d/%d/%d/%d want=%d effects/budgets/slots/calls=%d/%d/%d/%d", runs, graphs, scopes, nodes, attempts, receipts, advances, executes, want, effects, budgets, slots, calls.Load())
+				if runs != want ||
+					graphs != want ||
+					scopes != want ||
+					nodes != want ||
+					attempts != want ||
+					receipts != want ||
+					advances != want ||
+					executes != want ||
+					effects != 0 ||
+					budgets != 0 ||
+					slots != 0 ||
+					calls.Load() != 0 {
+					t.Fatalf(
+						"admission run/graph/scope/node/attempt/receipt/jobs=%d/%d/%d/%d/%d/%d/%d/%d want=%d effects/budgets/slots/calls=%d/%d/%d/%d",
+						runs,
+						graphs,
+						scopes,
+						nodes,
+						attempts,
+						receipts,
+						advances,
+						executes,
+						want,
+						effects,
+						budgets,
+						slots,
+						calls.Load(),
+					)
 				}
 			}
 			want := 0
@@ -237,11 +299,25 @@ func TestRiverAdmissionProcessCrashBoundaries(t *testing.T) {
 			checkAdmission(1)
 			var admitted, rootDeadline, nodeDeadline time.Time
 			var backend string
-			if err := admin.Pool.QueryRow(ctx, "SELECT admitted_at,execution_deadline,backend,(SELECT deadline FROM knotra_execution_nodes WHERE run_id=$1) FROM knotra_runs WHERE id=$1", accepted.Run.ID).Scan(&admitted, &rootDeadline, &backend, &nodeDeadline); err != nil {
+			if err := admin.Pool.QueryRow(
+				ctx,
+				"SELECT admitted_at,execution_deadline,backend,(SELECT deadline FROM knotra_execution_nodes WHERE run_id=$1) FROM knotra_runs WHERE id=$1",
+				accepted.Run.ID,
+			).Scan(&admitted, &rootDeadline, &backend, &nodeDeadline); err != nil {
 				t.Fatal(err)
 			}
-			if backend != execution.BackendRiver || !accepted.Run.CreatedAt.Equal(admitted) || !rootDeadline.Equal(admitted.Add(3*time.Minute)) || (want == 1 && (!rootDeadline.Equal(originalRootDeadline) || !nodeDeadline.Equal(originalNodeDeadline))) {
-				t.Fatalf("admitted identity/clock/deadlines changed: backend=%s created=%v admitted=%v root=%v node=%v", backend, accepted.Run.CreatedAt, admitted, rootDeadline, nodeDeadline)
+			if backend != execution.BackendRiver ||
+				!accepted.Run.CreatedAt.Equal(admitted) ||
+				!rootDeadline.Equal(admitted.Add(3*time.Minute)) ||
+				(want == 1 && (!rootDeadline.Equal(originalRootDeadline) || !nodeDeadline.Equal(originalNodeDeadline))) {
+				t.Fatalf(
+					"admitted identity/clock/deadlines changed: backend=%s created=%v admitted=%v root=%v node=%v",
+					backend,
+					accepted.Run.CreatedAt,
+					admitted,
+					rootDeadline,
+					nodeDeadline,
+				)
 			}
 			for _, name := range queues {
 				if err := queue.QueueResume(ctx, name, nil); err != nil {
@@ -255,21 +331,55 @@ func TestRiverAdmissionProcessCrashBoundaries(t *testing.T) {
 			}
 			var attempts, operations, debits, slots, successes, receipts int
 			var finalRootDeadline, finalNodeDeadline time.Time
-			if err := admin.Pool.QueryRow(ctx, `SELECT
+			if err := admin.Pool.QueryRow(
+				ctx,
+				`SELECT
 				(SELECT count(*) FROM knotra_execution_attempts WHERE run_id=$1),
 				(SELECT count(*) FROM knotra_operations WHERE run_id=$1 AND kind='model' AND completed),
 				(SELECT used FROM knotra_budgets WHERE run_id=$1 AND scope=$1 AND kind='model'),
 				(SELECT sum(active_attempts) FROM knotra_execution_scopes WHERE run_id=$1),
 				(SELECT count(*) FROM knotra_events WHERE run_id=$1 AND document->>'type'='node' AND document->>'message'='succeeded'),
 				(SELECT count(*) FROM knotra_commands WHERE id=$2),
-				r.execution_deadline,n.deadline FROM knotra_runs r JOIN knotra_execution_nodes n ON n.run_id=r.id WHERE r.id=$1`, final.ID, key).Scan(&attempts, &operations, &debits, &slots, &successes, &receipts, &finalRootDeadline, &finalNodeDeadline); err != nil {
+				r.execution_deadline,n.deadline FROM knotra_runs r JOIN knotra_execution_nodes n ON n.run_id=r.id WHERE r.id=$1`,
+				final.ID,
+				key,
+			).Scan(&attempts, &operations, &debits, &slots, &successes, &receipts, &finalRootDeadline, &finalNodeDeadline); err != nil {
 				t.Fatal(err)
 			}
-			if attempts != 1 || operations != 1 || debits != 1 || slots != 0 || successes != 1 || receipts != 1 || calls.Load() != 1 || !rootDeadline.Equal(finalRootDeadline) || !nodeDeadline.Equal(finalNodeDeadline) {
-				t.Fatalf("attempts/operations/debits/slots/events/receipts/calls=%d/%d/%d/%d/%d/%d/%d deadlines=%v/%v", attempts, operations, debits, slots, successes, receipts, calls.Load(), rootDeadline.Equal(finalRootDeadline), nodeDeadline.Equal(finalNodeDeadline))
+			if attempts != 1 ||
+				operations != 1 ||
+				debits != 1 ||
+				slots != 0 ||
+				successes != 1 ||
+				receipts != 1 ||
+				calls.Load() != 1 ||
+				!rootDeadline.Equal(finalRootDeadline) ||
+				!nodeDeadline.Equal(finalNodeDeadline) {
+				t.Fatalf(
+					"attempts/operations/debits/slots/events/receipts/calls=%d/%d/%d/%d/%d/%d/%d deadlines=%v/%v",
+					attempts,
+					operations,
+					debits,
+					slots,
+					successes,
+					receipts,
+					calls.Load(),
+					rootDeadline.Equal(finalRootDeadline),
+					nodeDeadline.Equal(finalNodeDeadline),
+				)
 			}
 			other := &client.Client{BaseURL: api.BaseURL, StateDir: filepath.Join(work, "different-client")}
-			if err := other.Command(ctx, "/runs", map[string]any{"definitionId": definition.Definition.ID, "profile": profile.Metadata.Name, "inputs": map[string]any{"marker": "different"}}, key, new(any)); err == nil {
+			if err := other.Command(
+				ctx,
+				"/runs",
+				map[string]any{
+					"definitionId": definition.Definition.ID,
+					"profile":      profile.Metadata.Name,
+					"inputs":       map[string]any{"marker": "different"},
+				},
+				key,
+				new(any),
+			); err == nil {
 				t.Fatal("a reused command key admitted different input")
 			} else {
 				var conflict *client.HTTPError

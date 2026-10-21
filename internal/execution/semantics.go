@@ -19,6 +19,7 @@ func BindPorts(ports map[string]contract.Port, scope contract.Scope, skipMissing
 		if port.Bind == nil {
 			return nil, failure("PLAN_INVALID", "port binding missing: "+name)
 		}
+
 		value, present, err := contract.EvalBinding(*port.Bind, scope)
 		if err != nil {
 			return nil, failure("BINDING_INVALID", name+": "+err.Error())
@@ -35,6 +36,7 @@ func BindPorts(ports map[string]contract.Port, scope contract.Scope, skipMissing
 		if err := contract.ValidateValue(port, value); err != nil {
 			return nil, failure("VALUE_INVALID", name+": "+err.Error())
 		}
+
 		values[name] = value
 	}
 
@@ -111,6 +113,7 @@ func NodeDeadline(now, parent time.Time, node contract.Node) time.Time {
 	if parent.Before(deadline) {
 		return parent
 	}
+
 	return deadline
 }
 
@@ -118,6 +121,7 @@ func RunSwitch(node contract.Node, args contract.Values) (contract.Values, error
 	if node.Switch == nil {
 		return nil, failure("PLAN_INVALID", "missing switch configuration")
 	}
+
 	route := node.Switch.Default
 
 	for _, branch := range node.Switch.Cases {
@@ -166,10 +170,12 @@ func Items(value contract.Value) ([]contract.Value, error) {
 	if value.Artifacts != nil {
 		return nil, failure("INPUT_INVALID", "foreach requires an artifact collection")
 	}
+
 	var raw []json.RawMessage
 	if err := json.Unmarshal(value.JSON, &raw); err != nil || string(value.JSON) == "null" {
 		return nil, failure("INPUT_INVALID", "foreach requires a JSON array")
 	}
+
 	result := make([]contract.Value, len(raw))
 
 	for i, v := range raw {
@@ -191,6 +197,7 @@ func LoopState(ports map[string]contract.Port, scope contract.Scope, initial boo
 		if binding == nil {
 			return nil, failure("PLAN_INVALID", "loop state binding absent: "+name)
 		}
+
 		value, present, err := contract.EvalBinding(*binding, scope)
 		if err != nil {
 			return nil, failure("BINDING_INVALID", err.Error())
@@ -201,6 +208,7 @@ func LoopState(ports map[string]contract.Port, scope contract.Scope, initial boo
 		if err := contract.ValidateValue(port, value); err != nil {
 			return nil, failure("VALUE_INVALID", name+": "+err.Error())
 		}
+
 		result[name] = value
 	}
 

@@ -82,14 +82,17 @@ func InsertExecutionGraph(ctx context.Context, tx pgx.Tx, graph execution.GraphR
 	if err != nil {
 		return err
 	}
+
 	permissions, err := json.Marshal(graph.Permissions)
 	if err != nil {
 		return err
 	}
+
 	scopes, err := json.Marshal(graph.Scopes)
 	if err != nil {
 		return err
 	}
+
 	_, err = db.New(tx).InsertExecutionGraph(ctx, db.InsertExecutionGraphParams{
 		RunID:            graph.RunID,
 		ID:               graph.ID,
@@ -122,14 +125,17 @@ func SaveExecutionGraph(ctx context.Context, tx pgx.Tx, graph execution.GraphRec
 	if err != nil {
 		return err
 	}
+
 	outputs, err := json.Marshal(graph.Outputs)
 	if err != nil {
 		return err
 	}
+
 	failure, err := json.Marshal(graph.Failure)
 	if err != nil {
 		return err
 	}
+
 	tag, err := db.New(tx).SaveExecutionGraph(ctx, db.SaveExecutionGraphParams{
 		RunID:                 graph.RunID,
 		ID:                    graph.ID,
@@ -144,7 +150,10 @@ func SaveExecutionGraph(ctx context.Context, tx pgx.Tx, graph execution.GraphRec
 		return ErrConflict
 	}
 	if err == nil && graph.ParentInstanceID != "" && protocol.Terminal(graph.State) {
-		tag, err = db.New(tx).FinishExecutionChild(ctx, db.FinishExecutionChildParams{RunID: graph.RunID, InstanceID: graph.ParentInstanceID, State: graph.State})
+		tag, err = db.New(tx).FinishExecutionChild(
+			ctx,
+			db.FinishExecutionChildParams{RunID: graph.RunID, InstanceID: graph.ParentInstanceID, State: graph.State},
+		)
 		if err == nil && tag.RowsAffected() != 1 {
 			return ErrConflict
 		}
@@ -156,22 +165,27 @@ func SaveExecutionNode(ctx context.Context, tx pgx.Tx, node execution.NodeRecord
 	if node.InputsOmitted {
 		return errors.New("cannot save a node with omitted admitted inputs")
 	}
+
 	inputs, err := json.Marshal(node.Inputs)
 	if err != nil {
 		return err
 	}
+
 	outputs, err := json.Marshal(node.Outputs)
 	if err != nil {
 		return err
 	}
+
 	failure, err := json.Marshal(node.Failure)
 	if err != nil {
 		return err
 	}
+
 	request, err := json.Marshal(node.Request)
 	if err != nil {
 		return err
 	}
+
 	tag, err := db.New(tx).SaveExecutionNode(ctx, db.SaveExecutionNodeParams{
 		RunID:                 node.RunID,
 		ID:                    node.ID,
@@ -246,6 +260,7 @@ func SaveExecutionControl(ctx context.Context, tx pgx.Tx, control execution.Cont
 	if control.Revision < 1 {
 		return errors.New("control transition requires a positive revision")
 	}
+
 	var elements []byte
 	var err error
 	if control.Revision == 1 {
@@ -258,6 +273,7 @@ func SaveExecutionControl(ctx context.Context, tx pgx.Tx, control execution.Cont
 	if err != nil {
 		return err
 	}
+
 	tag, err := db.New(tx).SaveExecutionControl(ctx, db.SaveExecutionControlParams{
 		RunID: control.RunID, InstanceID: control.InstanceID, Kind: control.Kind,
 		NextPosition: control.NextPosition, Iteration: control.Iteration, Elements: elements,
@@ -268,6 +284,7 @@ func SaveExecutionControl(ctx context.Context, tx pgx.Tx, control execution.Cont
 	if err == nil && tag.RowsAffected() != 1 {
 		return ErrConflict
 	}
+
 	return err
 }
 
@@ -275,7 +292,12 @@ func SaveExecutionControl(ctx context.Context, tx pgx.Tx, control execution.Cont
 // page is validated. Child rows are immutable; no growing result array is saved
 // or reloaded on intermediate coordination steps.
 func ReadForeachCollectedOutputs(ctx context.Context, tx pgx.Tx, control execution.ControlRecord, body contract.Graph) (contract.Values, error) {
-	if control.Kind != "foreach" || control.NextPosition != control.ElementCount || control.CollectionPosition != control.ElementCount || control.ActiveChildren != 0 || control.FailedChildren != 0 || control.SucceededChildren != control.ElementCount {
+	if control.Kind != "foreach" ||
+		control.NextPosition != control.ElementCount ||
+		control.CollectionPosition != control.ElementCount ||
+		control.ActiveChildren != 0 ||
+		control.FailedChildren != 0 ||
+		control.SucceededChildren != control.ElementCount {
 		return nil, errors.New("foreach collection is not complete")
 	}
 	var jsonPorts, artifactPorts []string
@@ -286,7 +308,15 @@ func ReadForeachCollectedOutputs(ctx context.Context, tx pgx.Tx, control executi
 			artifactPorts = append(artifactPorts, name)
 		}
 	}
-	document, err := db.New(tx).ReadForeachCollectedOutputs(ctx, db.ReadForeachCollectedOutputsParams{RunID: control.RunID, InstanceID: new(control.InstanceID), JsonPorts: jsonPorts, ArtifactPorts: artifactPorts})
+	document, err := db.New(tx).ReadForeachCollectedOutputs(
+		ctx,
+		db.ReadForeachCollectedOutputsParams{
+			RunID:         control.RunID,
+			InstanceID:    new(control.InstanceID),
+			JsonPorts:     jsonPorts,
+			ArtifactPorts: artifactPorts,
+		},
+	)
 	var outputs contract.Values
 	if err == nil {
 		err = json.Unmarshal(document, &outputs)

@@ -32,29 +32,42 @@ func TestRunMCPSessionStaysOnWorkerAcrossHandoffDrainAndLoss(t *testing.T) {
 			var calls atomic.Int32
 			var session atomic.Value
 			server := mcp.NewServer(&mcp.Implementation{Name: "affinity-test", Version: "1"}, nil)
-			server.AddTool(&mcp.Tool{Name: "work", InputSchema: map[string]any{"type": "object"}}, func(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				if previous, ok := session.Load().(string); ok && previous != req.Session.ID() {
-					t.Error("run-scoped MCP state moved to another session")
-				}
-				session.Store(req.Session.ID())
-				return &mcp.CallToolResult{StructuredContent: map[string]int32{"calls": calls.Add(1)}}, nil
-			})
+			server.AddTool(
+				&mcp.Tool{Name: "work", InputSchema: map[string]any{"type": "object"}},
+				func(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+					if previous, ok := session.Load().(string); ok && previous != req.Session.ID() {
+						t.Error("run-scoped MCP state moved to another session")
+					}
+					session.Store(req.Session.ID())
+					return &mcp.CallToolResult{StructuredContent: map[string]int32{"calls": calls.Add(1)}}, nil
+				},
+			)
 			remote := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil))
 			t.Cleanup(remote.Close)
 			plan := runtimePlan("")
 			port := contract.Port{Schema: json.RawMessage(`{"type":"object"}`)}
-			first := contract.Node{Type: "tool", Tool: &contract.ToolNode{Server: "tools", Name: "work", Arguments: contract.Binding{Value: json.RawMessage(`{}`)}},
-				Outputs: map[string]contract.Port{"result": port}}
+			first := contract.Node{
+				Type:    "tool",
+				Tool:    &contract.ToolNode{Server: "tools", Name: "work", Arguments: contract.Binding{Value: json.RawMessage(`{}`)}},
+				Outputs: map[string]contract.Port{"result": port},
+			}
 			second := first
 			second.Dependencies = []string{"review"}
-			review := contract.Node{Type: "human", Dependencies: []string{"first"}, Human: &contract.HumanNode{Prompt: contract.TextSource{Text: "Continue?"}},
-				Outputs: map[string]contract.Port{"approved": {Schema: json.RawMessage(`{"type":"boolean"}`)}}}
+			review := contract.Node{
+				Type:         "human",
+				Dependencies: []string{"first"},
+				Human:        &contract.HumanNode{Prompt: contract.TextSource{Text: "Continue?"}},
+				Outputs:      map[string]contract.Port{"approved": {Schema: json.RawMessage(`{"type":"boolean"}`)}},
+			}
 			export := port
 			export.Bind = &contract.Binding{From: "nodes.second.outputs.result"}
 			spec := &plan.Pipelines[plan.Root].Spec
 			spec.Models = nil
 			spec.MCP = map[string]contract.MCPResource{"tools": {Connection: "local", Session: "run"}}
-			spec.Graph = contract.Graph{Nodes: map[string]contract.Node{"first": first, "review": review, "second": second}, Outputs: map[string]contract.Port{"result": export}}
+			spec.Graph = contract.Graph{
+				Nodes:   map[string]contract.Node{"first": first, "review": review, "second": second},
+				Outputs: map[string]contract.Port{"result": export},
+			}
 			plan.Profile.Spec.MCP = map[string]contract.MCPConnection{"local": {Transport: "streamable_http", URL: remote.URL, AllowRunSession: true,
 				AllowedTools: []string{"work"}, ToolPolicies: map[string]contract.ToolPolicy{"work": {Effect: "read"}}}}
 			if err := owner.Host.Runner.Prepare(ctx, &plan); err != nil {
@@ -76,8 +89,18 @@ func TestRunMCPSessionStaysOnWorkerAcrossHandoffDrainAndLoss(t *testing.T) {
 					return owner.execute(ctx, job)
 				}
 				var err error
-				owner.Client, err = New(owner.Store.Pool, Config{EngineID: owner.Store.EngineID, HostID: owner.HostID,
-					Schema: owner.Store.Pool.Config().ConnConfig.RuntimeParams["search_path"], Logger: owner.Client.logger, ExecutionWorkers: 2, ExecutionTimeout: time.Minute}, handlers)
+				owner.Client, err = New(
+					owner.Store.Pool,
+					Config{
+						EngineID:         owner.Store.EngineID,
+						HostID:           owner.HostID,
+						Schema:           owner.Store.Pool.Config().ConnConfig.RuntimeParams["search_path"],
+						Logger:           owner.Client.logger,
+						ExecutionWorkers: 2,
+						ExecutionTimeout: time.Minute,
+					},
+					handlers,
+				)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -94,8 +117,18 @@ func TestRunMCPSessionStaysOnWorkerAcrossHandoffDrainAndLoss(t *testing.T) {
 			peer := &Runtime{Store: owner.Store, Outcomes: owner.Outcomes, WorkerID: uuid.NewString(), HostID: "affinity-peer",
 				Host: &executor.Host{Store: owner.Store, Artifacts: owner.Host.Artifacts, Runner: &adapters.Runner{}}}
 			var err error
-			peer.Client, err = New(owner.Store.Pool, Config{EngineID: owner.Store.EngineID, HostID: peer.HostID,
-				Schema: owner.Store.Pool.Config().ConnConfig.RuntimeParams["search_path"], Logger: owner.Client.logger, ExecutionWorkers: 2, ExecutionTimeout: time.Minute}, peer.Handlers())
+			peer.Client, err = New(
+				owner.Store.Pool,
+				Config{
+					EngineID:         owner.Store.EngineID,
+					HostID:           peer.HostID,
+					Schema:           owner.Store.Pool.Config().ConnConfig.RuntimeParams["search_path"],
+					Logger:           owner.Client.logger,
+					ExecutionWorkers: 2,
+					ExecutionTimeout: time.Minute,
+				},
+				peer.Handlers(),
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -132,7 +165,11 @@ func TestRunMCPSessionStaysOnWorkerAcrossHandoffDrainAndLoss(t *testing.T) {
 				cancel()
 				owner.cancel(context.Canceled)
 				<-owner.Done()
-				if _, err := owner.Store.Pool.Exec(ctx, "UPDATE knotra_workers SET heartbeat_at=clock_timestamp()-interval '21 seconds' WHERE id=$1", owner.WorkerID); err != nil {
+				if _, err := owner.Store.Pool.Exec(
+					ctx,
+					"UPDATE knotra_workers SET heartbeat_at=clock_timestamp()-interval '21 seconds' WHERE id=$1",
+					owner.WorkerID,
+				); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -145,10 +182,19 @@ func TestRunMCPSessionStaysOnWorkerAcrossHandoffDrainAndLoss(t *testing.T) {
 			if mode == "handoff" {
 				await(t, 5*time.Second, func() (bool, error) {
 					var ready bool
-					err := owner.Store.Pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM knotra_execution_attempts WHERE run_id=$1 AND instance_id=$2 AND state='ready')", id, secondID).Scan(&ready)
+					err := owner.Store.Pool.QueryRow(
+						ctx,
+						"SELECT EXISTS(SELECT 1 FROM knotra_execution_attempts WHERE run_id=$1 AND instance_id=$2 AND state='ready')",
+						id,
+						secondID,
+					).Scan(&ready)
 					return ready, err
 				})
-				args := ExecuteArgs{Attempt: execution.AttemptID{RunID: id, InstanceID: secondID, Number: 1}, DispatchGeneration: 1, RoutingVersion: RoutingVersion}
+				args := ExecuteArgs{
+					Attempt:            execution.AttemptID{RunID: id, InstanceID: secondID, Number: 1},
+					DispatchGeneration: 1,
+					RoutingVersion:     RoutingVersion,
+				}
 				if err := pgx.BeginFunc(ctx, peer.Store.Pool, func(tx pgx.Tx) error {
 					metadata, err := json.Marshal(args)
 					if err != nil {
@@ -161,7 +207,12 @@ func TestRunMCPSessionStaysOnWorkerAcrossHandoffDrainAndLoss(t *testing.T) {
 				}
 				await(t, 5*time.Second, func() (bool, error) {
 					var generation int64
-					err := owner.Store.Pool.QueryRow(ctx, "SELECT dispatch_generation FROM knotra_execution_attempts WHERE run_id=$1 AND instance_id=$2", id, secondID).Scan(&generation)
+					err := owner.Store.Pool.QueryRow(
+						ctx,
+						"SELECT dispatch_generation FROM knotra_execution_attempts WHERE run_id=$1 AND instance_id=$2",
+						id,
+						secondID,
+					).Scan(&generation)
 					return generation > 1, err
 				})
 				once.Do(func() { close(release) })
@@ -172,8 +223,13 @@ func TestRunMCPSessionStaysOnWorkerAcrossHandoffDrainAndLoss(t *testing.T) {
 			})
 			var affinity, secondOwner string
 			var failed *string
-			if err := peer.Store.Pool.QueryRow(ctx, `SELECT r.session_worker_id,a.owner,a.result->'failure'->>'code'
-				FROM knotra_runs r JOIN knotra_execution_attempts a ON a.run_id=r.id WHERE r.id=$1 AND a.instance_id=$2`, id, secondID).Scan(&affinity, &secondOwner, &failed); err != nil {
+			if err := peer.Store.Pool.QueryRow(
+				ctx,
+				`SELECT r.session_worker_id,a.owner,a.result->'failure'->>'code'
+				FROM knotra_runs r JOIN knotra_execution_attempts a ON a.run_id=r.id WHERE r.id=$1 AND a.instance_id=$2`,
+				id,
+				secondID,
+			).Scan(&affinity, &secondOwner, &failed); err != nil {
 				t.Fatal(err)
 			}
 			if affinity != owner.WorkerID {

@@ -103,7 +103,12 @@ func TestErrorsUseRequestedFormatAndStderr(t *testing.T) {
 			}
 			ExitCode int
 		}
-		if err == nil || out != "" || json.Unmarshal([]byte(stderr), &response) != nil || response.ExitCode != ExitCode(err) || response.Error.Message == "" || response.Error.Hint == "" {
+		if err == nil ||
+			out != "" ||
+			json.Unmarshal([]byte(stderr), &response) != nil ||
+			response.ExitCode != ExitCode(err) ||
+			response.Error.Message == "" ||
+			response.Error.Hint == "" {
 			t.Fatalf("args=%v out=%s stderr=%s err=%v", args, out, stderr, err)
 		}
 	}
@@ -120,7 +125,12 @@ func TestErrorsRetainEngineDiagnostics(t *testing.T) {
 	}))
 	defer server.Close()
 	out, stderr, err := invoke(t, []string{"info", "-e", server.URL, "-j"}, "")
-	if err == nil || out != "" || !json.Valid([]byte(stderr)) || !strings.Contains(stderr, `"code":"FORBIDDEN"`) || !strings.Contains(stderr, "missing scope") || !strings.Contains(stderr, "KNOTRA_TOKEN") {
+	if err == nil ||
+		out != "" ||
+		!json.Valid([]byte(stderr)) ||
+		!strings.Contains(stderr, `"code":"FORBIDDEN"`) ||
+		!strings.Contains(stderr, "missing scope") ||
+		!strings.Contains(stderr, "KNOTRA_TOKEN") {
 		t.Fatalf("out=%s stderr=%s err=%v", out, stderr, err)
 	}
 }

@@ -40,6 +40,7 @@ func (r *Runtime) observeMetrics() (metric.Registration, error) {
 		if err != nil {
 			return err
 		}
+
 		jobs, err := r.Client.River.JobList(ctx, river.NewJobListParams().First(1).
 			Queues(r.Client.advance, r.Client.execute, r.Client.affinityExecute, r.Client.maintenance, r.Client.cleanup).
 			States(rivertype.JobStateAvailable, rivertype.JobStateRetryable, rivertype.JobStateScheduled).
@@ -47,6 +48,7 @@ func (r *Runtime) observeMetrics() (metric.Registration, error) {
 		if err != nil {
 			return err
 		}
+
 		readyAge := 0.0
 		if len(jobs.Jobs) > 0 {
 			readyAge = max(0, snapshot.ObservedAt.Sub(jobs.Jobs[0].ScheduledAt).Seconds())

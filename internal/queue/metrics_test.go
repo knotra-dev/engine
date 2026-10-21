@@ -107,7 +107,13 @@ func TestSchedulerMetricsCollectDurableBacklogAndFailures(t *testing.T) {
 			return err
 		}
 		var err error
-		claim, err = r.Store.ClaimAttempt(ctx, tx, execution.AttemptID{RunID: id, InstanceID: execution.StableID("n", id+"/root/a"), Number: 1}, 1, r.WorkerID)
+		claim, err = r.Store.ClaimAttempt(
+			ctx,
+			tx,
+			execution.AttemptID{RunID: id, InstanceID: execution.StableID("n", id+"/root/a"), Number: 1},
+			1,
+			r.WorkerID,
+		)
 		return err
 	}); err != nil || claim == nil {
 		t.Fatalf("claim=%+v error=%v", claim, err)
@@ -133,32 +139,60 @@ func TestSchedulerMetricsCollectDurableBacklogAndFailures(t *testing.T) {
 	if err := r.publish(ctx, outcome, false, func(pgx.Tx) error { return injected }); !errors.Is(err, injected) {
 		t.Fatalf("publication failure=%v", err)
 	}
-	if _, err := r.Store.Pool.Exec(ctx, `UPDATE knotra_execution_attempts SET lease_expires_at=clock_timestamp()-interval '1 minute' WHERE run_id=$1;
+	if _, err := r.Store.Pool.Exec(
+		ctx,
+		`UPDATE knotra_execution_attempts SET lease_expires_at=clock_timestamp()-interval '1 minute' WHERE run_id=$1;
 		UPDATE knotra_execution_nodes SET state='waiting_resolution' WHERE run_id=$1;
-		UPDATE knotra_execution_timers SET due_at=clock_timestamp()-interval '1 minute' WHERE run_id=$1`, pgx.QueryExecModeSimpleProtocol, id); err != nil {
+		UPDATE knotra_execution_timers SET due_at=clock_timestamp()-interval '1 minute' WHERE run_id=$1`,
+		pgx.QueryExecModeSimpleProtocol,
+		id,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.cleanup(ctx, &river.Job[CleanupArgs]{Args: CleanupArgs{HostID: "another-host"}}); err == nil {
 		t.Fatal("wrong-host cleanup succeeded")
 	}
 	values = collect()
-	for _, name := range []string{"lease.expired", "outcome.unknown", "slot.reservations", "outcome.pending", "publication.failures", "cleanup.failures"} {
+	for _, name := range []string{
+		"lease.expired",
+		"outcome.unknown",
+		"slot.reservations",
+		"outcome.pending",
+		"publication.failures",
+		"cleanup.failures",
+	} {
 		if values["knotra.scheduler."+name] != 1 {
 			t.Fatalf("%s not observed: %v", name, values)
 		}
 	}
-	if values["knotra.scheduler.outcome.pending.age"] < 60 || values["knotra.scheduler.timer.lag"] < 60 || values["knotra.scheduler.steps"] < 1 {
+	if values["knotra.scheduler.outcome.pending.age"] < 60 ||
+		values["knotra.scheduler.timer.lag"] < 60 ||
+		values["knotra.scheduler.steps"] < 1 {
 		t.Fatalf("durable evidence/timer/step metrics=%v", values)
 	}
-	if _, err := r.Store.Pool.Exec(ctx, `UPDATE knotra_runs SET document=jsonb_set(document::jsonb,'{status}','"cancelled"'),dirty_since=clock_timestamp()-interval '1 day' WHERE id=$1;
+	if _, err := r.Store.Pool.Exec(
+		ctx,
+		`UPDATE knotra_runs SET document=jsonb_set(document::jsonb,'{status}','"cancelled"'),dirty_since=clock_timestamp()-interval '1 day' WHERE id=$1;
 		UPDATE knotra_execution_attempts SET outcome='{}',state='completed' WHERE run_id=$1;
 		UPDATE knotra_execution_slots SET released_at=clock_timestamp() WHERE run_id=$1;
 		UPDATE knotra_execution_nodes SET state='cancelled' WHERE run_id=$1;
-		UPDATE river_job SET queue='unrelated',scheduled_at=clock_timestamp()-interval '1 day'`, pgx.QueryExecModeSimpleProtocol, id); err != nil {
+		UPDATE river_job SET queue='unrelated',scheduled_at=clock_timestamp()-interval '1 day'`,
+		pgx.QueryExecModeSimpleProtocol,
+		id,
+	); err != nil {
 		t.Fatal(err)
 	}
 	values = collect()
-	for _, name := range []string{"dirty_run.age", "ready_job.age", "lease.expired", "outcome.unknown", "slot.reservations", "timer.lag", "outcome.pending.age", "outcome.pending"} {
+	for _, name := range []string{
+		"dirty_run.age",
+		"ready_job.age",
+		"lease.expired",
+		"outcome.unknown",
+		"slot.reservations",
+		"timer.lag",
+		"outcome.pending.age",
+		"outcome.pending",
+	} {
 		if values["knotra.scheduler."+name] != 0 {
 			t.Fatalf("settled %s=%v", name, values)
 		}
@@ -210,7 +244,16 @@ func TestSchedulerMetricsExportThroughConfiguredOTLP(t *testing.T) {
 	}
 	select {
 	case body := <-payloads:
-		for _, name := range []string{"dirty_run.age", "ready_job.age", "lease.expired", "outcome.unknown", "slot.reservations", "timer.lag", "outcome.pending.age", "outcome.pending"} {
+		for _, name := range []string{
+			"dirty_run.age",
+			"ready_job.age",
+			"lease.expired",
+			"outcome.unknown",
+			"slot.reservations",
+			"timer.lag",
+			"outcome.pending.age",
+			"outcome.pending",
+		} {
 			if !bytes.Contains(body, []byte("knotra.scheduler."+name)) {
 				t.Fatalf("OTLP payload omits %s", name)
 			}

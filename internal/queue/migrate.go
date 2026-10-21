@@ -25,6 +25,7 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, schema string) error {
 	if err != nil {
 		return fmt.Errorf("connect River migration lock: %w", err)
 	}
+
 	defer func() {
 		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -39,14 +40,17 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, schema string) error {
 	if _, err := db.New(lock).LockRiverMigrations(ctx, "knotra:river:migrate:"+schema); err != nil {
 		return err
 	}
+
 	migrator, err := rivermigrate.New(riverpgxv5.New(pool), &rivermigrate.Config{Schema: schema})
 	if err != nil {
 		return err
 	}
+
 	existing, err := migrator.ExistingVersions(ctx)
 	if err != nil {
 		return err
 	}
+
 	for _, version := range existing {
 		if version.Version > SchemaTarget {
 			return fmt.Errorf("river schema %d exceeds supported target %d", version.Version, SchemaTarget)
@@ -55,6 +59,7 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, schema string) error {
 	if _, err := migrator.Migrate(ctx, rivermigrate.DirectionUp, &rivermigrate.MigrateOpts{TargetVersion: SchemaTarget}); err != nil {
 		return fmt.Errorf("migrate River: %w", err)
 	}
+
 	validation, err := migrator.Validate(ctx, &rivermigrate.ValidateOpts{TargetVersion: SchemaTarget})
 	if err != nil {
 		return err
@@ -62,5 +67,6 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, schema string) error {
 	if !validation.OK {
 		return fmt.Errorf("river schema validation: %v", validation.Messages)
 	}
+
 	return nil
 }

@@ -25,7 +25,11 @@ func TestObservationContextBoundsPortsAndHidesArtifactPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !truncated || len(data) > maxContextBytes || strings.Contains(string(data), "/sandbox") || strings.Contains(string(data), "large") || !strings.Contains(string(data), "42") {
+	if !truncated ||
+		len(data) > maxContextBytes ||
+		strings.Contains(string(data), "/sandbox") ||
+		strings.Contains(string(data), "large") ||
+		!strings.Contains(string(data), "42") {
 		t.Fatalf("unexpected context preview: %s, truncated %v", data, truncated)
 	}
 	if values["file"].Artifacts[0].Path == "" {
@@ -41,7 +45,11 @@ func TestObservationContextOmitsUnrepresentablePortsWithoutChangingExecution(t *
 	}
 	preview, truncated := observationContext(values)
 	data, err := json.Marshal(preview)
-	if err != nil || !truncated || strings.Contains(string(data), "unsafe") || strings.Contains(string(data), "exponent") || !strings.Contains(string(data), "9007199254740991") {
+	if err != nil ||
+		!truncated ||
+		strings.Contains(string(data), "unsafe") ||
+		strings.Contains(string(data), "exponent") ||
+		!strings.Contains(string(data), "9007199254740991") {
 		t.Fatalf("unsafe numeric preview: %s, truncated %v, error %v", data, truncated, err)
 	}
 	if string(values["unsafe"].JSON) != `{"nested":[-9007199254740993]}` {
@@ -53,7 +61,16 @@ func TestObservationsPreserveProjectionSequenceAndPagedHistory(t *testing.T) {
 	s := testStore(t)
 	runID, _ := setupRun(t, s)
 	ctx := context.Background()
-	projection := execution.Projection{RunID: runID, Sequence: 1, Kind: "node", InstanceID: "node", NodeID: "work", Pipeline: "pipeline.yaml", Status: "running", Time: time.Now()}
+	projection := execution.Projection{
+		RunID:      runID,
+		Sequence:   1,
+		Kind:       "node",
+		InstanceID: "node",
+		NodeID:     "work",
+		Pipeline:   "pipeline.yaml",
+		Status:     "running",
+		Time:       time.Now(),
+	}
 	if err := s.project(ctx, projection); err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +79,13 @@ func TestObservationsPreserveProjectionSequenceAndPagedHistory(t *testing.T) {
 		if index == 1 {
 			instance = "other"
 		}
-		event := protocol.Event{RunID: runID, InstanceID: instance, AttemptID: "node.a1", Type: "model.delta", Data: map[string]any{"content": fmt.Sprint(index)}}
+		event := protocol.Event{
+			RunID:      runID,
+			InstanceID: instance,
+			AttemptID:  "node.a1",
+			Type:       "model.delta",
+			Data:       map[string]any{"content": fmt.Sprint(index)},
+		}
 		if err := s.Observe(ctx, event); err != nil {
 			t.Fatal(err)
 		}
@@ -90,10 +113,22 @@ func TestObservationsPreserveProjectionSequenceAndPagedHistory(t *testing.T) {
 		}
 	}
 	run, err := s.Run(ctx, runID)
-	if err != nil || len(run.Instances) != 1 || run.Instances[0].Status != "succeeded" || run.Instances[0].Inputs == nil || run.Instances[0].Outputs == nil {
+	if err != nil ||
+		len(run.Instances) != 1 ||
+		run.Instances[0].Status != "succeeded" ||
+		run.Instances[0].Inputs == nil ||
+		run.Instances[0].Outputs == nil {
 		t.Fatalf("projection overwritten by observations: %+v %v", run.Instances, err)
 	}
-	if err := s.Observe(ctx, protocol.Event{RunID: runID, InstanceID: "node", Type: "model.completed", Data: map[string]any{"step": 2, "content": strings.Repeat("x", maxObservationBytes)}}); err != nil {
+	if err := s.Observe(
+		ctx,
+		protocol.Event{
+			RunID:      runID,
+			InstanceID: "node",
+			Type:       "model.completed",
+			Data:       map[string]any{"step": 2, "content": strings.Repeat("x", maxObservationBytes)},
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 	last, err := s.Events(ctx, runID, next[len(next)-1].ID)

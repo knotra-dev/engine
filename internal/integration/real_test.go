@@ -40,6 +40,7 @@ func TestRealConcurrentPipelines(t *testing.T) {
 	if os.Getenv("KNOTRA_TEST_REAL") != "1" {
 		t.Skip("set KNOTRA_TEST_REAL=1 for real Ollama/Docker/PostgreSQL acceptance")
 	}
+
 	root, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)
@@ -319,7 +320,9 @@ func TestRealConcurrentPipelines(t *testing.T) {
 		if len(run.run.Instances) != 18 {
 			t.Errorf("unexpected dynamic instance count %d", len(run.run.Instances))
 		}
-		if string(run.run.Outputs["doubled"]) != "[4,8,12]" || string(run.run.Outputs["iterations"]) != "2" || string(run.run.Outputs["verified"]) != "true" {
+		if string(run.run.Outputs["doubled"]) != "[4,8,12]" ||
+			string(run.run.Outputs["iterations"]) != "2" ||
+			string(run.run.Outputs["verified"]) != "true" {
 			t.Errorf("incorrect deterministic outputs: %v", run.run.Outputs)
 		}
 		skipped := 0
@@ -431,39 +434,44 @@ func TestRealConcurrentPipelines(t *testing.T) {
 }
 
 func integrationProfile(mcpURL, ollamaURL string) contract.Profile {
-	return contract.Profile{APIVersion: "knotra/v1", Kind: "EngineProfile", Metadata: contract.Metadata{Name: "real-integration"}, Spec: contract.ProfileSpec{
-		Secrets: map[string]contract.SecretSource{"integration_label": {Env: "KNOTRA_INTEGRATION_LABEL"}},
-		Models: map[string]contract.ModelConnection{"local_model": {
-			Provider:   "ollama",
-			Model:      "qwen3.5:9b",
-			BaseURL:    ollamaURL,
-			Parameters: map[string]any{"think": false, "temperature": 0, "num_predict": 512, "num_ctx": 8192},
-		}},
-		MCP: map[string]contract.MCPConnection{"dataset_service": {
-			Transport:       "streamable_http",
-			URL:             mcpURL,
-			AllowedTools:    []string{"stats", "archive"},
-			AllowRunSession: true,
-			ToolPolicies: map[string]contract.ToolPolicy{
-				"stats":   {Effect: "read"},
-				"archive": {Effect: "write", IdempotencyArgument: "/key"},
+	return contract.Profile{
+		APIVersion: "knotra/v1",
+		Kind:       "EngineProfile",
+		Metadata:   contract.Metadata{Name: "real-integration"},
+		Spec: contract.ProfileSpec{
+			Secrets: map[string]contract.SecretSource{"integration_label": {Env: "KNOTRA_INTEGRATION_LABEL"}},
+			Models: map[string]contract.ModelConnection{"local_model": {
+				Provider:   "ollama",
+				Model:      "qwen3.5:9b",
+				BaseURL:    ollamaURL,
+				Parameters: map[string]any{"think": false, "temperature": 0, "num_predict": 512, "num_ctx": 8192},
+			}},
+			MCP: map[string]contract.MCPConnection{"dataset_service": {
+				Transport:       "streamable_http",
+				URL:             mcpURL,
+				AllowedTools:    []string{"stats", "archive"},
+				AllowRunSession: true,
+				ToolPolicies: map[string]contract.ToolPolicy{
+					"stats":   {Effect: "read"},
+					"archive": {Effect: "write", IdempotencyArgument: "/key"},
+				},
+			}},
+			Sandboxes: map[string]contract.SandboxProfile{"python": {
+				Image:          "python:3.13-alpine",
+				Resources:      contract.Resources{CPU: 0.5, MemoryMiB: 256, DiskMiB: 64, Pids: 64},
+				Network:        contract.Network{Mode: "none"},
+				AllowedTools:   []string{"files.read", "files.write", "process.exec"},
+				AllowedSecrets: []string{"integration_label"},
+			}},
+			Limits: contract.Limits{
+				Timeout:            "30m",
+				MaxConcurrentNodes: 6,
+				MaxNodeInstances:   128,
+				MaxModelCalls:      40,
+				MaxToolCalls:       100,
 			},
-		}},
-		Sandboxes: map[string]contract.SandboxProfile{"python": {
-			Image:          "python:3.13-alpine",
-			Resources:      contract.Resources{CPU: 0.5, MemoryMiB: 256, DiskMiB: 64, Pids: 64},
-			Network:        contract.Network{Mode: "none"},
-			AllowedTools:   []string{"files.read", "files.write", "process.exec"},
-			AllowedSecrets: []string{"integration_label"},
-		}},
-		Limits: contract.Limits{
-			Timeout:            "30m",
-			MaxConcurrentNodes: 6,
-			MaxNodeInstances:   128,
-			MaxModelCalls:      40,
-			MaxToolCalls:       100,
 		},
-	}}
+	}
 }
 
 func TestRealScenarioCompiles(t *testing.T) {
@@ -673,56 +681,60 @@ func TestMCPServiceProcess(t *testing.T) {
 		err := appendAudit(auditRecord{"stats", input.Marker, req.Session.ID(), time.Now().UTC()})
 		return nil, result, err
 	})
-	mcp.AddTool(server, &mcp.Tool{Name: "archive", Description: "Durably save a report summary once per idempotency key."}, func(_ context.Context, req *mcp.CallToolRequest, input archiveInput) (*mcp.CallToolResult, archiveOutput, error) {
-		mu.Lock()
-		defer mu.Unlock()
-		hash := sha256.Sum256([]byte(input.Key))
-		path := filepath.Join(directory, "record-"+hex.EncodeToString(hash[:])+".json")
-		record := struct {
-			Input  archiveInput
-			Output archiveOutput
-		}{
-			Input:  input,
-			Output: archiveOutput{Receipt: input.Key, Total: input.Total, Writes: 1},
-		}
-		raw, err := os.ReadFile(path)
-		if err == nil {
-			var existing struct {
+	mcp.AddTool(
+		server,
+		&mcp.Tool{Name: "archive", Description: "Durably save a report summary once per idempotency key."},
+		func(_ context.Context, req *mcp.CallToolRequest, input archiveInput) (*mcp.CallToolResult, archiveOutput, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			hash := sha256.Sum256([]byte(input.Key))
+			path := filepath.Join(directory, "record-"+hex.EncodeToString(hash[:])+".json")
+			record := struct {
 				Input  archiveInput
 				Output archiveOutput
+			}{
+				Input:  input,
+				Output: archiveOutput{Receipt: input.Key, Total: input.Total, Writes: 1},
 			}
-			if err := json.Unmarshal(raw, &existing); err != nil {
+			raw, err := os.ReadFile(path)
+			if err == nil {
+				var existing struct {
+					Input  archiveInput
+					Output archiveOutput
+				}
+				if err := json.Unmarshal(raw, &existing); err != nil {
+					return nil, archiveOutput{}, err
+				}
+				if existing.Input != input {
+					return nil, archiveOutput{}, fmt.Errorf("idempotency key reused with other input")
+				}
+				return nil, existing.Output, nil
+			}
+			if !os.IsNotExist(err) {
 				return nil, archiveOutput{}, err
 			}
-			if existing.Input != input {
-				return nil, archiveOutput{}, fmt.Errorf("idempotency key reused with other input")
+			raw, err = json.Marshal(record)
+			if err != nil {
+				return nil, archiveOutput{}, err
 			}
-			return nil, existing.Output, nil
-		}
-		if !os.IsNotExist(err) {
-			return nil, archiveOutput{}, err
-		}
-		raw, err = json.Marshal(record)
-		if err != nil {
-			return nil, archiveOutput{}, err
-		}
-		file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-		if err != nil {
-			return nil, archiveOutput{}, err
-		}
-		if _, err = file.Write(raw); err == nil {
-			err = file.Sync()
-		}
-		closeErr := file.Close()
-		if err == nil {
-			err = closeErr
-		}
-		if err != nil {
-			return nil, archiveOutput{}, err
-		}
-		err = appendAudit(auditRecord{"archive", input.Marker, req.Session.ID(), time.Now().UTC()})
-		return nil, record.Output, err
-	})
+			file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+			if err != nil {
+				return nil, archiveOutput{}, err
+			}
+			if _, err = file.Write(raw); err == nil {
+				err = file.Sync()
+			}
+			closeErr := file.Close()
+			if err == nil {
+				err = closeErr
+			}
+			if err != nil {
+				return nil, archiveOutput{}, err
+			}
+			err = appendAudit(auditRecord{"archive", input.Marker, req.Session.ID(), time.Now().UTC()})
+			return nil, record.Output, err
+		},
+	)
 	handler := mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return server },
 		&mcp.StreamableHTTPOptions{JSONResponse: true},

@@ -28,6 +28,7 @@ func pointer(v any, path string) (any, bool, error) {
 	if !strings.HasPrefix(path, "/") {
 		return nil, false, fmt.Errorf("invalid JSON Pointer")
 	}
+
 	segments := []string{}
 
 	for _, part := range strings.Split(path[1:], "/") {
@@ -172,6 +173,7 @@ func EvalBinding(b Binding, s Scope) (Value, bool, error) {
 		out, err := JSONValue(v)
 		return out, true, err
 	}
+
 	return Value{}, false, fmt.Errorf("binding has no selector")
 }
 
@@ -231,6 +233,7 @@ func BindingReferences(binding Binding) ([]string, error) {
 	if err := visit(binding); err != nil {
 		return nil, err
 	}
+
 	return sortedKeys(refs), nil
 }
 
@@ -261,6 +264,7 @@ func expression(source string) (*checkedExpression, error) {
 	if len(source) > 8192 {
 		return nil, fmt.Errorf("CEL expression exceeds 8192 bytes")
 	}
+
 	opts := []cel.EnvOption{cel.CustomTypeAdapter(orderedAdapter{})}
 
 	for _, name := range []string{"inputs", "args", "nodes", "state", "iteration", "body"} {
@@ -271,14 +275,17 @@ func expression(source string) (*checkedExpression, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	a, issues := env.Compile(source)
 	if issues != nil && issues.Err() != nil {
 		return nil, issues.Err()
 	}
+
 	proto, err := cel.AstToCheckedExpr(a)
 	if err != nil {
 		return nil, err
 	}
+
 	refs := map[string]bool{}
 	count := 0
 	if err := checkExpr(proto.Expr, refs, &count); err != nil {
@@ -287,10 +294,12 @@ func expression(source string) (*checkedExpression, error) {
 	if count > 4096 {
 		return nil, fmt.Errorf("CEL AST exceeds 4096 nodes")
 	}
+
 	program, err := env.Program(a, cel.CostLimit(100000), cel.CustomDecoratorV2(orderedMapConstructors))
 	if err != nil {
 		return nil, err
 	}
+
 	x := &checkedExpression{ast: a, program: program, refs: sortedKeys(refs)}
 	return expressions.store(source, x), nil
 }
@@ -339,6 +348,7 @@ func accessChain(e *exprpb.Expr) (string, []string, []*exprpb.Expr, bool) {
 		}
 		return root, append(parts, key), dyn, ok
 	}
+
 	return "", nil, nil, false
 }
 
@@ -346,6 +356,7 @@ func checkExpr(e *exprpb.Expr, refs map[string]bool, count *int) error {
 	if e == nil {
 		return nil
 	}
+
 	*count++
 	if root, parts, dynamic, ok := accessChain(e); ok && namespaces[root] {
 		length := 1
@@ -371,6 +382,7 @@ func checkExpr(e *exprpb.Expr, refs map[string]bool, count *int) error {
 		if root == "iteration" && parts[0] != "item" && parts[0] != "index" {
 			return fmt.Errorf("unknown iteration field")
 		}
+
 		refs[strings.Join(append([]string{root}, parts[:length]...), ".")] = true
 		*count += len(parts)
 
@@ -382,6 +394,7 @@ func checkExpr(e *exprpb.Expr, refs map[string]bool, count *int) error {
 
 		return nil
 	}
+
 	visit := func(child *exprpb.Expr) error { return checkExpr(child, refs, count) }
 
 	switch x := e.ExprKind.(type) {
@@ -502,6 +515,7 @@ func eval(source string, s Scope) (Value, bool, error) {
 	if err != nil {
 		return Value{}, false, err
 	}
+
 	activation["body"] = map[string]any{"outputs": body}
 	iteration := map[string]any{"index": int64(s.IterationIndex)}
 	if s.IterationItem != nil && len(s.IterationItem.JSON) > 0 {
@@ -516,10 +530,12 @@ func eval(source string, s Scope) (Value, bool, error) {
 	if err != nil {
 		return Value{}, false, err
 	}
+
 	native, err := celJSON(result)
 	if err != nil {
 		return Value{}, false, err
 	}
+
 	v, err := JSONValue(native)
 	return v, true, err
 }

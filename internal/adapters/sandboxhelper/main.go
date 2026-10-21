@@ -71,6 +71,7 @@ func main() {
 		}
 		return
 	}
+
 	var req request
 	if len(os.Args) > 2 {
 		var data []byte
@@ -124,6 +125,7 @@ func supervise(control string) error {
 	if err := protectSupervisor(); err != nil {
 		return fmt.Errorf("cannot protect sandbox supervisor: %w", err)
 	}
+
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT, syscall.SIGCHLD)
 	defer signal.Stop(signals)
@@ -208,6 +210,7 @@ func (s *supervisorLease) check(control string, now time.Time) error {
 		}
 		return errors.New("sandbox lease expired without a fresh host heartbeat")
 	}
+
 	return nil
 }
 
@@ -220,6 +223,7 @@ func execute(req request) (any, error) {
 	if len(req.Command) == 0 || req.Command[0] == "" {
 		return nil, errors.New("empty command")
 	}
+
 	d := 5 * time.Minute
 	if req.Timeout != "" {
 		var err error
@@ -267,6 +271,7 @@ func safePath(root, name string, createParents bool) (string, error) {
 	if name == "" || filepath.IsAbs(name) || strings.Contains(name, "\\") || strings.ContainsRune(name, 0) {
 		return "", errors.New("invalid relative path")
 	}
+
 	parts := strings.Split(name, "/")
 	current := root
 
@@ -274,6 +279,7 @@ func safePath(root, name string, createParents bool) (string, error) {
 		if part == "" || part == "." || part == ".." {
 			return "", errors.New("invalid path component")
 		}
+
 		current = filepath.Join(current, part)
 		info, err := os.Lstat(current)
 		if os.IsNotExist(err) && createParents && i < len(parts)-1 {
@@ -313,10 +319,12 @@ func readFile(req request, collect bool) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	f, err := os.Open(name)
 	if err != nil {
 		return nil, err
 	}
+
 	defer func() { _ = f.Close() }()
 	info, err := f.Stat()
 	if err != nil {
@@ -325,6 +333,7 @@ func readFile(req request, collect bool) (any, error) {
 	if !info.Mode().IsRegular() || hasMultipleLinks(info) {
 		return nil, errors.New("expected a regular file with one link")
 	}
+
 	limitBytes := int64(limit)
 	if collect {
 		limitBytes = 64 << 20
@@ -332,6 +341,7 @@ func readFile(req request, collect bool) (any, error) {
 	if info.Size() > limitBytes {
 		return nil, errors.New("file exceeds size limit")
 	}
+
 	data, err := io.ReadAll(io.LimitReader(f, limitBytes+1))
 	if err != nil {
 		return nil, err
@@ -339,6 +349,7 @@ func readFile(req request, collect bool) (any, error) {
 	if int64(len(data)) > limitBytes {
 		return nil, errors.New("file exceeds size limit")
 	}
+
 	encoding := req.Encoding
 	if encoding == "" {
 		encoding = "utf8"
@@ -365,6 +376,7 @@ func writeFile(req request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	var data []byte
 
 	switch req.Encoding {
@@ -388,6 +400,7 @@ func writeFile(req request) (any, error) {
 	if len(data) > limit {
 		return nil, errors.New("file exceeds size limit")
 	}
+
 	mode := req.Mode
 	if mode == "" {
 		mode = "create"
@@ -409,6 +422,7 @@ func writeFile(req request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	temp := f.Name()
 	defer func() { _ = os.Remove(temp) }()
 	if _, err = f.Write(data); err != nil {
@@ -426,6 +440,7 @@ func writeFile(req request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return map[string]any{"bytesWritten": len(data)}, nil
 }
 
@@ -438,6 +453,7 @@ func quiesce() error {
 		if err != nil {
 			return err
 		}
+
 		alive := false
 
 		for _, entry := range entries {
@@ -460,6 +476,7 @@ func quiesce() error {
 		if !alive {
 			return nil
 		}
+
 		time.Sleep(10 * time.Millisecond)
 	}
 
