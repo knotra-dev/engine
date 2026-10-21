@@ -127,8 +127,10 @@ func TestCompatibleReaderAcceptsTextAndFragmentedTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = res.Body.Close() }()
-	result, first, err := readCompatibleResponse(context.Background(), res, time.Now(), nil, "model", 1)
-	if err != nil || result.Message.Content != "Hello world" || first <= 0 || !result.Done {
+	// A fully buffered response can be consumed within one Windows clock tick.
+	started := time.Now().Add(-time.Second)
+	result, first, err := readCompatibleResponse(context.Background(), res, started, nil, "model", 1)
+	if err != nil || result.Message.Content != "Hello world" || first < time.Second || !result.Done {
 		t.Fatalf("response=%+v first=%v err=%v", result, first, err)
 	}
 }
