@@ -54,11 +54,6 @@ func ExitCode(err error) int {
 	return 1
 }
 
-func New(options Options) *cobra.Command {
-	root, _ := newCommand(options)
-	return root
-}
-
 func newCommand(options Options) (*cobra.Command, *commandState) {
 	if options.In == nil {
 		options.In = os.Stdin

@@ -447,13 +447,15 @@ func integrationRunner(t *testing.T) *Runner {
 	if root == "" {
 		root = "../../.knotra/test-work"
 	}
-	return &Runner{
+	runner := &Runner{
 		Hooks:         newHooks(),
 		HelperPath:    helper,
 		WorkDir:       root,
 		DockerHost:    os.Getenv("DOCKER_HOST"),
 		FirewallImage: os.Getenv("KNOTRA_TEST_FIREWALL_IMAGE"),
 	}
+	t.Cleanup(func() { _ = runner.Close() })
+	return runner
 }
 
 func TestDockerCodeAndArtifacts(t *testing.T) {

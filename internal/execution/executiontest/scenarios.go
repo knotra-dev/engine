@@ -34,9 +34,8 @@ type Scenario struct {
 }
 
 type Observation struct {
-	Result   execution.RunResult
-	Calls    []execution.ExecuteRequest
-	Requests []execution.Request
+	Result execution.RunResult
+	Calls  []execution.ExecuteRequest
 	// Terminal node observations are keyed by stable instance identity. The
 	// suite makes no assertion about order of independent branch completions.
 	TerminalNodes map[string]string

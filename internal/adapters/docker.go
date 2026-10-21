@@ -52,6 +52,16 @@ func (d *dockerClient) remove(ctx context.Context, id string) error {
 }
 
 func (r *Runner) docker(ctx context.Context) (*dockerClient, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	cache := r.cache()
+	cache.mu.Lock()
+	client := cache.docker
+	cache.mu.Unlock()
+	if client != nil {
+		return client, nil
+	}
 	host := r.DockerHost
 	if host == "" {
 		host = os.Getenv("DOCKER_HOST")
@@ -80,7 +90,13 @@ func (r *Runner) docker(ctx context.Context) (*dockerClient, error) {
 	}
 
 	transport := &http.Transport{IdleConnTimeout: 30 * time.Second, MaxIdleConns: 2, MaxIdleConnsPerHost: 2, DialContext: dial}
-	return &dockerClient{client: &http.Client{Transport: transport}, base: "http://docker"}, nil
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	// Keep discovery and connections shared across maintenance and executions.
+	if cache.docker == nil {
+		cache.docker = &dockerClient{client: &http.Client{Transport: transport}, base: "http://docker"}
+	}
+	return cache.docker, nil
 }
 
 type dockerDialFunc func(context.Context, string, string) (net.Conn, error)
@@ -172,9 +188,6 @@ type sandbox struct {
 }
 
 func (s *sandbox) close() error {
-	if s.docker != nil {
-		defer s.docker.client.CloseIdleConnections()
-	}
 	if s.stopLease != nil {
 		s.stopLease()
 		<-s.leaseDone

@@ -35,7 +35,7 @@ func TestDockerHTTPOverNamedPipe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer docker.client.CloseIdleConnections()
+	t.Cleanup(func() { _ = runner.Close() })
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var info struct{ OSType, Architecture string }

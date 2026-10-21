@@ -33,6 +33,7 @@ var ErrConflict = errors.New("operation conflicts with existing state")
 type Store struct {
 	Pool     *pgxpool.Pool
 	EngineID string
+	plans    admittedPlanCache
 }
 
 func Open(ctx context.Context, dsn string) (_ *Store, err error) {
@@ -203,8 +204,28 @@ func (s *Store) Run(ctx context.Context, id string) (protocol.Run, error) {
 	return v, classify(e)
 }
 
+// Plan returns a shared, immutable admitted plan. Admission reads inside a
+// transaction must use ReadPlan so uncommitted plans never enter this cache.
 func (s *Store) Plan(ctx context.Context, id string) (contract.Plan, error) {
-	return ReadPlan(ctx, s.Pool, id)
+	if err := ctx.Err(); err != nil {
+		return contract.Plan{}, err
+	}
+	if plan, ok := s.plans.load(id); ok {
+		return plan, nil
+	}
+	var plan contract.Plan
+	b, err := db.New(s.Pool).ReadPlan(ctx, id)
+	if err == nil {
+		err = json.Unmarshal(b, &plan)
+	}
+	if err != nil {
+		return plan, classify(err)
+	}
+	if err := ctx.Err(); err != nil {
+		return contract.Plan{}, err
+	}
+	s.plans.store(id, plan, len(b))
+	return plan, nil
 }
 
 func ReadPlan(ctx context.Context, q Querier, id string) (contract.Plan, error) {

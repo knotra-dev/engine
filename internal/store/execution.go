@@ -207,26 +207,54 @@ func ApplyWake(ctx context.Context, tx pgx.Tx, id string, generation int64) (boo
 // authoritative state in the same transaction. Complete graph/node values are
 // persisted independently, before calling this bounded observation projection.
 func (s *Store) ProjectExecution(ctx context.Context, tx pgx.Tx, p execution.Projection) error {
-	run, err := LockExecutionRun(ctx, tx, p.RunID)
+	return s.ProjectExecutionBatch(ctx, tx, []execution.Projection{p})
+}
+
+// ProjectExecutionBatch allocates fresh sequences and folds a scheduler step's
+// ordered projections under one run lock, writing its public run document once.
+func (s *Store) ProjectExecutionBatch(ctx context.Context, tx pgx.Tx, projections []execution.Projection) error {
+	if len(projections) == 0 {
+		return nil
+	}
+	id := projections[0].RunID
+	for _, p := range projections {
+		if p.RunID != id || p.Sequence != 0 {
+			return fmt.Errorf("scheduler projections require one run and transaction-allocated sequences")
+		}
+	}
+	run, err := LockExecutionRun(ctx, tx, id)
 	if err != nil {
 		return err
 	}
 	if err := checkExecutionVersion(run); err != nil {
 		return err
 	}
-	if p.Sequence != 0 {
-		return fmt.Errorf("scheduler projections must allocate their sequence in the transaction")
-	}
-
-	storedExecutionEventSequence, err := db.New(tx).NextExecutionEventSequence(ctx, p.RunID)
+	last, err := db.New(tx).NextExecutionEventSequence(ctx, db.NextExecutionEventSequenceParams{ID: id, Count: int64(len(projections))})
 	if err != nil {
 		return err
 	}
-
-	p.Sequence = storedExecutionEventSequence
-
-	if p.Time.IsZero() {
-		p.Time = run.Now
+	stored, err := db.New(tx).LockRunProjection(ctx, id)
+	if err != nil {
+		return err
 	}
-	return s.ProjectTx(ctx, tx, p)
+	var public protocol.Run
+	if err := json.Unmarshal(stored.Document, &public); err != nil {
+		return err
+	}
+	sequence := stored.Sequence
+	for i, p := range projections {
+		p.Sequence = last - int64(len(projections)-1-i)
+		if p.Time.IsZero() {
+			p.Time = run.Now
+		}
+		if err := projectEvent(ctx, tx, p, &public, &sequence); err != nil {
+			return err
+		}
+	}
+	b, err := raw(public)
+	if err != nil {
+		return err
+	}
+	_, err = db.New(tx).UpdateRunProjection(ctx, db.UpdateRunProjectionParams{ID: id, Document: b, Sequence: sequence})
+	return err
 }

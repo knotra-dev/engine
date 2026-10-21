@@ -47,8 +47,6 @@ func (r *Runner) ResourcePage(ctx context.Context, before string) ([]execution.R
 	if err != nil {
 		return nil, before, err
 	}
-
-	defer docker.client.CloseIdleConnections()
 	labels := []string{"io.knotra.engine=" + r.EngineID, "io.knotra.host=" + r.HostID}
 	filters := map[string][]string{"label": labels}
 	if before != "" {
@@ -123,8 +121,6 @@ func (r *Runner) CleanupResource(ctx context.Context, resource execution.Resourc
 	if err != nil {
 		return err
 	}
-
-	defer docker.client.CloseIdleConnections()
 	labels := resource.Labels()
 	filters, err := json.Marshal(map[string][]string{"label": {
 		"io.knotra.engine=" + resource.EngineID, "io.knotra.host=" + resource.HostID, "io.knotra.resource=" + resource.ID,

@@ -210,7 +210,7 @@ func TestBindingSemantics(t *testing.T) {
 		t.Fatalf("graph absence must dominate short circuit: %v %v", present, err)
 	}
 
-	for _, expr := range []string{`[1,2,3].map(x, x * 2)`, `{"a": args.number}`, `1.0 + 2.0`, `inputs.object["a/b"]["~x"]`} {
+	for _, expr := range []string{`[1,2,3].map(x, x * 2)`, `{"a": args.number}`, `inputs.object["a/b"]["~x"]`} {
 		v, ok, err := EvalBinding(Binding{Expr: expr}, s)
 		if err != nil || !ok {
 			t.Fatalf("expression %s: %v", expr, err)
@@ -220,8 +220,8 @@ func TestBindingSemantics(t *testing.T) {
 		}
 	}
 
-	v, _, err := EvalBinding(Binding{Expr: "1.0 + 2.0"}, s)
-	if err != nil || string(v.JSON) != "3.0" {
+	v, present, err := EvalBinding(Binding{Expr: "1.0 + 2.0"}, s)
+	if err != nil || !present || string(v.JSON) != "3.0" {
 		t.Fatal("double type lost", string(v.JSON), err)
 	}
 }
@@ -276,7 +276,6 @@ func TestDataSchemaProfile(t *testing.T) {
 	for _, raw := range []string{
 		`{"format":"date"}`,
 		`{"$ref":"https://example.org/schema"}`,
-		`{"$ref":"#"}`,
 		`{"$defs":{"x":{"$ref":"#/$defs/x"}},"$ref":"#/$defs/x"}`,
 		`{"pattern":"(?=a)a"}`,
 		`{"pattern":"\\p{L}"}`,

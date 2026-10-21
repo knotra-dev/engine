@@ -25,7 +25,7 @@ import (
 
 // Integration tests create isolated schemas and never reset a developer's DB.
 // Run with KNOTRA_TEST_DATABASE_URL set to a disposable/local PostgreSQL DSN.
-func testStore(t *testing.T) *Store {
+func testStore(t testing.TB) *Store {
 	t.Helper()
 	dsn := os.Getenv("KNOTRA_TEST_DATABASE_URL")
 	if dsn == "" {
@@ -71,7 +71,7 @@ func testStore(t *testing.T) *Store {
 	return db
 }
 
-func setupDefinition(t *testing.T, s *Store) (string, contract.Plan) {
+func setupDefinition(t testing.TB, s *Store) (string, contract.Plan) {
 	t.Helper()
 	ctx := context.Background()
 	tx, err := s.Pool.Begin(ctx)

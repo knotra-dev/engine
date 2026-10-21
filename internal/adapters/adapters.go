@@ -78,6 +78,7 @@ type Runner struct {
 
 type sessionCache struct {
 	mu            sync.Mutex
+	docker        *dockerClient
 	sessions      map[string]*mcpSession
 	initializing  map[string]chan struct{}
 	discoveryGate chan struct{}
@@ -111,8 +112,9 @@ func (r *Runner) cache() *sessionCache {
 	return r.shared
 }
 
-// WithHooks creates an execution-scoped runner while retaining shared run MCP
-// sessions. Configure a runner before its first use; never mutate it concurrently.
+// WithHooks creates an execution-scoped runner while retaining the Docker client
+// and run MCP sessions. Configure a runner before its first use; never mutate it
+// concurrently.
 func (r *Runner) WithHooks(h Hooks) *Runner {
 	return &Runner{
 		Hooks:            h,
@@ -292,9 +294,13 @@ func (r *Runner) Close() error {
 	<-cache.discoveryGate
 	cache.mu.Lock()
 	keys := slices.Clone(cache.keys)
+	docker := cache.docker
 	cache.mu.Unlock()
 	for _, key := range keys {
 		failures = errors.Join(failures, r.releaseSession(key, true))
+	}
+	if docker != nil {
+		docker.client.CloseIdleConnections()
 	}
 	return failures
 }

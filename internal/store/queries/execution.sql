@@ -24,5 +24,6 @@ WHERE id=$1 RETURNING wake_generation;
 UPDATE knotra_runs SET applied_generation=wake_generation,state_revision=state_revision+1,dirty_since=NULL WHERE id=$1;
 
 -- name: NextExecutionEventSequence :one
-UPDATE knotra_runs SET execution_event_sequence=execution_event_sequence+1,state_revision=state_revision+1
-WHERE id=$1 RETURNING execution_event_sequence;
+UPDATE knotra_runs SET execution_event_sequence=execution_event_sequence+sqlc.arg(count)::bigint,
+    state_revision=state_revision+sqlc.arg(count)::bigint
+WHERE id=sqlc.arg(id) RETURNING execution_event_sequence;

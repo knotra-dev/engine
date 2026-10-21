@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/knotra-dev/engine/internal/execution"
@@ -111,6 +112,7 @@ func TestCleanupResourceVerifiesLabelsAndConfinesDirectoryRemoval(t *testing.T) 
 			}()
 			t.Cleanup(func() { _ = server.Close() })
 			runner.DockerHost = "unix://" + socket
+			t.Cleanup(func() { _ = runner.Close() })
 			err = runner.CleanupResource(t.Context(), resource)
 			wantError := mode == "worker_mismatch" || mode == "generation_mismatch" || mode == "delete_failed"
 			if (err != nil) != wantError {
@@ -149,6 +151,8 @@ func TestResourceInventoryPagesAndRejectsForeignLabels(t *testing.T) {
 		t.Fatal(err)
 	}
 	var calls atomic.Int32
+	var connections atomic.Int32
+	closed := make(chan struct{}, 1)
 	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var filters map[string][]string
 		if err := json.Unmarshal([]byte(r.URL.Query().Get("filters")), &filters); err != nil {
@@ -195,7 +199,17 @@ func TestResourceInventoryPagesAndRejectsForeignLabels(t *testing.T) {
 		if err := json.NewEncoder(w).Encode(containers); err != nil {
 			t.Error(err)
 		}
-	})}
+	}), ConnState: func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			connections.Add(1)
+		}
+		if state == http.StateClosed {
+			select {
+			case closed <- struct{}{}:
+			default:
+			}
+		}
+	}}
 	go func() {
 		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Error(err)
@@ -203,6 +217,7 @@ func TestResourceInventoryPagesAndRejectsForeignLabels(t *testing.T) {
 	}()
 	t.Cleanup(func() { _ = server.Close() })
 	runner := &Runner{EngineID: resource.EngineID, HostID: resource.HostID, DockerHost: "unix://" + socket}
+	t.Cleanup(func() { _ = runner.Close() })
 	page, cursor, err := runner.ResourcePage(t.Context(), "")
 	if err != nil || len(page) != 64 || cursor != "container-63" || page[0].Ownership != resource.Ownership {
 		t.Fatalf("first page=%d cursor=%q error=%v", len(page), cursor, err)
@@ -219,5 +234,16 @@ func TestResourceInventoryPagesAndRejectsForeignLabels(t *testing.T) {
 	}
 	if page, _, err := runner.ResourcePage(t.Context(), ""); err == nil || len(page) != 0 {
 		t.Fatalf("oversized inventory was accepted: %d %v", len(page), err)
+	}
+	if got := connections.Load(); got != 1 {
+		t.Fatalf("inventory opened %d Docker connections for %d scans", got, calls.Load())
+	}
+	if err := runner.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("runner shutdown left its Docker connection open")
 	}
 }

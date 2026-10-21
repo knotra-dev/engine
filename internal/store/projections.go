@@ -42,14 +42,25 @@ func (s *Store) ProjectTx(ctx context.Context, tx pgx.Tx, p execution.Projection
 	if duplicate {
 		return nil
 	}
+	if err := projectEvent(ctx, tx, p, &run, &seq); err != nil {
+		return err
+	}
+	b, e = raw(run)
+	if e != nil {
+		return e
+	}
+	_, e = db.New(tx).UpdateRunProjection(ctx, db.UpdateRunProjectionParams{ID: p.RunID, Document: b, Sequence: seq})
+	return e
+}
 
+func projectEvent(ctx context.Context, tx pgx.Tx, p execution.Projection, run *protocol.Run, seq *int64) error {
 	switch {
 	case p.InstanceID != "" && p.Kind == "node":
 		if p.Status == "succeeded" {
 			for _, value := range p.Outputs {
 				for _, artifact := range value.Artifacts {
-					if _, e = db.New(tx).PublishArtifact(ctx, db.PublishArtifactParams{ID: artifact.ID, OriginRunID: p.RunID}); e != nil {
-						return e
+					if _, err := db.New(tx).PublishArtifact(ctx, db.PublishArtifactParams{ID: artifact.ID, OriginRunID: p.RunID}); err != nil {
+						return err
 					}
 				}
 			}
@@ -82,7 +93,7 @@ func (s *Store) ProjectTx(ctx context.Context, tx pgx.Tx, p execution.Projection
 		}
 	case p.Kind == "diagnostic" && p.Failure != nil:
 		run.Diagnostics = append(run.Diagnostics, diagnostic(p.Failure))
-	case p.Kind == "run" && p.InstanceID == "" && p.Sequence > seq && !protocol.Terminal(run.Status):
+	case p.Kind == "run" && p.InstanceID == "" && p.Sequence > *seq && !protocol.Terminal(run.Status):
 		run.Status = p.Status
 		if p.Outputs != nil {
 			run.Outputs = map[string]json.RawMessage{}
@@ -104,8 +115,8 @@ func (s *Store) ProjectTx(ctx context.Context, tx pgx.Tx, p execution.Projection
 	}
 	switch {
 	case protocol.Terminal(run.Status):
-		if _, e = db.New(tx).CancelOpenRequests(ctx, p.RunID); e != nil {
-			return e
+		if _, err := db.New(tx).CancelOpenRequests(ctx, p.RunID); err != nil {
+			return err
 		}
 		run.AvailableActions = []string{}
 	case run.Status == "waiting_resolution":
@@ -117,18 +128,10 @@ func (s *Store) ProjectTx(ctx context.Context, tx pgx.Tx, p execution.Projection
 	if p.Time.After(run.UpdatedAt) {
 		run.UpdatedAt = p.Time
 	}
-	b, e = raw(run)
-	if e != nil {
-		return e
-	}
 	// Only root projections order root state; independent instance events must not
 	// suppress a root event that was delivered after a concurrent activity.
-	if p.InstanceID == "" && p.Sequence > seq {
-		seq = p.Sequence
-	}
-	_, e = db.New(tx).UpdateRunProjection(ctx, db.UpdateRunProjectionParams{ID: p.RunID, Document: b, Sequence: seq})
-	if e != nil {
-		return e
+	if p.InstanceID == "" && p.Sequence > *seq {
+		*seq = p.Sequence
 	}
 
 	data := map[string]any{
@@ -168,7 +171,7 @@ func (s *Store) ProjectTx(ctx context.Context, tx pgx.Tx, p execution.Projection
 	if p.Attempt > 0 {
 		ev.AttemptID = fmt.Sprintf("%s.a%d", p.InstanceID, p.Attempt)
 	}
-	b, e = raw(ev)
+	b, e := raw(ev)
 	if e != nil {
 		return e
 	}

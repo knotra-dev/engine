@@ -190,7 +190,6 @@ func TestImplementedCompatibilityAtBoundedStepSizes(t *testing.T) {
 							record := requests[request.ID]
 							record.Request = request
 							requests[request.ID] = record
-							got.Requests = append(got.Requests, request)
 						}
 						for _, scope := range changes.NewScopes {
 							scopes[scope.ID] = scope

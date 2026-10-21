@@ -235,9 +235,6 @@ func (r *Runner) prepareSandboxes(ctx context.Context, plan *contract.Plan) erro
 	if err != nil {
 		return err
 	}
-
-	defer d.client.CloseIdleConnections()
-
 	for name := range used {
 		p, ok := plan.Profile.Spec.Sandboxes[name]
 		if !ok {

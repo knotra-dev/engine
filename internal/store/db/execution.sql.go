@@ -105,12 +105,18 @@ func (q *Queries) LockExecutionRun(ctx context.Context, id string) (LockExecutio
 }
 
 const nextExecutionEventSequence = `-- name: NextExecutionEventSequence :one
-UPDATE knotra_runs SET execution_event_sequence=execution_event_sequence+1,state_revision=state_revision+1
-WHERE id=$1 RETURNING execution_event_sequence
+UPDATE knotra_runs SET execution_event_sequence=execution_event_sequence+$1::bigint,
+    state_revision=state_revision+$1::bigint
+WHERE id=$2 RETURNING execution_event_sequence
 `
 
-func (q *Queries) NextExecutionEventSequence(ctx context.Context, id string) (int64, error) {
-	row := q.db.QueryRow(ctx, nextExecutionEventSequence, id)
+type NextExecutionEventSequenceParams struct {
+	Count int64
+	ID    string
+}
+
+func (q *Queries) NextExecutionEventSequence(ctx context.Context, arg NextExecutionEventSequenceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, nextExecutionEventSequence, arg.Count, arg.ID)
 	var execution_event_sequence int64
 	err := row.Scan(&execution_event_sequence)
 	return execution_event_sequence, err

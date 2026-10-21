@@ -474,58 +474,28 @@ func eval(source string, s Scope) (Value, bool, error) {
 		}
 	}
 
-	values := func(v Values) (map[string]any, error) {
-		m := map[string]any{}
-
-		for _, k := range sortedKeys(v) {
-			if len(v[k].JSON) == 0 {
-				continue
-			}
-			x, err := DecodeJSON(v[k].JSON)
-			if err != nil {
-				return nil, err
-			}
-			m[k] = x
-		}
-
-		return m, nil
-	}
 	activation := map[string]any{}
-
-	for key, v := range map[string]Values{"inputs": s.Inputs, "args": s.Args, "state": s.State} {
-		m, err := values(v)
+	for _, r := range x.refs {
+		parts := strings.Split(r, ".")
+		frame := activation
+		for _, part := range parts[:len(parts)-1] {
+			child, ok := frame[part].(map[string]any)
+			if !ok {
+				child = map[string]any{}
+				frame[part] = child
+			}
+			frame = child
+		}
+		v, present, _ := lookup(r, s)
+		if !present {
+			continue
+		}
+		decoded, err := DecodeJSON(v.JSON)
 		if err != nil {
 			return Value{}, false, err
 		}
-		activation[key] = m
+		frame[parts[len(parts)-1]] = decoded
 	}
-
-	nodes := map[string]any{}
-
-	for _, name := range sortedKeys(s.Nodes) {
-		m, err := values(s.Nodes[name])
-		if err != nil {
-			return Value{}, false, err
-		}
-		nodes[name] = map[string]any{"outputs": m}
-	}
-
-	activation["nodes"] = nodes
-	body, err := values(s.Body)
-	if err != nil {
-		return Value{}, false, err
-	}
-
-	activation["body"] = map[string]any{"outputs": body}
-	iteration := map[string]any{"index": int64(s.IterationIndex)}
-	if s.IterationItem != nil && len(s.IterationItem.JSON) > 0 {
-		item, err := DecodeJSON(s.IterationItem.JSON)
-		if err != nil {
-			return Value{}, false, err
-		}
-		iteration["item"] = item
-	}
-	activation["iteration"] = iteration
 	result, _, err := x.program.Eval(activation)
 	if err != nil {
 		return Value{}, false, err

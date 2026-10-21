@@ -150,6 +150,14 @@ def wait_run(base, run_id, status, timeout=600):
     while time.monotonic() < deadline:
         run = request(base, "/runs/" + run_id)["run"]
         if run["status"] == status:
+            cursor = run.get("instancesNextCursor")
+            while cursor:
+                page = request(
+                    base,
+                    "/runs/" + run_id + "/instances?cursor=" + urllib.parse.quote(cursor),
+                )
+                run["instances"].extend(page["items"])
+                cursor = page.get("nextCursor")
             return run
         if run["status"] in ("succeeded", "failed", "cancelled"):
             raise RuntimeError(
@@ -1073,6 +1081,7 @@ def main():
                             args,
                             f"""
                         SELECT json_build_object(
+                            'run_duration_ms',extract(epoch FROM ((r.document->>'updatedAt')::timestamptz-r.admitted_at))*1000,
                             'first_node_start_ms',(SELECT extract(epoch FROM min(n.started_at)-r.admitted_at)*1000 FROM {schema}.knotra_execution_nodes n WHERE n.run_id=r.id),
                             'queues',(SELECT json_object_agg(kind,summary) FROM (
                                 SELECT kind,json_build_object(
